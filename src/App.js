@@ -16,7 +16,7 @@ import General from './General/General';
 import RequestCountGraph from './RequestCountGraph/RequestCountGraph';
 import DataTable from './DataTable/DataTable';
 import NewPage from './NewPage/NewPage';
-import LandingPage from './LandingPage/LandingPage'; // Adjusted import path
+import LandingPage from './LandingPage/LandingPage';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
 
@@ -33,7 +33,6 @@ const App = () => {
     setIsAuthenticated(true);
   };
 
-  // Add the handleLogout function
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
     setIsAuthenticated(false);
@@ -69,18 +68,9 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
     <Route path="/" element={<Navigate to="/landing" replace />} />
 
     {/* Admin Routes */}
-    <Route
-      path="/ADMIN-PopularObjects"
-      element={<HomeAdmin />}
-    />
-    <Route
-      path="/ADMIN-DIGITAL-CALENDAR"
-      element={<NewPageAdmin />}
-    />
-    <Route
-      path="/Digital-Calendar"
-      element={<NewPage />}
-    />
+    <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
+    <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
+    <Route path="/Digital-Calendar" element={<NewPage />} />
 
     {/* Main Application Route */}
     <Route

@@ -1,7 +1,14 @@
 // LandingPage.js
 
 import React, { useState, useEffect } from 'react';
-import { Box, Flex, Image, Text, Button } from '@chakra-ui/react';
+import {
+  Box,
+  Flex,
+  Image,
+  Text,
+  Button,
+  useBreakpointValue,
+} from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { FaLock } from 'react-icons/fa';
 import { AiOutlineEye, AiOutlineCalendar } from 'react-icons/ai';
@@ -15,22 +22,36 @@ const LandingPage = ({ handleLogout }) => {
 
   useEffect(() => {
     // Trigger transition effect after a small delay
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setContentVisible(true);
     }, 300);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleMouseEnter = (id) => setShowLock(id);
   const handleMouseLeave = () => setShowLock(null);
 
+  // Determine responsive values based on screen size
+  const flexDirection = useBreakpointValue({ base: 'column', md: 'row' });
+  const boxWidth = useBreakpointValue({ base: '90%', md: '300px' });
+  const boxHeight = useBreakpointValue({ base: '160px', md: '150px' });
+  const gap = useBreakpointValue({ base: 6, md: 14 });
+  const iconSize = useBreakpointValue({ base: '50px', md: '60px' });
+  const lighthouseWidth = useBreakpointValue({ base: '50px', md: '60px' });
+
+  // Adjust logo size responsively
+  const logoSize = useBreakpointValue({ base: '150px', md: '200px' });
+
   return (
     <Box
       color="white"
       width="100vw"
-      height="100vh"
+      minHeight="100vh" // Ensure the Box takes at least the full viewport height
       position="relative"
-      overflow="hidden"
+      overflow="auto" // Allow scrolling if content overflows
       bg="linear-gradient(90deg, #000000, #7800ff)"
+      py={8} // Vertical padding
+      px={4} // Horizontal padding
     >
       {/* Background Image */}
       <Image
@@ -48,40 +69,51 @@ const LandingPage = ({ handleLogout }) => {
 
       {/* Logout Button */}
       <Button
-        position="absolute"
+        position="fixed" // Fixed position to stay in place during scrolling
         top="20px"
         right="20px"
         variant="link"
         color="white"
         onClick={handleLogout}
         aria-label="Logout"
-        zIndex="2"  // Set zIndex higher than other elements to bring it to the front
+        zIndex="2"
         _hover={{ textDecoration: 'none', color: 'white' }}
         _active={{ bg: 'transparent' }}
       >
         Logout
       </Button>
 
-      {/* Centered Logo and Boxes with Transition Effect */}
+      {/* Main Content */}
       <Flex
         direction="column"
         align="center"
-        justify="center"
-        height="75vh"
+        justify="flex-start" // Align items from the top to prevent cutting off
         zIndex="1"
         position="relative"
         gap={10}
         style={{
           opacity: contentVisible ? 1 : 0,
-          transform: contentVisible ? 'scale(1)' : 'scale(0.5)', // Transition from smaller size
-          transition: 'opacity 1.5s ease, transform 1.5s ease', // Smooth transition
+          transform: contentVisible ? 'scale(1)' : 'scale(0.5)',
+          transition: 'opacity 1.5s ease, transform 1.5s ease',
         }}
       >
         {/* Logo in the Center */}
-        <Image src={logoImage} alt="Digital Benchmarks Logo" width="200px" />
+        <Image
+          src={logoImage}
+          alt="Digital Benchmarks Logo"
+          width={logoSize}
+          mb={8} // Bottom margin to separate from navigation boxes
+        />
 
         {/* Centered Boxes for Navigation */}
-        <Flex justify="center" align="center" gap={14} position="relative" mt={4}>
+        <Flex
+          direction={flexDirection}
+          justify="center"
+          align="center"
+          gap={gap}
+          wrap="wrap"
+          width="100%"
+        >
           {/* Popular Objects */}
           <Flex
             direction="column"
@@ -92,12 +124,15 @@ const LandingPage = ({ handleLogout }) => {
             border="2px solid white"
             borderRadius="lg"
             p={4}
-            w="300px"
-            h="150px"
+            width={boxWidth}
+            height={boxHeight}
             position="relative"
             _hover={{ transform: 'scale(1.05)' }}
             onMouseEnter={() => handleMouseEnter('popular')}
             onMouseLeave={handleMouseLeave}
+            transition="transform 0.3s ease"
+            cursor="pointer"
+            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
           >
             {showLock === 'popular' && (
               <Button
@@ -109,18 +144,31 @@ const LandingPage = ({ handleLogout }) => {
                 top="10px"
                 right="10px"
                 color="white"
-                variant="link"
-                _hover={{ textDecoration: 'none', color: 'white' }}
+                variant="ghost"
+                _hover={{
+                  textDecoration: 'none',
+                  color: 'yellow.400',
+                  transform: 'scale(1.2)',
+                }}
                 _active={{ bg: 'transparent' }}
-              />
+                transition="color 0.3s ease, transform 0.3s ease"
+              >
+                Admin
+              </Button>
             )}
-            <AiOutlineEye size="60px" />
-            <Text mt={6} fontSize="lg" fontWeight="bold" fontFamily="Arial">
+            <AiOutlineEye size={iconSize} />
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
               Popular Objects
             </Text>
           </Flex>
 
-          {/* Lighthouse */}
+          {/* Lighthouse (Static) */}
           <Flex
             direction="column"
             align="center"
@@ -128,18 +176,27 @@ const LandingPage = ({ handleLogout }) => {
             border="2px solid white"
             borderRadius="lg"
             p={4}
-            w="300px"
-            h="150px"
+            width={boxWidth}
+            height={boxHeight}
             position="relative"
             _hover={{ transform: 'scale(1.05)' }}
+            transition="transform 0.3s ease"
+            cursor="default" // Indicate non-interactivity
+            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
           >
             <Image
               src={lighthouseIcon}
               alt="Lighthouse Icon"
-              width="60px"
+              width={lighthouseWidth}
               filter="invert(1)"
             />
-            <Text mt={6} fontSize="lg" fontWeight="bold" fontFamily="Arial">
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
               Lighthouse
             </Text>
           </Flex>
@@ -154,12 +211,15 @@ const LandingPage = ({ handleLogout }) => {
             border="2px solid white"
             borderRadius="lg"
             p={4}
-            w="300px"
-            h="150px"
+            width={boxWidth}
+            height={boxHeight}
             position="relative"
             _hover={{ transform: 'scale(1.05)' }}
             onMouseEnter={() => handleMouseEnter('calendar')}
             onMouseLeave={handleMouseLeave}
+            transition="transform 0.3s ease"
+            cursor="pointer"
+            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
           >
             {showLock === 'calendar' && (
               <Button
@@ -171,13 +231,26 @@ const LandingPage = ({ handleLogout }) => {
                 top="10px"
                 right="10px"
                 color="white"
-                variant="link"
-                _hover={{ textDecoration: 'none', color: 'white' }}
+                variant="ghost"
+                _hover={{
+                  textDecoration: 'none',
+                  color: 'yellow.400',
+                  transform: 'scale(1.2)',
+                }}
                 _active={{ bg: 'transparent' }}
-              />
+                transition="color 0.3s ease, transform 0.3s ease"
+              >
+                Admin
+              </Button>
             )}
-            <AiOutlineCalendar size="60px" />
-            <Text mt={6} fontSize="lg" fontWeight="bold" fontFamily="Arial">
+            <AiOutlineCalendar size={iconSize} />
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
               Digital Calendar
             </Text>
           </Flex>

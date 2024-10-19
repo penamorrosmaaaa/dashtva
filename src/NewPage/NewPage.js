@@ -1,6 +1,6 @@
 /* src/NewPage/NewPage.js */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Box,
   Text,
@@ -20,6 +20,7 @@ import {
   TagLabel,
   TagCloseButton,
   Collapse,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import { ChevronUpIcon, ChevronDownIcon } from "@chakra-ui/icons";
 import Papa from "papaparse";
@@ -581,7 +582,7 @@ const NewPage = () => {
 
       const traceCTV = {
         x: lineGraphData.dates,
-        y: lineGraphData.Ctv,
+        y: lineGraphData.CTV,
         type: "scatter",
         mode: "lines+markers",
         name: "CTV",
@@ -728,14 +729,22 @@ const NewPage = () => {
     };
   }, [selectedCompareEvents, eventData]);
 
+  // Responsive values
+  const gridTemplateColumns = useBreakpointValue({ base: "1fr", md: "1fr 1fr" });
+  const plotWidth = useBreakpointValue({ base: 300, md: 500, lg: 600 });
+  const plotHeight = useBreakpointValue({ base: 300, md: 500, lg: 600 });
+  const piePlotWidth = useBreakpointValue({ base: 300, md: 500, lg: 600 });
+  const piePlotHeight = useBreakpointValue({ base: 300, md: 500, lg: 600 });
+  const linePlotHeight = useBreakpointValue({ base: 400, md: 500, lg: 600 });
+
   return (
-    <Box p={10} pt={10} color="white" minH="100vh">
+    <Box p={[4, 6, 10]} pt={10} color="white" minH="100vh">
       {/* Events Table at the Top */}
       {!isLoading && !error && (
         <Box
           bg="linear-gradient(90deg, #000000, #7800ff)"
           borderRadius="20px"
-          p={6}
+          p={[4, 6]}
           border="5px solid rgba(255, 255, 255, 0.8)"
           boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
           mb={6}
@@ -744,10 +753,10 @@ const NewPage = () => {
             justifyContent="space-between"
             alignItems="center"
             mb={4}
-            flexWrap="wrap"
+            flexDirection={["column", "row"]}
             gap={2}
           >
-            <Text fontSize="lg" fontWeight="bold" color="white">
+            <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
               Events Table
             </Text>
             <Flex gap={2} flexWrap="wrap">
@@ -761,7 +770,7 @@ const NewPage = () => {
                 bg="white"
                 color="black"
                 size="sm"
-                width="200px"
+                width={["100%", "200px"]}
               >
                 <option value="All">All</option>
                 {categories.map((cat) => (
@@ -777,7 +786,7 @@ const NewPage = () => {
                 bg="white"
                 color="black"
                 size="sm"
-                width="200px"
+                width={["100%", "200px"]}
                 isDisabled={tableCategoryFilter === "All"}
               >
                 <option value="All">All</option>
@@ -801,65 +810,68 @@ const NewPage = () => {
                 onClick={compareMode ? handleCancelCompare : handleCompare}
                 size="sm"
                 isDisabled={selectedCompareEvents.length < 2 && !compareMode}
+                width={["100%", "auto"]}
               >
                 {compareMode ? "Cancel Compare" : "Compare"}
               </Button>
             </Flex>
           </Flex>
           {/* Removed Reset Timeline Button from Events Table */}
-          <Table variant="simple" size="sm">
-            <Thead>
-              <Tr>
-                <Th fontSize="sm" color="white" fontWeight="bold">Select</Th>
-                <Th fontSize="sm" color="white" fontWeight="bold">Week</Th>
-                <Th fontSize="sm" color="white" fontWeight="bold">Date</Th>
-                <Th fontSize="sm" color="white" fontWeight="bold">Category</Th>
-                <Th fontSize="sm" color="white" fontWeight="bold">Subcategory</Th>
-                <Th fontSize="sm" color="white" fontWeight="bold">Event Name</Th>
-                <Th fontSize="sm" color="white" fontWeight="bold">Description</Th>
-                <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SITE</Th>
-                <Th isNumeric fontSize="sm" color="white" fontWeight="bold">APPS'</Th>
-                <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SUBTOTAL</Th>
-                <Th isNumeric fontSize="sm" color="white" fontWeight="bold">CTV</Th>
-                <Th isNumeric fontSize="sm" color="white" fontWeight="bold">TOTAL</Th>
-                <Th fontSize="sm" color="white" fontWeight="bold">Aprov.</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {displayedTableData.map((row) => (
-                <Tr
-                  key={row.id}
-                  bg={categoryColors[row.category] || "gray.600"}
-                  _hover={{ bg: "gray.600", cursor: "pointer" }}
-                  onClick={() => handleRowClick(row)}
-                  fontSize="xs"
-                  height="40px"
-                >
-                  <Td>
-                    <Checkbox
-                      isChecked={selectedCompareEvents.includes(row.id)}
-                      onChange={() => handleCompareSelection(row.id)}
-                      onClick={(e) => e.stopPropagation()} // Prevent triggering row click
-                    />
-                  </Td>
-                  <Td>{row.weekNumber}</Td>
-                  <Td>{row.eventDate}</Td>
-                  <Td>{row.category}</Td>
-                  <Td>{row.subcategory}</Td>
-                  <Td>{row.eventName}</Td>
-                  <Td>{row.eventDescription}</Td>
-                  <Td isNumeric>{formatNumber(row.siteUsers)}</Td>
-                  <Td isNumeric>{formatNumber(row.appsUsers)}</Td>
-                  <Td isNumeric>{formatNumber(row.subtotal)}</Td>
-                  <Td isNumeric>
-                    {row.ctv > 0 ? formatNumber(row.ctv) : "-"}
-                  </Td>
-                  <Td isNumeric fontWeight="bold">{formatNumber(row.total)}</Td> {/* Made TOTAL numbers bold */}
-                  <Td>{row.aprov !== null ? formatNumber(row.aprov) : "-"}</Td>
+          <Box overflowX="auto">
+            <Table variant="simple" size="sm">
+              <Thead>
+                <Tr>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Select</Th>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Week</Th>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Date</Th>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Category</Th>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Subcategory</Th>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Event Name</Th>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Description</Th>
+                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SITE</Th>
+                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">APPS'</Th>
+                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SUBTOTAL</Th>
+                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">CTV</Th>
+                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">TOTAL</Th>
+                  <Th fontSize="sm" color="white" fontWeight="bold">Aprov.</Th>
                 </Tr>
-              ))}
-            </Tbody>
-          </Table>
+              </Thead>
+              <Tbody>
+                {displayedTableData.map((row) => (
+                  <Tr
+                    key={row.id}
+                    bg={categoryColors[row.category] || "gray.600"}
+                    _hover={{ bg: "gray.600", cursor: "pointer" }}
+                    onClick={() => handleRowClick(row)}
+                    fontSize={["xs", "sm"]}
+                    height={["40px", "50px"]}
+                  >
+                    <Td>
+                      <Checkbox
+                        isChecked={selectedCompareEvents.includes(row.id)}
+                        onChange={() => handleCompareSelection(row.id)}
+                        onClick={(e) => e.stopPropagation()} // Prevent triggering row click
+                      />
+                    </Td>
+                    <Td>{row.weekNumber}</Td>
+                    <Td>{row.eventDate}</Td>
+                    <Td>{row.category}</Td>
+                    <Td>{row.subcategory}</Td>
+                    <Td>{row.eventName}</Td>
+                    <Td>{row.eventDescription}</Td>
+                    <Td isNumeric>{formatNumber(row.siteUsers)}</Td>
+                    <Td isNumeric>{formatNumber(row.appsUsers)}</Td>
+                    <Td isNumeric>{formatNumber(row.subtotal)}</Td>
+                    <Td isNumeric>
+                      {row.ctv > 0 ? formatNumber(row.ctv) : "-"}
+                    </Td>
+                    <Td isNumeric fontWeight="bold">{formatNumber(row.total)}</Td> {/* Made TOTAL numbers bold */}
+                    <Td>{row.aprov !== null ? formatNumber(row.aprov) : "-"}</Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
           {/* Toggle Button to Expand/Collapse Table */}
           {tableFilteredData.length > 10 && (
             <Flex justifyContent="center" mt={2}>
@@ -874,6 +886,7 @@ const NewPage = () => {
                   )
                 }
                 colorScheme="teal"
+                width={["100%", "auto"]}
               >
                 {isTableExpanded ? "Show Less" : "Show All"}
               </Button>
@@ -887,44 +900,47 @@ const NewPage = () => {
                 mt={4}
                 bg="linear-gradient(90deg, #000000, #7800ff)"
                 borderRadius="20px"
-                p={6}
+                p={[4, 6]}
                 border="5px solid rgba(255, 255, 255, 0.8)"
                 boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
               >
-                <Text fontSize="sm" mb={2} textAlign="center" color="white" fontWeight="bold">
+                <Text fontSize={["sm", "md"]} mb={2} textAlign="center" color="white" fontWeight="bold">
                   Distribution for {selectedRow.eventName} on {formatDate(selectedRow.eventDate)}
                 </Text>
                 <Flex justifyContent="center">
-                  <Plot
-                    data={[
-                      {
-                        values: [selectedRow.appsUsers, selectedRow.siteUsers, selectedRow.ctv],
-                        labels: ["APPS'", "SITE", "CTV"],
-                        type: "pie",
-                        marker: {
-                          colors: ["#36a2eb", "#ff6384", "#ffce56"],
+                  <Box width="100%" maxWidth={piePlotWidth} maxHeight={piePlotHeight}>
+                    <Plot
+                      data={[
+                        {
+                          values: [selectedRow.appsUsers, selectedRow.siteUsers, selectedRow.ctv],
+                          labels: ["APPS'", "SITE", "CTV"],
+                          type: "pie",
+                          marker: {
+                            colors: ["#36a2eb", "#ff6384", "#ffce56"],
+                          },
+                          hoverinfo: "label+percent+value",
+                          textinfo: "label+value",
+                          textposition: "inside",
+                          textfont: {
+                            color: "white",
+                            size: 14,
+                            family: "Arial",
+                            weight: "bold",
+                          },
                         },
-                        hoverinfo: "label+percent+value",
-                        textinfo: "label+value",
-                        textposition: "inside",
-                        textfont: {
-                          color: "white",
-                          size: 14,
-                          family: "Arial",
-                          weight: "bold",
-                        },
-                      },
-                    ]}
-                    layout={{
-                      width: 600,
-                      height: 600,
-                      paper_bgcolor: "transparent",
-                      plot_bgcolor: "transparent",
-                      showlegend: true,
-                      legend: { orientation: "h", x: 0.3, y: -0.2 },
-                    }}
-                    config={{ displayModeBar: false }}
-                  />
+                      ]}
+                      layout={{
+                        autosize: true,
+                        paper_bgcolor: "transparent",
+                        plot_bgcolor: "transparent",
+                        showlegend: true,
+                        legend: { orientation: "h", x: 0.3, y: -0.2 },
+                      }}
+                      config={{ displayModeBar: false }}
+                      style={{ width: "100%", height: "100%" }}
+                      useResizeHandler={true}
+                    />
+                  </Box>
                 </Flex>
               </Box>
             )}
@@ -935,95 +951,104 @@ const NewPage = () => {
             <Box
               bg="linear-gradient(90deg, #000000, #7800ff)"
               borderRadius="20px"
-              p={6}
+              p={[4, 6]}
               border="5px solid rgba(255, 255, 255, 0.8)"
               boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
               mb={6}
             >
-              <Flex justifyContent="space-between" alignItems="center" mb={4} flexWrap="wrap" gap={2}>
-                <Text fontSize="lg" fontWeight="bold" color="white">
+              <Flex
+                justifyContent="space-between"
+                alignItems="center"
+                mb={4}
+                flexDirection={["column", "row"]}
+                gap={2}
+              >
+                <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
                   Comparison
                 </Text>
                 <Button
                   colorScheme="red"
                   onClick={handleCancelCompare}
                   size="sm"
+                  width={["100%", "auto"]}
                 >
                   Cancel
                 </Button>
               </Flex>
-              <Table variant="simple" size="sm">
-                <Thead>
-                  <Tr>
-                    <Th fontSize="sm" color="white" fontWeight="bold">Event Name</Th>
-                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">APPS' Count</Th>
-                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SITE Count</Th>
-                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">CTV Count</Th>
-                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SUBTOTAL Count</Th>
-                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">TOTAL Count</Th>
-                    <Th fontSize="sm" color="white" fontWeight="bold">APPS' Change (%)</Th>
-                    <Th fontSize="sm" color="white" fontWeight="bold">SITE Change (%)</Th>
-                    <Th fontSize="sm" color="white" fontWeight="bold">CTV Change (%)</Th>
-                    <Th fontSize="sm" color="white" fontWeight="bold">SUBTOTAL Change (%)</Th>
-                    <Th fontSize="sm" color="white" fontWeight="bold">TOTAL Change (%)</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  <Tr>
-                    <Td fontWeight="bold" color="white">
-                      {comparisonData.baseEvent.eventName} - {formatDate(comparisonData.baseEvent.eventDate)}
-                    </Td>
-                    <Td isNumeric>{formatNumber(comparisonData.baseEvent.appsUsers)}</Td>
-                    <Td isNumeric>{formatNumber(comparisonData.baseEvent.siteUsers)}</Td>
-                    <Td isNumeric>{comparisonData.baseEvent.ctv > 0 ? formatNumber(comparisonData.baseEvent.ctv) : "-"}</Td>
-                    <Td isNumeric>{formatNumber(comparisonData.baseEvent.subtotal)}</Td>
-                    <Td isNumeric>{formatNumber(comparisonData.baseEvent.total)}</Td>
-                    <Td color="gray.400">-</Td>
-                    <Td color="gray.400">-</Td>
-                    <Td color="gray.400">-</Td>
-                    <Td color="gray.400">-</Td>
-                    <Td color="gray.400">-</Td>
-                  </Tr>
-                  {comparisonData.comparisons.map((comp, index) => {
-                    const appsChangePositive = parseFloat(comp.appsChange) >= 0;
-                    const siteChangePositive = parseFloat(comp.siteChange) >= 0;
-                    const ctvChangePositive = parseFloat(comp.ctvChange) >= 0;
-                    const subtotalChangePositive = parseFloat(comp.subtotalChange) >= 0;
-                    const totalChangePositive = parseFloat(comp.totalChange) >= 0;
+              <Box overflowX="auto">
+                <Table variant="simple" size="sm">
+                  <Thead>
+                    <Tr>
+                      <Th fontSize="sm" color="white" fontWeight="bold">Event Name</Th>
+                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">APPS' Count</Th>
+                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SITE Count</Th>
+                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">CTV Count</Th>
+                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SUBTOTAL Count</Th>
+                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">TOTAL Count</Th>
+                      <Th fontSize="sm" color="white" fontWeight="bold">APPS' Change (%)</Th>
+                      <Th fontSize="sm" color="white" fontWeight="bold">SITE Change (%)</Th>
+                      <Th fontSize="sm" color="white" fontWeight="bold">CTV Change (%)</Th>
+                      <Th fontSize="sm" color="white" fontWeight="bold">SUBTOTAL Change (%)</Th>
+                      <Th fontSize="sm" color="white" fontWeight="bold">TOTAL Change (%)</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    <Tr>
+                      <Td fontWeight="bold" color="white">
+                        {comparisonData.baseEvent.eventName} - {formatDate(comparisonData.baseEvent.eventDate)}
+                      </Td>
+                      <Td isNumeric>{formatNumber(comparisonData.baseEvent.appsUsers)}</Td>
+                      <Td isNumeric>{formatNumber(comparisonData.baseEvent.siteUsers)}</Td>
+                      <Td isNumeric>{comparisonData.baseEvent.ctv > 0 ? formatNumber(comparisonData.baseEvent.ctv) : "-"}</Td>
+                      <Td isNumeric>{formatNumber(comparisonData.baseEvent.subtotal)}</Td>
+                      <Td isNumeric>{formatNumber(comparisonData.baseEvent.total)}</Td>
+                      <Td color="gray.400">-</Td>
+                      <Td color="gray.400">-</Td>
+                      <Td color="gray.400">-</Td>
+                      <Td color="gray.400">-</Td>
+                      <Td color="gray.400">-</Td>
+                    </Tr>
+                    {comparisonData.comparisons.map((comp, index) => {
+                      const appsChangePositive = parseFloat(comp.appsChange) >= 0;
+                      const siteChangePositive = parseFloat(comp.siteChange) >= 0;
+                      const ctvChangePositive = parseFloat(comp.ctvChange) >= 0;
+                      const subtotalChangePositive = parseFloat(comp.subtotalChange) >= 0;
+                      const totalChangePositive = parseFloat(comp.totalChange) >= 0;
 
-                    // Find the event to get accurate counts
-                    const event = eventData.find(e => e.id === comp.eventId);
+                      // Find the event to get accurate counts
+                      const event = eventData.find(e => e.id === comp.eventId);
 
-                    return (
-                      <Tr key={index}>
-                        <Td fontWeight="bold" color="white">
-                          {event ? `${event.eventName} - ${formatDate(event.eventDate)}` : `${comp.eventName} - ${formatDate(comp.eventDate)}`}
-                        </Td>
-                        <Td isNumeric>{event ? formatNumber(event.appsUsers) : "0"}</Td>
-                        <Td isNumeric>{event ? formatNumber(event.siteUsers) : "0"}</Td>
-                        <Td isNumeric>{event && event.ctv > 0 ? formatNumber(event.ctv) : "-"}</Td>
-                        <Td isNumeric>{event ? formatNumber(event.subtotal) : "0"}</Td>
-                        <Td isNumeric>{event ? formatNumber(event.total) : "0"}</Td>
-                        <Td color={appsChangePositive ? "green.400" : "red.400"}>
-                          {comp.appsChange}%
-                        </Td>
-                        <Td color={siteChangePositive ? "green.400" : "red.400"}>
-                          {comp.siteChange}%
-                        </Td>
-                        <Td color={ctvChangePositive ? "green.400" : "red.400"}>
-                          {comp.ctvChange}%
-                        </Td>
-                        <Td color={subtotalChangePositive ? "green.400" : "red.400"}>
-                          {comp.subtotalChange}%
-                        </Td>
-                        <Td color={totalChangePositive ? "green.400" : "red.400"}>
-                          {comp.totalChange}%
-                        </Td>
-                      </Tr>
-                    );
-                  })}
-                </Tbody>
-              </Table>
+                      return (
+                        <Tr key={index}>
+                          <Td fontWeight="bold" color="white">
+                            {event ? `${event.eventName} - ${formatDate(event.eventDate)}` : `${comp.eventName} - ${formatDate(comp.eventDate)}`}
+                          </Td>
+                          <Td isNumeric>{event ? formatNumber(event.appsUsers) : "0"}</Td>
+                          <Td isNumeric>{event ? formatNumber(event.siteUsers) : "0"}</Td>
+                          <Td isNumeric>{event && event.ctv > 0 ? formatNumber(event.ctv) : "-"}</Td>
+                          <Td isNumeric>{event ? formatNumber(event.subtotal) : "0"}</Td>
+                          <Td isNumeric>{event ? formatNumber(event.total) : "0"}</Td>
+                          <Td color={appsChangePositive ? "green.400" : "red.400"}>
+                            {comp.appsChange}%
+                          </Td>
+                          <Td color={siteChangePositive ? "green.400" : "red.400"}>
+                            {comp.siteChange}%
+                          </Td>
+                          <Td color={ctvChangePositive ? "green.400" : "red.400"}>
+                            {comp.ctvChange}%
+                          </Td>
+                          <Td color={subtotalChangePositive ? "green.400" : "red.400"}>
+                            {comp.subtotalChange}%
+                          </Td>
+                          <Td color={totalChangePositive ? "green.400" : "red.400"}>
+                            {comp.totalChange}%
+                          </Td>
+                        </Tr>
+                      );
+                    })}
+                  </Tbody>
+                </Table>
+              </Box>
             </Box>
           )}
         </Box>
@@ -1031,34 +1056,37 @@ const NewPage = () => {
 
       {/* Visualization Panels */}
       {!isLoading && !error && (
-        <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={6} mb={6}>
+        <Grid templateColumns={gridTemplateColumns} gap={6} mb={6}>
           {/* Main Pie Chart Box (Distribution Section) */}
           <Box
             bg="linear-gradient(90deg, #000000, #7800ff)"
             borderRadius="20px"
-            p={6}
+            p={[4, 6]}
             border="5px solid rgba(255, 255, 255, 0.8)"
             boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
           >
-            <Text fontSize="lg" mb={4} textAlign="center" color="white" fontWeight="bold">
+            <Text fontSize={["lg", "xl"]} mb={4} textAlign="center" color="white" fontWeight="bold">
               Distribution of APPS', SITE, & CTV
             </Text>
             <Flex justifyContent="center" mb={4}>
               {totalApps === 0 && totalSites === 0 && totalCtv === 0 ? (
                 <Text fontSize="sm" color="white">No data to display.</Text>
               ) : (
-                <Plot
-                  data={pieData}
-                  layout={{
-                    width: 500,
-                    height: 500,
-                    paper_bgcolor: "transparent",
-                    plot_bgcolor: "transparent",
-                    showlegend: true,
-                    legend: { orientation: "h", x: 0.3, y: -0.2 },
-                  }}
-                  config={{ displayModeBar: false }}
-                />
+                <Box width="100%" maxWidth={piePlotWidth} maxHeight={piePlotHeight}>
+                  <Plot
+                    data={pieData}
+                    layout={{
+                      autosize: true,
+                      paper_bgcolor: "transparent",
+                      plot_bgcolor: "transparent",
+                      showlegend: true,
+                      legend: { orientation: "h", x: 0.3, y: -0.2 },
+                    }}
+                    config={{ displayModeBar: false }}
+                    style={{ width: "100%", height: "100%" }}
+                    useResizeHandler={true}
+                  />
+                </Box>
               )}
             </Flex>
             {/* Filters for Distribution Section */}
@@ -1106,12 +1134,18 @@ const NewPage = () => {
           <Box
             bg="linear-gradient(90deg, #000000, #7800ff)"
             borderRadius="20px"
-            p={6}
+            p={[4, 6]}
             border="5px solid rgba(255, 255, 255, 0.8)"
             boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
           >
-            <Flex justifyContent="space-between" alignItems="center" mb={4} flexWrap="wrap" gap={2}>
-              <Text fontSize="lg" fontWeight="bold" color="white">
+            <Flex
+              justifyContent="space-between"
+              alignItems="center"
+              mb={4}
+              flexDirection={["column", "row"]}
+              gap={2}
+            >
+              <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
                 {metricsType} Metrics
               </Text>
               <Select
@@ -1120,7 +1154,7 @@ const NewPage = () => {
                 bg="white"
                 color="black"
                 size="sm"
-                width="150px"
+                width={["100%", "150px"]}
               >
                 <option value="Average">Average</option>
                 <option value="Total">Total</option>
@@ -1233,15 +1267,15 @@ const NewPage = () => {
         <Box
           bg="linear-gradient(90deg, #000000, #7800ff)"
           borderRadius="20px"
-          p={6}
+          p={[4, 6]}
           border="5px solid rgba(255, 255, 255, 0.8)"
           boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
           mb={6}
         >
-          <Text fontSize="lg" mb={4} textAlign="center" color="white" fontWeight="bold">
+          <Text fontSize={["lg", "xl"]} mb={4} textAlign="center" color="white" fontWeight="bold">
             APPS', SITE, CTV Clicks Over Time
           </Text>
-          <Flex direction={{ base: "column", md: "row" }} justifyContent="space-between" mb={4} gap={4}>
+          <Flex direction={["column", "row"]} justifyContent="space-between" mb={4} gap={4}>
             <Select
               placeholder="Select Graph Option"
               value={selectedGraphOption}
@@ -1249,7 +1283,7 @@ const NewPage = () => {
               bg="white"
               color="black"
               size="sm"
-              width={{ base: "100%", md: "200px" }}
+              width={["100%", "200px"]}
             >
               <option value="APPS">APPS'</option>
               <option value="SITE">SITE</option>
@@ -1260,7 +1294,7 @@ const NewPage = () => {
             </Select>
 
             {/* Customizable Event Selection Dropdown */}
-            <Box width={{ base: "100%", md: "300px" }}>
+            <Box width={["100%", "300px"]}>
               <Select
                 placeholder="Select Events"
                 onChange={handleEventSelection}
@@ -1301,87 +1335,90 @@ const NewPage = () => {
             {lineGraphData.dates.length === 0 ? (
               <Text fontSize="sm" color="white">No data to display.</Text>
             ) : (
-              <Plot
-                data={plotData}
-                layout={{
-                  width: "100%",
-                  height: 500,
-                  paper_bgcolor: "transparent",
-                  plot_bgcolor: "transparent",
-                  xaxis: {
-                    title: "Event Date",
-                    type: "date",
-                    rangeselector: {
-                      buttons: [
-                        {
-                          count: 1,
-                          label: "1m",
-                          step: "month",
-                          stepmode: "backward",
-                        },
-                        {
-                          count: 6,
-                          label: "6m",
-                          step: "month",
-                          stepmode: "backward",
-                        },
-                        { step: "all" },
-                      ],
+              <Box width="100%" maxHeight={linePlotHeight}>
+                <Plot
+                  data={plotData}
+                  layout={{
+                    autosize: true,
+                    paper_bgcolor: "transparent",
+                    plot_bgcolor: "transparent",
+                    xaxis: {
+                      title: "Event Date",
+                      type: "date",
+                      rangeselector: {
+                        buttons: [
+                          {
+                            count: 1,
+                            label: "1m",
+                            step: "month",
+                            stepmode: "backward",
+                          },
+                          {
+                            count: 6,
+                            label: "6m",
+                            step: "month",
+                            stepmode: "backward",
+                          },
+                          { step: "all" },
+                        ],
+                      },
+                      rangeslider: { visible: true },
+                      tickangle: -45,
+                      automargin: true,
+                      tickfont: {
+                        color: "rgba(255, 255, 255, 0.7)", // Semi-transparent white
+                        size: 12,
+                      },
+                      titlefont: {
+                        color: "white",
+                        size: 14,
+                        family: "Arial",
+                        weight: "bold",
+                      },
+                      gridcolor: "rgba(255, 255, 255, 0.2)", // More transparent grid lines
                     },
-                    rangeslider: { visible: true },
-                    tickangle: -45,
-                    automargin: true,
-                    tickfont: {
-                      color: "rgba(255, 255, 255, 0.7)", // Semi-transparent white
-                      size: 12,
+                    yaxis: {
+                      title: "Count",
+                      tickfont: {
+                        color: "rgba(255, 255, 255, 0.7)", // Semi-transparent white
+                        size: 12,
+                      },
+                      titlefont: {
+                        color: "white",
+                        size: 14,
+                        family: "Arial",
+                        weight: "bold",
+                      },
+                      gridcolor: "rgba(255, 255, 255, 0.2)", // More transparent grid lines
                     },
-                    titlefont: {
-                      color: "white",
-                      size: 14,
-                      family: "Arial",
-                      weight: "bold",
+                    legend: {
+                      orientation: "h",
+                      x: 0.5,
+                      y: -0.2,
+                      xanchor: "center",
+                      yanchor: "top",
+                      font: {
+                        color: "white",
+                        size: 12,
+                        family: "Arial",
+                        weight: "bold",
+                      },
                     },
-                    gridcolor: "rgba(255, 255, 255, 0.2)", // More transparent grid lines
-                  },
-                  yaxis: {
-                    title: "Count",
-                    tickfont: {
-                      color: "rgba(255, 255, 255, 0.7)", // Semi-transparent white
-                      size: 12,
+                    hoverlabel: {
+                      bgcolor: "gray",
+                      font: {
+                        color: "white",
+                        family: "Arial",
+                        size: 12,
+                        weight: "bold",
+                      },
                     },
-                    titlefont: {
-                      color: "white",
-                      size: 14,
-                      family: "Arial",
-                      weight: "bold",
-                    },
-                    gridcolor: "rgba(255, 255, 255, 0.2)", // More transparent grid lines
-                  },
-                  legend: {
-                    orientation: "h",
-                    x: 0.5,
-                    y: -0.2,
-                    xanchor: "center",
-                    yanchor: "top",
-                    font: {
-                      color: "white",
-                      size: 12,
-                      family: "Arial",
-                      weight: "bold",
-                    },
-                  },
-                  hoverlabel: {
-                    bgcolor: "gray",
-                    font: {
-                      color: "white",
-                      family: "Arial",
-                      size: 12,
-                      weight: "bold",
-                    },
-                  },
-                }}
-                config={{ displayModeBar: false }}
-              />
+                  }}
+                  config={{ displayModeBar: false }}
+                  style={{ width: "100%", height: "100%" }}
+                  useResizeHandler={true}
+                />
+              </Box>
             )}
           </Flex>
         </Box>

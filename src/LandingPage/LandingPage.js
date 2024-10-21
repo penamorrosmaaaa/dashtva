@@ -13,7 +13,7 @@ import { AiOutlineEye, AiOutlineCalendar } from 'react-icons/ai';
 import nasaImage from '../assets/nasa-Q1p7bh3SHj8-unsplash.jpg';
 import logoImage from '../assets/Diseño sin título (1).png';
 import lighthouseIcon from '../assets/lighthouse-svgrepo-com.svg';
-import ampIcon from '/Users/manuelpenamorros/Downloads/tva2-main/src/assets/amp-svgrepo-com.svg'; // Path to AMP icon
+import ampIcon from '../assets/amp-svgrepo-com.svg';
 
 const LandingPage = ({ handleLogout }) => {
   const [showLock, setShowLock] = useState(null);

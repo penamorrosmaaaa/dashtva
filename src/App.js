@@ -1,13 +1,8 @@
-// src/App.js
+// App.js
 
 import React, { useState, useEffect } from 'react';
 import { ChakraProvider, Box } from '@chakra-ui/react';
-import {
-  BrowserRouter as Router,
-  Route,
-  Routes,
-  Navigate,
-} from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 
 // Import your components with correct paths
 import HomeAdmin from './HomeAdmin/HomeAdmin';
@@ -21,21 +16,23 @@ import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
 
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState(null);
 
   useEffect(() => {
-    const authStatus = localStorage.getItem('isAuthenticated');
-    setIsAuthenticated(authStatus === 'true');
+    const storedUser = localStorage.getItem('authenticatedUser');
+    if (storedUser) {
+      setAuthenticatedUser(JSON.parse(storedUser));
+    }
   }, []);
 
-  const handleLogin = () => {
-    localStorage.setItem('isAuthenticated', 'true');
-    setIsAuthenticated(true);
+  const handleLogin = (user) => {
+    localStorage.setItem('authenticatedUser', JSON.stringify(user));
+    setAuthenticatedUser(user);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    setIsAuthenticated(false);
+    localStorage.removeItem('authenticatedUser');
+    setAuthenticatedUser(null);
   };
 
   return (
@@ -47,8 +44,11 @@ const App = () => {
         color="white"
       >
         <Router>
-          {isAuthenticated ? (
-            <AuthenticatedRoutes handleLogout={handleLogout} />
+          {authenticatedUser ? (
+            <AuthenticatedRoutes
+              handleLogout={handleLogout}
+              authenticatedUser={authenticatedUser}
+            />
           ) : (
             <UnauthenticatedRoutes handleLogin={handleLogin} />
           )}
@@ -58,26 +58,57 @@ const App = () => {
   );
 };
 
-const AuthenticatedRoutes = ({ handleLogout }) => (
+const AuthenticatedRoutes = ({ handleLogout, authenticatedUser }) => (
   <Routes>
+    {/* Redirect authenticated users from /login to /landing */}
     <Route path="/login" element={<Navigate to="/landing" replace />} />
+
+    {/* Landing Page */}
     <Route
       path="/landing"
-      element={<LandingPage handleLogout={handleLogout} />}
+      element={
+        <LandingPage
+          handleLogout={handleLogout}
+          authenticatedUser={authenticatedUser}
+        />
+      }
     />
+
+    {/* Redirect root to /landing */}
     <Route path="/" element={<Navigate to="/landing" replace />} />
 
-    {/* Admin Routes */}
-    <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
-    <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
-    <Route path="/Digital-Calendar" element={<NewPage />} />
-
-    {/* Main Application Route */}
+    {/* Admin Routes - Protected Based on adminPermissions */}
     <Route
-      path="/*"
+      path="/ADMIN-PopularObjects"
+      element={
+        authenticatedUser.isAdmin &&
+        Array.isArray(authenticatedUser.adminPermissions) &&
+        authenticatedUser.adminPermissions.includes('/ADMIN-PopularObjects') ? (
+          <HomeAdmin />
+        ) : (
+          <Navigate to="/landing" replace />
+        )
+      }
+    />
+    <Route
+      path="/ADMIN-DIGITAL-CALENDAR"
+      element={
+        authenticatedUser.isAdmin &&
+        Array.isArray(authenticatedUser.adminPermissions) &&
+        authenticatedUser.adminPermissions.includes('/ADMIN-DIGITAL-CALENDAR') ? (
+          <NewPageAdmin />
+        ) : (
+          <Navigate to="/landing" replace />
+        )
+      }
+    />
+    {/* Add other admin routes similarly */}
+    
+    {/* Main Application Routes */}
+    <Route
+      path="/PopularObjects"
       element={
         <MainLayout>
-          {/* Main Content */}
           <Box maxW="1600px" py={10} bg="transparent">
             <General />
             <RequestCountGraph />
@@ -86,6 +117,7 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
         </MainLayout>
       }
     />
+    <Route path="/Digital-Calendar" element={<NewPage />} />
 
     {/* Catch-all Route */}
     <Route path="*" element={<Navigate to="/landing" replace />} />
@@ -94,8 +126,8 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
 
 const UnauthenticatedRoutes = ({ handleLogin }) => (
   <Routes>
-    <Route path="*" element={<Navigate to="/login" replace />} />
     <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+    <Route path="*" element={<Navigate to="/login" replace />} />
   </Routes>
 );
 

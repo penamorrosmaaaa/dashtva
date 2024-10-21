@@ -1,20 +1,27 @@
 // LandingPage.js
 
 import React, { useState, useEffect } from 'react';
-import { Box, Flex, Image, Text, Button, useBreakpointValue } from '@chakra-ui/react';
+import {
+  Box,
+  Flex,
+  Image,
+  Text,
+  Button,
+  useBreakpointValue,
+} from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { FaLock } from 'react-icons/fa';
 import { AiOutlineEye, AiOutlineCalendar } from 'react-icons/ai';
 import nasaImage from '../assets/nasa-Q1p7bh3SHj8-unsplash.jpg';
 import logoImage from '../assets/Diseño sin título (1).png';
 import lighthouseIcon from '../assets/lighthouse-svgrepo-com.svg';
-import ampIcon from '../assets/amp-svgrepo-com.svg';
 
-const LandingPage = ({ handleLogout, authenticatedUser }) => {
+const LandingPage = ({ handleLogout }) => {
   const [showLock, setShowLock] = useState(null);
   const [contentVisible, setContentVisible] = useState(false);
 
   useEffect(() => {
+    // Trigger transition effect after a small delay
     const timer = setTimeout(() => {
       setContentVisible(true);
     }, 300);
@@ -24,66 +31,29 @@ const LandingPage = ({ handleLogout, authenticatedUser }) => {
   const handleMouseEnter = (id) => setShowLock(id);
   const handleMouseLeave = () => setShowLock(null);
 
-  const flexDirection = useBreakpointValue({ base: 'column', lg: 'row' });
+  // Determine responsive values based on screen size
+  const flexDirection = useBreakpointValue({ base: 'column', md: 'row' });
   const boxWidth = useBreakpointValue({ base: '90%', md: '300px' });
   const boxHeight = useBreakpointValue({ base: '160px', md: '150px' });
-  const gap = useBreakpointValue({ base: 6, lg: 10 });
+  const gap = useBreakpointValue({ base: 6, md: 14 });
   const iconSize = useBreakpointValue({ base: '50px', md: '60px' });
   const lighthouseWidth = useBreakpointValue({ base: '50px', md: '60px' });
-  const logoSize = useBreakpointValue({ base: '150px', md: '200px' });
 
-  const options = [
-    {
-      name: 'Lighthouse',
-      icon: (
-        <Image
-          src={lighthouseIcon}
-          alt="Lighthouse Icon"
-          width={lighthouseWidth}
-          filter="invert(1)"
-        />
-      ),
-      route: null, // Static, no link
-      adminRoute: null,
-    },
-    {
-      name: 'Lighthouse AMP',
-      icon: (
-        <Image
-          src={ampIcon}
-          alt="Lighthouse AMP Icon"
-          width={lighthouseWidth}
-          filter="invert(1)"
-        />
-      ),
-      route: null, // Static, no link
-      adminRoute: null,
-    },
-    {
-      name: 'Popular Objects',
-      icon: <AiOutlineEye size={iconSize} />,
-      route: '/PopularObjects',
-      adminRoute: '/ADMIN-PopularObjects',
-    },
-    {
-      name: 'Digital Calendar',
-      icon: <AiOutlineCalendar size={iconSize} />,
-      route: '/Digital-Calendar',
-      adminRoute: '/ADMIN-DIGITAL-CALENDAR',
-    },
-  ];
+  // Adjust logo size responsively
+  const logoSize = useBreakpointValue({ base: '150px', md: '200px' });
 
   return (
     <Box
       color="white"
       width="100vw"
-      minHeight="100vh"
+      minHeight="100vh" // Ensure the Box takes at least the full viewport height
       position="relative"
-      overflow="auto"
+      overflow="auto" // Allow scrolling if content overflows
       bg="linear-gradient(90deg, #000000, #7800ff)"
-      py={8}
-      px={4}
+      py={8} // Vertical padding
+      px={4} // Horizontal padding
     >
+      {/* Background Image */}
       <Image
         src={nasaImage}
         alt="NASA background"
@@ -99,24 +69,25 @@ const LandingPage = ({ handleLogout, authenticatedUser }) => {
 
       {/* Logout Button */}
       <Button
-        position="fixed"
+        position="fixed" // Fixed position to stay in place during scrolling
         top="20px"
         right="20px"
         variant="link"
         color="white"
         onClick={handleLogout}
         aria-label="Logout"
-        zIndex="1000"
+        zIndex="2"
         _hover={{ textDecoration: 'none', color: 'white' }}
         _active={{ bg: 'transparent' }}
       >
         Logout
       </Button>
 
+      {/* Main Content */}
       <Flex
         direction="column"
         align="center"
-        justify="flex-start"
+        justify="flex-start" // Align items from the top to prevent cutting off
         zIndex="1"
         position="relative"
         gap={10}
@@ -126,13 +97,15 @@ const LandingPage = ({ handleLogout, authenticatedUser }) => {
           transition: 'opacity 1.5s ease, transform 1.5s ease',
         }}
       >
+        {/* Logo in the Center */}
         <Image
           src={logoImage}
           alt="Digital Benchmarks Logo"
           width={logoSize}
-          mb={8}
+          mb={8} // Bottom margin to separate from navigation boxes
         />
 
+        {/* Centered Boxes for Navigation */}
         <Flex
           direction={flexDirection}
           justify="center"
@@ -141,67 +114,146 @@ const LandingPage = ({ handleLogout, authenticatedUser }) => {
           wrap="wrap"
           width="100%"
         >
-          {options.map((option) => {
-            if (authenticatedUser.permissions.includes(option.name)) {
-              return (
-                <Flex
-                  key={option.name}
-                  direction="column"
-                  align="center"
-                  justify="center"
-                  as={option.route ? RouterLink : 'div'}
-                  to={option.route ? option.route : undefined}
-                  border="2px solid white"
-                  borderRadius="lg"
-                  p={4}
-                  width={boxWidth}
-                  height={boxHeight}
-                  position="relative"
-                  _hover={{ transform: 'scale(1.05)' }}
-                  onMouseEnter={() => handleMouseEnter(option.name)}
-                  onMouseLeave={handleMouseLeave}
-                  transition="transform 0.3s ease"
-                  cursor={option.route ? 'pointer' : 'default'}
-                  mb={{ base: 4, md: 0 }}
-                >
-                  {showLock === option.name && option.adminRoute && (
-                    <Button
-                      as={RouterLink}
-                      to={option.adminRoute}
-                      leftIcon={<FaLock />}
-                      aria-label={`Admin - ${option.name}`}
-                      position="absolute"
-                      top="10px"
-                      right="10px"
-                      color="white"
-                      variant="ghost"
-                      _hover={{
-                        textDecoration: 'none',
-                        color: 'yellow.400',
-                        transform: 'scale(1.2)',
-                      }}
-                      _active={{ bg: 'transparent' }}
-                      transition="color 0.3s ease, transform 0.3s ease"
-                    >
-                      Admin
-                    </Button>
-                  )}
-                  {option.icon}
-                  <Text
-                    mt={6}
-                    fontSize={['md', 'lg']}
-                    fontWeight="bold"
-                    fontFamily="Arial"
-                    textAlign="center"
-                  >
-                    {option.name}
-                  </Text>
-                </Flex>
-              );
-            } else {
-              return null;
-            }
-          })}
+          {/* Popular Objects */}
+          <Flex
+            direction="column"
+            align="center"
+            justify="center"
+            as={RouterLink}
+            to="/PopularObjects"
+            border="2px solid white"
+            borderRadius="lg"
+            p={4}
+            width={boxWidth}
+            height={boxHeight}
+            position="relative"
+            _hover={{ transform: 'scale(1.05)' }}
+            onMouseEnter={() => handleMouseEnter('popular')}
+            onMouseLeave={handleMouseLeave}
+            transition="transform 0.3s ease"
+            cursor="pointer"
+            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
+          >
+            {showLock === 'popular' && (
+              <Button
+                as={RouterLink}
+                to="/ADMIN-PopularObjects"
+                leftIcon={<FaLock />}
+                aria-label="Admin - Popular Objects"
+                position="absolute"
+                top="10px"
+                right="10px"
+                color="white"
+                variant="ghost"
+                _hover={{
+                  textDecoration: 'none',
+                  color: 'yellow.400',
+                  transform: 'scale(1.2)',
+                }}
+                _active={{ bg: 'transparent' }}
+                transition="color 0.3s ease, transform 0.3s ease"
+              >
+                Admin
+              </Button>
+            )}
+            <AiOutlineEye size={iconSize} />
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
+              Popular Objects
+            </Text>
+          </Flex>
+
+          {/* Lighthouse (Static) */}
+          <Flex
+            direction="column"
+            align="center"
+            justify="center"
+            border="2px solid white"
+            borderRadius="lg"
+            p={4}
+            width={boxWidth}
+            height={boxHeight}
+            position="relative"
+            _hover={{ transform: 'scale(1.05)' }}
+            transition="transform 0.3s ease"
+            cursor="default" // Indicate non-interactivity
+            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
+          >
+            <Image
+              src={lighthouseIcon}
+              alt="Lighthouse Icon"
+              width={lighthouseWidth}
+              filter="invert(1)"
+            />
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
+              Lighthouse
+            </Text>
+          </Flex>
+
+          {/* Digital Calendar */}
+          <Flex
+            direction="column"
+            align="center"
+            justify="center"
+            as={RouterLink}
+            to="/Digital-Calendar"
+            border="2px solid white"
+            borderRadius="lg"
+            p={4}
+            width={boxWidth}
+            height={boxHeight}
+            position="relative"
+            _hover={{ transform: 'scale(1.05)' }}
+            onMouseEnter={() => handleMouseEnter('calendar')}
+            onMouseLeave={handleMouseLeave}
+            transition="transform 0.3s ease"
+            cursor="pointer"
+            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
+          >
+            {showLock === 'calendar' && (
+              <Button
+                as={RouterLink}
+                to="/ADMIN-DIGITAL-CALENDAR"
+                leftIcon={<FaLock />}
+                aria-label="Admin - Digital Calendar"
+                position="absolute"
+                top="10px"
+                right="10px"
+                color="white"
+                variant="ghost"
+                _hover={{
+                  textDecoration: 'none',
+                  color: 'yellow.400',
+                  transform: 'scale(1.2)',
+                }}
+                _active={{ bg: 'transparent' }}
+                transition="color 0.3s ease, transform 0.3s ease"
+              >
+                Admin
+              </Button>
+            )}
+            <AiOutlineCalendar size={iconSize} />
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
+              Digital Calendar
+            </Text>
+          </Flex>
         </Flex>
       </Flex>
     </Box>

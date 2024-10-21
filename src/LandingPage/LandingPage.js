@@ -1,5 +1,3 @@
-// LandingPage.js
-
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -15,13 +13,13 @@ import { AiOutlineEye, AiOutlineCalendar } from 'react-icons/ai';
 import nasaImage from '../assets/nasa-Q1p7bh3SHj8-unsplash.jpg';
 import logoImage from '../assets/Diseño sin título (1).png';
 import lighthouseIcon from '../assets/lighthouse-svgrepo-com.svg';
+import ampIcon from '/Users/manuelpenamorros/Downloads/tva2-main/src/assets/amp-svgrepo-com.svg'; // Path to AMP icon
 
 const LandingPage = ({ handleLogout }) => {
   const [showLock, setShowLock] = useState(null);
   const [contentVisible, setContentVisible] = useState(false);
 
   useEffect(() => {
-    // Trigger transition effect after a small delay
     const timer = setTimeout(() => {
       setContentVisible(true);
     }, 300);
@@ -31,29 +29,25 @@ const LandingPage = ({ handleLogout }) => {
   const handleMouseEnter = (id) => setShowLock(id);
   const handleMouseLeave = () => setShowLock(null);
 
-  // Determine responsive values based on screen size
-  const flexDirection = useBreakpointValue({ base: 'column', md: 'row' });
+  const flexDirection = useBreakpointValue({ base: 'column', lg: 'row' });
   const boxWidth = useBreakpointValue({ base: '90%', md: '300px' });
   const boxHeight = useBreakpointValue({ base: '160px', md: '150px' });
-  const gap = useBreakpointValue({ base: 6, md: 14 });
+  const gap = useBreakpointValue({ base: 6, lg: 10 });
   const iconSize = useBreakpointValue({ base: '50px', md: '60px' });
   const lighthouseWidth = useBreakpointValue({ base: '50px', md: '60px' });
-
-  // Adjust logo size responsively
   const logoSize = useBreakpointValue({ base: '150px', md: '200px' });
 
   return (
     <Box
       color="white"
       width="100vw"
-      minHeight="100vh" // Ensure the Box takes at least the full viewport height
+      minHeight="100vh"
       position="relative"
-      overflow="auto" // Allow scrolling if content overflows
+      overflow="auto"
       bg="linear-gradient(90deg, #000000, #7800ff)"
-      py={8} // Vertical padding
-      px={4} // Horizontal padding
+      py={8}
+      px={4}
     >
-      {/* Background Image */}
       <Image
         src={nasaImage}
         alt="NASA background"
@@ -69,25 +63,24 @@ const LandingPage = ({ handleLogout }) => {
 
       {/* Logout Button */}
       <Button
-        position="fixed" // Fixed position to stay in place during scrolling
+        position="fixed" // Ensure the button stays fixed
         top="20px"
         right="20px"
         variant="link"
         color="white"
         onClick={handleLogout}
         aria-label="Logout"
-        zIndex="2"
+        zIndex="1000" // High z-index to stay above other elements
         _hover={{ textDecoration: 'none', color: 'white' }}
         _active={{ bg: 'transparent' }}
       >
         Logout
       </Button>
 
-      {/* Main Content */}
       <Flex
         direction="column"
         align="center"
-        justify="flex-start" // Align items from the top to prevent cutting off
+        justify="flex-start"
         zIndex="1"
         position="relative"
         gap={10}
@@ -97,15 +90,13 @@ const LandingPage = ({ handleLogout }) => {
           transition: 'opacity 1.5s ease, transform 1.5s ease',
         }}
       >
-        {/* Logo in the Center */}
         <Image
           src={logoImage}
           alt="Digital Benchmarks Logo"
           width={logoSize}
-          mb={8} // Bottom margin to separate from navigation boxes
+          mb={8}
         />
 
-        {/* Centered Boxes for Navigation */}
         <Flex
           direction={flexDirection}
           justify="center"
@@ -114,6 +105,72 @@ const LandingPage = ({ handleLogout }) => {
           wrap="wrap"
           width="100%"
         >
+          {/* Lighthouse (Static) */}
+          <Flex
+            direction="column"
+            align="center"
+            justify="center"
+            border="2px solid white"
+            borderRadius="lg"
+            p={4}
+            width={boxWidth}
+            height={boxHeight}
+            position="relative"
+            _hover={{ transform: 'scale(1.05)' }}
+            transition="transform 0.3s ease"
+            cursor="default"
+            mb={{ base: 4, md: 0 }}
+          >
+            <Image
+              src={lighthouseIcon}
+              alt="Lighthouse Icon"
+              width={lighthouseWidth}
+              filter="invert(1)"
+            />
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
+              Lighthouse
+            </Text>
+          </Flex>
+
+          {/* Lighthouse AMP (Static) */}
+          <Flex
+            direction="column"
+            align="center"
+            justify="center"
+            border="2px solid white"
+            borderRadius="lg"
+            p={4}
+            width={boxWidth}
+            height={boxHeight}
+            position="relative"
+            _hover={{ transform: 'scale(1.05)' }}
+            transition="transform 0.3s ease"
+            cursor="default"
+            mb={{ base: 4, md: 0 }}
+          >
+            <Image
+              src={ampIcon} // New AMP Icon
+              alt="Lighthouse AMP Icon"
+              width={lighthouseWidth}
+              filter="invert(1)"
+            />
+            <Text
+              mt={6}
+              fontSize={['md', 'lg']}
+              fontWeight="bold"
+              fontFamily="Arial"
+              textAlign="center"
+            >
+              Lighthouse AMP
+            </Text>
+          </Flex>
+
           {/* Popular Objects */}
           <Flex
             direction="column"
@@ -132,7 +189,7 @@ const LandingPage = ({ handleLogout }) => {
             onMouseLeave={handleMouseLeave}
             transition="transform 0.3s ease"
             cursor="pointer"
-            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
+            mb={{ base: 4, md: 0 }}
           >
             {showLock === 'popular' && (
               <Button
@@ -168,39 +225,6 @@ const LandingPage = ({ handleLogout }) => {
             </Text>
           </Flex>
 
-          {/* Lighthouse (Static) */}
-          <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            border="2px solid white"
-            borderRadius="lg"
-            p={4}
-            width={boxWidth}
-            height={boxHeight}
-            position="relative"
-            _hover={{ transform: 'scale(1.05)' }}
-            transition="transform 0.3s ease"
-            cursor="default" // Indicate non-interactivity
-            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
-          >
-            <Image
-              src={lighthouseIcon}
-              alt="Lighthouse Icon"
-              width={lighthouseWidth}
-              filter="invert(1)"
-            />
-            <Text
-              mt={6}
-              fontSize={['md', 'lg']}
-              fontWeight="bold"
-              fontFamily="Arial"
-              textAlign="center"
-            >
-              Lighthouse
-            </Text>
-          </Flex>
-
           {/* Digital Calendar */}
           <Flex
             direction="column"
@@ -219,7 +243,7 @@ const LandingPage = ({ handleLogout }) => {
             onMouseLeave={handleMouseLeave}
             transition="transform 0.3s ease"
             cursor="pointer"
-            mb={{ base: 4, md: 0 }} // Margin bottom on mobile to prevent overlap
+            mb={{ base: 4, md: 0 }}
           >
             {showLock === 'calendar' && (
               <Button
@@ -261,3 +285,4 @@ const LandingPage = ({ handleLogout }) => {
 };
 
 export default LandingPage;
+

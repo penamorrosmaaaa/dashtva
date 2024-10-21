@@ -1,7 +1,31 @@
+// LoginPage.js
+
 import React, { useState } from 'react';
-import { Box, Button, Input, FormControl, FormLabel, Heading, VStack, Image } from '@chakra-ui/react';
+import { Box, Button, Input, FormControl, FormLabel, VStack, Image } from '@chakra-ui/react';
 import nasaImage from './assets/nasa-Q1p7bh3SHj8-unsplash.jpg';
 import logoImage from './assets/Diseño sin título (1).png';
+
+const users = [
+  {
+    username: 'Gudiño',
+    password: '12345',
+    permissions: ['Popular Objects', 'Digital Calendar', 'Lighthouse', 'Lighthouse AMP'],
+    isAdmin: true, // This user is an admin
+  },
+  {
+    username: 'User1',
+    password: 'password1',
+    permissions: ['Lighthouse'],
+    isAdmin: false,
+  },
+  {
+    username: 'User2',
+    password: 'password2',
+    permissions: ['Lighthouse AMP', 'Popular Objects'],
+    isAdmin: false,
+  },
+  // Add more users as needed
+];
 
 const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');
@@ -11,21 +35,20 @@ const LoginPage = ({ onLogin }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Check credentials against the provided username and password
-    if (username === 'Gudiño' && password === '12345') {
-      onLogin(); // Trigger login
+    // Find the user
+    const user = users.find(
+      (u) => u.username === username && u.password === password
+    );
+
+    if (user) {
+      onLogin(user); // Pass the user object to App.js
     } else {
       setError('Invalid credentials. Please try again.');
     }
   };
 
   return (
-    <Box
-      width="100vw"
-      height="100vh"
-      position="relative"
-      overflow="hidden"
-    >
+    <Box width="100vw" height="100vh" position="relative" overflow="hidden">
       {/* Background Gradient */}
       <Box
         width="100vw"
@@ -66,7 +89,7 @@ const LoginPage = ({ onLogin }) => {
         {/* Logo in the Center */}
         <Image src={logoImage} alt="Digital Benchmarks Logo" width="200px" mb={8} />
         <VStack spacing={4} align="stretch" width="300px">
-                    <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
             <FormControl id="username" isRequired>
               <FormLabel fontWeight="bold">Username</FormLabel>
               <Input
@@ -112,7 +135,8 @@ const LoginPage = ({ onLogin }) => {
               mt={6}
               bg="transparent"
               _hover={{ bg: 'rgba(0, 0, 0, 0.2)' }}
-             border="2px solid white">
+              border="2px solid white"
+            >
               Login
             </Button>
           </form>

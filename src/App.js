@@ -1,13 +1,8 @@
-// src/App.js
+// App.js
 
 import React, { useState, useEffect } from 'react';
 import { ChakraProvider, Box } from '@chakra-ui/react';
-import {
-  BrowserRouter as Router,
-  Route,
-  Routes,
-  Navigate,
-} from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
 
 // Import your components with correct paths
 import HomeAdmin from './HomeAdmin/HomeAdmin';
@@ -21,21 +16,23 @@ import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
 
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState(null);
 
   useEffect(() => {
-    const authStatus = localStorage.getItem('isAuthenticated');
-    setIsAuthenticated(authStatus === 'true');
+    const storedUser = localStorage.getItem('authenticatedUser');
+    if (storedUser) {
+      setAuthenticatedUser(JSON.parse(storedUser));
+    }
   }, []);
 
-  const handleLogin = () => {
-    localStorage.setItem('isAuthenticated', 'true');
-    setIsAuthenticated(true);
+  const handleLogin = (user) => {
+    localStorage.setItem('authenticatedUser', JSON.stringify(user));
+    setAuthenticatedUser(user);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    setIsAuthenticated(false);
+    localStorage.removeItem('authenticatedUser');
+    setAuthenticatedUser(null);
   };
 
   return (
@@ -47,8 +44,11 @@ const App = () => {
         color="white"
       >
         <Router>
-          {isAuthenticated ? (
-            <AuthenticatedRoutes handleLogout={handleLogout} />
+          {authenticatedUser ? (
+            <AuthenticatedRoutes
+              handleLogout={handleLogout}
+              authenticatedUser={authenticatedUser}
+            />
           ) : (
             <UnauthenticatedRoutes handleLogin={handleLogin} />
           )}
@@ -58,19 +58,32 @@ const App = () => {
   );
 };
 
-const AuthenticatedRoutes = ({ handleLogout }) => (
+const AuthenticatedRoutes = ({ handleLogout, authenticatedUser }) => (
   <Routes>
     <Route path="/login" element={<Navigate to="/landing" replace />} />
     <Route
       path="/landing"
-      element={<LandingPage handleLogout={handleLogout} />}
+      element={
+        <LandingPage
+          handleLogout={handleLogout}
+          authenticatedUser={authenticatedUser}
+        />
+      }
     />
     <Route path="/" element={<Navigate to="/landing" replace />} />
 
     {/* Admin Routes */}
-    <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
-    <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
-    <Route path="/Digital-Calendar" element={<NewPage />} />
+    {authenticatedUser.isAdmin && (
+      <>
+        <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
+        <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
+      </>
+    )}
+
+    {/* User Routes */}
+    {authenticatedUser.permissions.includes('Digital Calendar') && (
+      <Route path="/Digital-Calendar" element={<NewPage />} />
+    )}
 
     {/* Main Application Route */}
     <Route

@@ -21,11 +21,6 @@ const NewPageAdmin = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated'); // Remove auth flag
-    navigate('/'); // Redirect to the main login page
-  };
-
   if (!isAuthorized) {
     return (
       <Box
@@ -93,21 +88,7 @@ const NewPageAdmin = () => {
         ></iframe>
       </Box>
 
-      {/* Logout Button */}
-      <Button
-        position="absolute"
-        bottom="20px"
-        right="20px"
-        bg="transparent"
-        color="white"
-        border="2px solid white"
-        _hover={{ bg: 'rgba(255, 255, 255, 0.1)' }}
-        onClick={handleLogout}
-        aria-label="Logout"
-        zIndex="1" // Ensure the button is above the iframe
-      >
-        Logout
-      </Button>
+      {/* The Logout Button has been removed */}
     </Box>
   );
 };

@@ -574,8 +574,38 @@ const DataTable = () => {
           overflow="hidden" // Prevent overflow
         >
           {/* Navigation Arrows and Date Selection */}
-          
-
+          <Flex alignItems="center" mb={4}>
+            <IconButton
+              icon={<ChevronLeftIcon />}
+              onClick={goToPreviousDate}
+              isDisabled={currentIndex >= sortedDates.length - 1}
+              aria-label="Previous Date"
+              mr={2}
+            />
+            <Text fontSize="md" mr={2}>
+              Viewing Data for:
+            </Text>
+            {/* Calendar Input for Date Selection */}
+            <Flex alignItems="center">
+              <Input
+                type="date"
+                value={currentDate || ""}
+                onChange={handleDateChange}
+                max={mostRecentDate} // Prevent selecting future dates
+                bg="white"
+                color="black"
+                size="sm"
+                mr={2}
+              />
+            </Flex>
+            <IconButton
+              icon={<ChevronRightIcon />}
+              onClick={goToNextDate}
+              isDisabled={currentIndex <= 0}
+              aria-label="Next Date"
+              ml={2}
+            />
+          </Flex>
 
           {/* Expand/Collapse Button */}
           <Flex justifyContent="flex-end" mb={2}>
@@ -838,3 +868,4 @@ const DataTable = () => {
 };
 
 export default DataTable;
+

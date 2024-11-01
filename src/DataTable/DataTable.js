@@ -18,12 +18,16 @@ import {
   Spinner,
   IconButton,
   Button,
-  Input, // Import Input for date picker
-  Icon, // Import Icon for calendar icon
+  Input,
 } from "@chakra-ui/react";
-import { ChevronLeftIcon, ChevronRightIcon, CalendarIcon } from "@chakra-ui/icons"; // Import CalendarIcon
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+} from "@chakra-ui/icons";
 import Plot from "react-plotly.js";
-import Papa from "papaparse"; // Import PapaParse
+import Papa from "papaparse";
 
 // Function to get RGBA fill color based on line color
 function getFillColor(lineColor) {
@@ -37,6 +41,10 @@ function getFillColor(lineColor) {
 }
 
 const DataTable = () => {
+  // ============================
+  // 1. Hook Declarations (Top Level)
+  // ============================
+
   // State to manage all CSV data
   const [allData, setAllData] = useState([]);
 
@@ -63,6 +71,13 @@ const DataTable = () => {
   const [isComparing, setIsComparing] = useState(false);
   const [compareDay, setCompareDay] = useState(""); // Removed default "All"
 
+  // State to manage expand/collapse
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // ============================
+  // 2. Function Definitions (Top Level)
+  // ============================
+
   // Function to handle row click
   const handleRowClick = (row) => {
     setSelectedRow(row);
@@ -71,6 +86,24 @@ const DataTable = () => {
     setIsComparing(false);
     setCompareDay("");
   };
+
+  // Function to navigate to the previous date
+  const goToPreviousDate = () => {
+    if (currentIndex < sortedDates.length - 1) {
+      setCurrentDate(sortedDates[currentIndex + 1]);
+    }
+  };
+
+  // Function to navigate to the next date
+  const goToNextDate = () => {
+    if (currentIndex > 0) {
+      setCurrentDate(sortedDates[currentIndex - 1]);
+    }
+  };
+
+  // ============================
+  // 3. Data Fetching and Processing
+  // ============================
 
   // Fetch and process CSV data on component mount
   useEffect(() => {
@@ -159,12 +192,16 @@ const DataTable = () => {
     });
   }, []);
 
-  // Get all unique dates sorted ascending
+  // ============================
+  // 4. Derived Data with useMemo
+  // ============================
+
+  // Get all unique dates sorted descending (newest first)
   const sortedDates = useMemo(() => {
     const uniqueDates = Array.from(new Set(allData.map((row) => row.Date))).filter(
       (date) => date
     );
-    uniqueDates.sort((a, b) => new Date(a) - new Date(b)); // Sort ascending
+    uniqueDates.sort((a, b) => new Date(b) - new Date(a)); // Sort descending
     return uniqueDates;
   }, [allData]);
 
@@ -172,23 +209,11 @@ const DataTable = () => {
     return sortedDates.indexOf(currentDate);
   }, [currentDate, sortedDates]);
 
-  const goToPreviousDate = () => {
-    if (currentIndex > 0) {
-      setCurrentDate(sortedDates[currentIndex - 1]);
-    }
-  };
-
-  const goToNextDate = () => {
-    if (currentIndex < sortedDates.length - 1) {
-      setCurrentDate(sortedDates[currentIndex + 1]);
-    }
-  };
-
   // Compute displayedData based on currentDate
   const displayedData = useMemo(() => {
     if (!currentDate) return [];
 
-    // Filter allData for the currentDate
+    // Filter data for the currentDate
     const recentData = allData.filter((row) => row.Date === currentDate);
 
     if (recentData.length === 0) {
@@ -232,14 +257,6 @@ const DataTable = () => {
     if (maxObjectLength > 50) return "sm";
     return "md";
   }, [maxObjectLength]);
-
-  // Update selectedRow based on displayedData
-  useEffect(() => {
-    const initialRow =
-      displayedData.find((row) => row.object === "/envivo/query") ||
-      (displayedData.length > 0 ? displayedData[0] : null);
-    setSelectedRow(initialRow);
-  }, [displayedData]);
 
   // Memoized historic data for the selected row to optimize performance
   const historicData = useMemo(() => {
@@ -300,7 +317,7 @@ const DataTable = () => {
     // Remove any entries with invalid dates
     const validMappedData = mappedData.filter((d) => d.dayOfWeek !== null);
 
-    // Sort by date ascending
+    // Sort by date ascending for the graph (oldest first)
     validMappedData.sort((a, b) => new Date(a.x) - new Date(b.x));
 
     return validMappedData;
@@ -430,13 +447,45 @@ const DataTable = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // Calculate three weeks ago from currentDate
-  const threeWeeksAgo = useMemo(() => {
+  // Calculate seven days ago from currentDate
+  const sevenDaysAgo = useMemo(() => {
     if (!currentDate) return null;
     const date = new Date(currentDate);
-    date.setDate(date.getDate() - 21); // 21 days = 3 weeks
+    date.setDate(date.getDate() - 6); // Past 6 days + current day = 7 days
     return formatDate(date);
   }, [currentDate]);
+
+  // Generate the last seven dates for table headers and data alignment in descending order
+  const lastSevenDates = useMemo(() => {
+    if (!currentDate) return [];
+    const dates = [];
+    const current = new Date(currentDate);
+    for (let i = 0; i < 7; i++) { // i from 0 to 6 for descending order
+      const d = new Date(current);
+      d.setDate(current.getDate() - i);
+      dates.push(formatDate(d)); // 'YYYY-MM-DD'
+    }
+    return dates;
+  }, [currentDate]);
+
+  // Optional: Format dates for better display in headers
+  const displayLastSevenDates = useMemo(() => {
+    return lastSevenDates.map(dateStr => {
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() + 1); // Subtract one day to correct the header
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); // e.g., "Oct 25"
+    });
+  }, [lastSevenDates]);
+
+  // Determine Flex direction based on isExpanded
+  const flexDirection = useMemo(() => {
+    if (isExpanded) return "column";
+    return { base: "column", md: "row" };
+  }, [isExpanded]);
+
+  // ============================
+  // 5. Early Returns for Loading and Error
+  // ============================
 
   // Loading State
   if (loading) {
@@ -475,6 +524,26 @@ const DataTable = () => {
     );
   }
 
+  // ============================
+  // 6. Helper Function
+  // ============================
+
+  // Helper function to get data for the past 7 days for a specific object
+  const getPastSevenDaysData = (object) => {
+    if (!lastSevenDates.length) return [];
+    return lastSevenDates.map(date => {
+      const row = allData.find(r => r.Date === date && r.Object === object);
+      if (!row) return "-"; // If data is missing, show '-'
+      const requestCount = parseInt(row["Request Count"], 10);
+      if (isNaN(requestCount) || requestCount === 0) return "-"; // If 0 or invalid, show '-'
+      return requestCount.toLocaleString();
+    });
+  };
+
+  // ============================
+  // 7. Render Component
+  // ============================
+
   return (
     <Box
       p={5}
@@ -487,7 +556,7 @@ const DataTable = () => {
     >
       {/* Table and Detailed Graph Section */}
       <Flex
-        direction={{ base: "column", md: "row" }}
+        direction={flexDirection}
         width={{ base: "100%", md: "87%" }}
         overflow="hidden" // Prevent overflow
       >
@@ -500,49 +569,31 @@ const DataTable = () => {
           p={6}
           boxShadow="lg"
           flex="1"
-          mr={{ base: 0, md: 8 }} // Margin right on medium screens and above
-          mb={{ base: 8, md: 0 }} // Bottom margin on small screens
+          mr={{ base: 0, md: isExpanded ? 0 : 8 }} // Margin right on medium screens and above, remove if expanded
+          mb={{ base: 8, md: isExpanded ? 4 : 0 }} // Bottom margin on small screens or when expanded
           overflow="hidden" // Prevent overflow
         >
           {/* Navigation Arrows and Date Selection */}
-          <Flex alignItems="center" mb={4}>
-            <IconButton
-              icon={<ChevronLeftIcon />}
-              onClick={goToPreviousDate}
-              isDisabled={currentIndex <= 0}
-              aria-label="Previous Date"
-              mr={2}
-            />
-            <Text fontSize="md" mr={2}>
-              Viewing Data for:
-            </Text>
-            {/* Calendar Input for Date Selection */}
-            <Flex alignItems="center">
-              <Input
-                type="date"
-                value={currentDate || ""}
-                onChange={handleDateChange}
-                max={mostRecentDate} // Prevent selecting future dates
-                bg="white"
-                color="black"
-                size="sm"
-                mr={2}
-              />
-            </Flex>
-            <IconButton
-              icon={<ChevronRightIcon />}
-              onClick={goToNextDate}
-              isDisabled={currentIndex >= sortedDates.length - 1}
-              aria-label="Next Date"
-              ml={2}
-            />
+          
+
+
+          {/* Expand/Collapse Button */}
+          <Flex justifyContent="flex-end" mb={2}>
+            <Button
+              onClick={() => setIsExpanded(!isExpanded)}
+              leftIcon={isExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+              size="sm"
+              colorScheme="none"
+            >
+              {isExpanded ? "Collapse" : "Expand"} 
+            </Button>
           </Flex>
 
           {/* Updated TableContainer with Hidden Scrollbar and Uniform Font Size */}
           <TableContainer
-            overflowY="scroll"
+            overflowY="auto"
             maxH="600px" // Adjust this value based on the approximate height of 10 rows
-            overflowX="hidden" // Prevent horizontal scrolling
+            overflowX="auto" // Enable horizontal scrolling when expanded
             sx={{
               /* Hide scrollbar for IE, Edge, and Firefox */
               scrollbarWidth: "none", // Firefox
@@ -565,8 +616,22 @@ const DataTable = () => {
                   >
                     Object
                   </Th>
-                  <Th isNumeric color="white">Percentage (%)</Th> {/* Include % symbol */}
-                  <Th isNumeric color="white">Amount</Th>
+                  {/* Conditionally hide Percentage column when expanded */}
+                  {!isExpanded && (
+                    <Th isNumeric color="white">
+                      Percentage (%)
+                    </Th>
+                  )}
+                  <Th isNumeric color="white">
+                    Amount
+                  </Th>
+                  {/* Conditionally render past 7 days headers in descending order */}
+                  {isExpanded &&
+                    displayLastSevenDates.map((date, i) => (
+                      <Th key={i} isNumeric color="white" fontSize="sm" p={2}>
+                        {date}
+                      </Th>
+                    ))}
                 </Tr>
               </Thead>
               <Tbody>
@@ -594,8 +659,16 @@ const DataTable = () => {
                         </Text>
                       </Tooltip>
                     </Td>
-                    <Td isNumeric>{row.percentage}</Td>
+                    {/* Conditionally hide Percentage cell when expanded */}
+                    {!isExpanded && <Td isNumeric>{row.percentage}</Td>}
                     <Td isNumeric>{row.amount}</Td>
+                    {/* Conditionally render past 7 days data */}
+                    {isExpanded &&
+                      getPastSevenDaysData(row.object).map((count, i) => (
+                        <Td key={i} isNumeric fontSize="sm" p={2}>
+                          {count}
+                        </Td>
+                      ))}
                   </Tr>
                 ))}
               </Tbody>
@@ -613,6 +686,7 @@ const DataTable = () => {
           p={6}
           boxShadow="lg"
           flex="1"
+          mt={isExpanded ? 8 : 0} // Add top margin when expanded to move the graph down
           overflow="hidden" // Prevent overflow
         >
           <Flex direction="column" alignItems="center" mb={4}>
@@ -633,7 +707,7 @@ const DataTable = () => {
                   <Select
                     value={selectedDay}
                     onChange={(e) => setSelectedDay(e.target.value)}
-                    placeholder="All Days" // Changed from "All Days" to "Select Day"
+                    placeholder="Select Day" // Changed from "All Days" to "Select Day"
                     bg="white"
                     color="black"
                   >
@@ -655,7 +729,7 @@ const DataTable = () => {
                     <Select
                       value={compareDay}
                       onChange={(e) => setCompareDay(e.target.value)}
-                      placeholder="All days" // Changed from "Compare with..." to "Select Day"
+                      placeholder="Select Day" // Changed from "Compare with..." to "Select Day"
                       isDisabled={!isComparing}
                       maxW="200px"
                       bg="white"
@@ -708,8 +782,8 @@ const DataTable = () => {
                     tickangle: -45,
                     automargin: true,
                     tickformat: "%b %d, %Y", // Format to show month, day, year
-                    // **Preset the timeline to last 3 weeks**
-                    range: threeWeeksAgo ? [threeWeeksAgo, currentDate] : undefined,
+                    // **Preset the timeline to last 7 days**
+                    range: sevenDaysAgo ? [sevenDaysAgo, currentDate] : undefined,
                     rangeslider: { visible: true }, // Enable range slider
                   },
                   yaxis: {

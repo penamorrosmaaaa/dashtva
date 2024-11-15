@@ -479,12 +479,16 @@ const DataTable = () => {
     return `${year}-${month}-${day}`;
   };
 
-  // Generate the last seven dates for table headers and data alignment in descending order
+  // ============================
+  // 4.1. Adjusted lastSevenDates Calculation
+  // ============================
+
+  // Generate the last seven dates starting from currentDate -1
   const lastSevenDates = useMemo(() => {
     if (!currentDate) return [];
     const dates = [];
     const current = new Date(currentDate);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 1; i <= 7; i++) { // Start from 1 to exclude currentDate
       const d = new Date(current);
       d.setDate(current.getDate() - i);
       dates.push(formatDate(d));
@@ -492,10 +496,15 @@ const DataTable = () => {
     return dates;
   }, [currentDate]);
 
-  // Format dates for better display in headers
+  // ============================
+  // 4.2. Updated Display Last Seven Dates (Shift Labels by One Day Earlier)
+  // ============================
+
+  // Format dates for better display in headers and shift labels by one day earlier
   const displayLastSevenDates = useMemo(() => {
     return lastSevenDates.map((dateStr) => {
       const d = new Date(dateStr);
+      d.setDate(d.getDate() + 1); // Shift label by one day earlier
       return d.toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
@@ -503,28 +512,25 @@ const DataTable = () => {
     });
   }, [lastSevenDates]);
 
-  // Define a formatted date for table headers (e.g., "Nov 7")
-  const formattedDate = useMemo(() => {
+  // ============================
+  // 4.3. Update formattedCurrentDate
+  // ============================
+
+  // Define a formatted date for table headers (e.g., "Nov 15")
+  const formattedCurrentDate = useMemo(() => {
     if (!currentDate) return "";
     const d = new Date(currentDate);
+    d.setDate(d.getDate() + 1); // **Add one day to the currentDate**
     return d.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
     });
   }, [currentDate]);
 
-  // Define a formatted next date for the "Amount" header (e.g., "Nov 8")
-  const nextDate = useMemo(() => {
-    if (!currentDate) return "";
-    const d = new Date(currentDate);
-    d.setDate(d.getDate() + 1); // Add one day
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  }, [currentDate]);
+  // ============================
+  // 4.4. Determine Flex direction based on isExpanded
+  // ============================
 
-  // Determine Flex direction based on isExpanded
   const flexDirection = useMemo(() => {
     if (isExpanded) return "column";
     return { base: "column", md: "row" };
@@ -699,7 +705,7 @@ const DataTable = () => {
                     </Th>
                   )}
                   <Th isNumeric color="white">
-                    {nextDate}
+                    {formattedCurrentDate} {/* Updated to currentDate + 1 day */}
                   </Th>
                   {/* Conditionally render past 7 days headers in descending order */}
                   {isExpanded &&
@@ -711,7 +717,7 @@ const DataTable = () => {
                         fontSize="sm"
                         p={2}
                       >
-                        {date}
+                        {date} {/* Labels shifted by one day earlier */}
                       </Th>
                     ))}
                 </Tr>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Button, Input, FormControl, FormLabel, Heading, VStack, Image } from '@chakra-ui/react';
+import { Box, Button, Input, FormControl, FormLabel, VStack, Image } from '@chakra-ui/react';
 import nasaImage from './assets/nasa-Q1p7bh3SHj8-unsplash.jpg';
 import logoImage from './assets/Diseño sin título (1).png';
 
@@ -12,7 +12,7 @@ const LoginPage = ({ onLogin }) => {
     e.preventDefault();
 
     // Check credentials against the provided username and password
-    if (username === 'Gudiño' && password === '12345') {
+    if ((username === 'Gudiño' && password === '12345') || (username === 'Liz' && password === '1793')) {
       onLogin(); // Trigger login
     } else {
       setError('Invalid credentials. Please try again.');
@@ -66,7 +66,7 @@ const LoginPage = ({ onLogin }) => {
         {/* Logo in the Center */}
         <Image src={logoImage} alt="Digital Benchmarks Logo" width="200px" mb={8} />
         <VStack spacing={4} align="stretch" width="300px">
-                    <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit}>
             <FormControl id="username" isRequired>
               <FormLabel fontWeight="bold">Username</FormLabel>
               <Input
@@ -112,7 +112,8 @@ const LoginPage = ({ onLogin }) => {
               mt={6}
               bg="transparent"
               _hover={{ bg: 'rgba(0, 0, 0, 0.2)' }}
-             border="2px solid white">
+              border="2px solid white"
+            >
               Login
             </Button>
           </form>

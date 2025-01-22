@@ -135,7 +135,7 @@ const NewPage = () => {
   }, [CSV_2024_URL, CSV_2025_URL, toast]);
 
   const processSheetData = (rows, defaultYear) => {
-    const dataRows = rows.slice(9);
+    const dataRows = rows.slice(5);
     const parsed = [];
     dataRows.forEach((row, i) => {
       try {
@@ -388,7 +388,7 @@ const NewPage = () => {
   }, [yearFilteredData]);
 
   // table displayed data
-  const recentEvents = useMemo(() => tableFilteredData.slice(0, 10), [tableFilteredData]);
+  const recentEvents = useMemo(() => tableFilteredData.slice(0, 5), [tableFilteredData]);
   const displayedTableData = useMemo(
     () => (isTableExpanded ? tableFilteredData : recentEvents),
     [isTableExpanded, tableFilteredData, recentEvents]

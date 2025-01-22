@@ -1,6 +1,5 @@
 /* src/NewPage/NewPage.js */
-
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Box,
   Text,
@@ -26,198 +25,99 @@ import { ChevronUpIcon, ChevronDownIcon } from "@chakra-ui/icons";
 import Papa from "papaparse";
 import Plot from "react-plotly.js";
 
-// Helper function to parse date strings like "1/12/2024" to Date objects
 const parseDateString = (dateStr) => {
   if (!dateStr) return null;
-  const date = new Date(dateStr); // Will parse "M/D/YYYY" in most browsers
-  if (isNaN(date)) {
-    console.warn(`Invalid date format encountered: "${dateStr}"`);
-    return null;
-  }
-  return date;
+  const d = new Date(dateStr);
+  return isNaN(d) ? null : d;
 };
 
-// Helper function to format dates as "M/D/YYYY"
 const formatDate = (dateStr) => {
-  const date = new Date(dateStr);
-  if (isNaN(date)) return "Invalid Date";
-  const month = date.getMonth() + 1; // Months are zero-based
-  const day = date.getDate();
-  const year = date.getFullYear();
-  return `${month}/${day}/${year}`;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return "Invalid Date";
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 };
 
-// Helper function to format numbers with commas and no decimals
-const formatNumber = (number) => {
-  if (number === null || number === undefined) return "-";
-  if (isNaN(number)) return "-";
-  return Number(number).toLocaleString("en-US", {
+const formatNumber = (val) => {
+  if (val == null || isNaN(val)) return "-";
+  return Number(val).toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
 };
 
 const NewPage = () => {
-  const [eventData, setEventData] = useState([]); 
-  const [categories, setCategories] = useState([]); 
+  const [eventData, setEventData] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Distribution Section states
+  // Year Filter
+  const [yearFilter, setYearFilter] = useState("All");
+
+  // Distribution / Pie
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedSubcategory, setSelectedSubcategory] = useState("All");
-  const [selectedGraphOption, setSelectedGraphOption] = useState("TOTAL");
 
-  // Line Graph states
-  const [selectedEvents, setSelectedEvents] = useState([]);
-  const [selectedRow, setSelectedRow] = useState(null);
-
-  // Table expansion & Pie chart visibility
-  const [isTableExpanded, setIsTableExpanded] = useState(false);
-  const [isPieChartVisible, setIsPieChartVisible] = useState(false);
-
-  // Table Filters
+  // Table
   const [tableCategoryFilter, setTableCategoryFilter] = useState("All");
   const [tableSubcategoryFilter, setTableSubcategoryFilter] = useState("All");
+  const [isTableExpanded, setIsTableExpanded] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [isPieChartVisible, setIsPieChartVisible] = useState(false);
 
-  // Compare Mode
+  // Compare
   const [compareMode, setCompareMode] = useState(false);
   const [selectedCompareEvents, setSelectedCompareEvents] = useState([]);
 
-  // Optional: timeline range for filtering
+  // Timeline Range (optional)
   const [timelineRange, setTimelineRange] = useState({ start: null, end: null });
 
-  // Metrics Type
+  // Metrics Box
   const [metricsType, setMetricsType] = useState("Average");
+
+  // Line Graph
+  const [selectedGraphOption, setSelectedGraphOption] = useState("TOTAL");
+  const [selectedEvents, setSelectedEvents] = useState([]);
+  const pieChartRef = useRef(null);
 
   const toast = useToast();
 
-  // Your Google Sheets CSV URL
-  const PRIMARY_CSV_URL =
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vRA4x6epe-dPmk8C0RxA9Y9bgj4t7GUglqLzSn1FmPGawDdD5yawZg-ZO3hSG01yA/pub?output=csv";
+  // Two CSV URLs (2024 & 2025)
+  const CSV_2024_URL =
+    "https://docs.google.com/spreadsheets/d/1oaMzcoyGzpY8Wg8EL8wlLtb4OHWzExOu/pub?gid=192670985&single=true&output=csv";
+  const CSV_2025_URL =
+    "https://docs.google.com/spreadsheets/d/1oaMzcoyGzpY8Wg8EL8wlLtb4OHWzExOu/pub?gid=1426605172&single=true&output=csv";
 
-  // Helper function to fetch CSV data
   const fetchCSVData = async (csvUrl) => {
-    try {
-      const response = await fetch(csvUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch CSV: ${response.statusText}`);
-      }
-      const csvText = await response.text();
-      const parsed = Papa.parse(csvText, { header: false, skipEmptyLines: true });
-      if (parsed.errors.length > 0) {
-        console.error("CSV Parsing Errors:", parsed.errors);
-        throw new Error("Error parsing CSV data.");
-      }
-      return parsed.data; // Array of rows
-    } catch (error) {
-      console.error("Error fetching CSV:", error);
-      throw error;
+    const res = await fetch(csvUrl);
+    if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.statusText}`);
+    const text = await res.text();
+    const parsed = Papa.parse(text, { header: false, skipEmptyLines: true });
+    if (parsed.errors.length > 0) {
+      console.error("CSV Parsing Errors:", parsed.errors);
+      throw new Error("Error parsing CSV data.");
     }
+    return parsed.data;
   };
 
-  // Fetch primary CSV and process event data
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAll = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Fetch primary CSV
-        const primaryData = await fetchCSVData(PRIMARY_CSV_URL);
+        const [data2024, data2025] = await Promise.all([
+          fetchCSVData(CSV_2024_URL),
+          fetchCSVData(CSV_2025_URL),
+        ]);
+        const p2024 = processSheetData(data2024, "2024");
+        const p2025 = processSheetData(data2025, "2025");
+        const combined = [...p2024, ...p2025];
+        combined.sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
+        setEventData(combined);
 
-        // Data starts from row 10 (index 9)
-        const dataRows = primaryData.slice(9);
-        const allEventData = [];
-
-        dataRows.forEach((row, index) => {
-          try {
-            const weekNumberStr = row[2]?.trim(); // Column C
-            const weekNumber = weekNumberStr ? parseInt(weekNumberStr, 10) : 0;
-            const category = row[3]?.trim();      // Column D
-            const subcategory = row[4]?.trim();   // Column E
-
-            // Column F is index 5, in format "M/D/YYYY"
-            const dateStr = row[5]?.trim();       
-
-            const eventName = row[6]?.trim();     // Column G
-            const eventDescription = row[7]?.trim(); // Column H
-            const siteUsers = row[12]?.trim();    // Column M
-            const appsUsers = row[13]?.trim();    // Column N
-            const subtotal = row[14]?.trim();     // Column O
-            const ctv = row[15]?.trim();          // Column P
-            const total = row[16]?.trim();        // Column Q
-            const aprov = row[18]?.trim();        // Column S
-
-            // Skip row if category is empty
-            if (!category) {
-              return;
-            }
-
-            // Parse date
-            const eventDateObj = parseDateString(dateStr);
-
-            // Parse numbers
-            const parsedSiteUsers = siteUsers
-              ? parseFloat(siteUsers.replace(/,/g, "")) || 0
-              : 0;
-            const parsedAppsUsers = appsUsers
-              ? parseFloat(appsUsers.replace(/,/g, "")) || 0
-              : 0;
-
-            // Subtotal fallback
-            const parsedSubtotal =
-              subtotal && subtotal !== "-"
-                ? parseFloat(subtotal.replace(/,/g, "")) ||
-                  (parsedSiteUsers + parsedAppsUsers)
-                : parsedSiteUsers + parsedAppsUsers;
-
-            // CTV fallback
-            const parsedCtv =
-              ctv && ctv !== "-" ? parseFloat(ctv.replace(/,/g, "")) : 0;
-
-            // Total fallback
-            const parsedTotal =
-              total && total !== "-"
-                ? parseFloat(total.replace(/,/g, ""))
-                : parsedSubtotal + parsedCtv;
-
-            // Aprov as number or null
-            const parsedAprov =
-              aprov && aprov !== "-" ? parseFloat(aprov.replace(/,/g, "")) : null;
-
-            allEventData.push({
-              id: `${eventName}-${dateStr}-${category}-${subcategory}-${index}`,
-              weekNumber: weekNumber || 0,
-              category: category,
-              subcategory: subcategory || "N/A",
-              eventDate: eventDateObj
-                ? eventDateObj.toISOString().split("T")[0] // store as "YYYY-MM-DD"
-                : "N/A",
-              eventName: eventName || "N/A",
-              eventDescription: eventDescription || "",
-              siteUsers: parsedSiteUsers,
-              appsUsers: parsedAppsUsers,
-              subtotal: parsedSubtotal,
-              ctv: parsedCtv,
-              total: parsedTotal,
-              aprov: parsedAprov,
-            });
-          } catch (err) {
-            console.error(`Error processing row ${index + 10}:`, err);
-            // Continue for other rows
-          }
-        });
-
-        // ***** Sort purely by date descending to ensure most recent date is at the top *****
-        allEventData.sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
-
-        setEventData(allEventData);
-
-        // Extract unique categories
-        const uniqueCategories = Array.from(
-          new Set(allEventData.map((d) => d.category))
-        ).sort();
-        setCategories(uniqueCategories);
+        // unique categories
+        const uniqueCats = Array.from(new Set(combined.map((d) => d.category))).sort();
+        setCategories(uniqueCats);
       } catch (err) {
         setError(err.message);
         toast({
@@ -231,22 +131,91 @@ const NewPage = () => {
         setIsLoading(false);
       }
     };
+    fetchAll();
+  }, [CSV_2024_URL, CSV_2025_URL, toast]);
 
-    fetchData();
-  }, [PRIMARY_CSV_URL, toast]);
+  const processSheetData = (rows, defaultYear) => {
+    const dataRows = rows.slice(9);
+    const parsed = [];
+    dataRows.forEach((row, i) => {
+      try {
+        const cat = row[3]?.trim();
+        if (!cat) return; // skip empty
+        const dateStr = row[5]?.trim();
+        const eDate = parseDateString(dateStr);
+        const yearVal = eDate ? eDate.getFullYear().toString() : defaultYear;
 
-  // Subcategories for selected category
+        const eventName = row[6]?.trim() || "";
+        const eventDesc = row[7]?.trim() || "";
+        const siteUsers = row[12]?.trim();
+        const appsUsers = row[13]?.trim();
+        const subtotal = row[14]?.trim();
+        const ctv = row[15]?.trim();
+        const total = row[16]?.trim();
+        const aprov = row[18]?.trim();
+
+        const wNum = row[2] ? parseInt(row[2], 10) : 0;
+        const parsedSite = siteUsers ? parseFloat(siteUsers.replace(/,/g, "")) || 0 : 0;
+        const parsedApps = appsUsers ? parseFloat(appsUsers.replace(/,/g, "")) || 0 : 0;
+
+        let subVal = subtotal && subtotal !== "-" 
+          ? parseFloat(subtotal.replace(/,/g, "")) || (parsedSite + parsedApps)
+          : parsedSite + parsedApps;
+
+        let ctvVal = ctv && ctv !== "-" ? parseFloat(ctv.replace(/,/g, "")) : 0;
+        let totalVal = total && total !== "-" 
+          ? parseFloat(total.replace(/,/g, "")) 
+          : subVal + ctvVal;
+        let aprovVal = aprov && aprov !== "-" 
+          ? parseFloat(aprov.replace(/,/g, "")) 
+          : null;
+
+        parsed.push({
+          id: `${eventName}-${dateStr}-${cat}-${i}-${defaultYear}`,
+          weekNumber: wNum,
+          category: cat,
+          subcategory: row[4]?.trim() || "N/A",
+          eventDate: eDate ? eDate.toISOString().split("T")[0] : "N/A",
+          eventName,
+          eventDescription: eventDesc,
+          siteUsers: parsedSite,
+          appsUsers: parsedApps,
+          subtotal: subVal,
+          ctv: ctvVal,
+          total: totalVal,
+          aprov: aprovVal,
+          year: yearVal,
+        });
+      } catch (err) {
+        console.error("Row error:", err);
+      }
+    });
+    return parsed;
+  };
+
+  // Year Filter
+  const yearFilteredData = useMemo(() => {
+    if (yearFilter === "All") return eventData;
+    return eventData.filter((d) => d.year === yearFilter);
+  }, [eventData, yearFilter]);
+
+  // subcategories for distribution
   const subcategories = useMemo(() => {
     if (selectedCategory === "All") {
       return Array.from(new Set(eventData.map((d) => d.subcategory))).sort();
     }
-    const filtered = eventData.filter((d) => d.category === selectedCategory);
-    return Array.from(new Set(filtered.map((d) => d.subcategory))).sort();
+    return Array.from(
+      new Set(
+        eventData
+          .filter((d) => d.category === selectedCategory)
+          .map((x) => x.subcategory)
+      )
+    ).sort();
   }, [eventData, selectedCategory]);
 
-  // Dynamic Category Colors
+  // category colors
   const categoryColors = useMemo(() => {
-    const predefinedColors = [
+    const palette = [
       "blue.600",
       "green.600",
       "purple.600",
@@ -258,18 +227,17 @@ const NewPage = () => {
       "cyan.600",
       "gray.600",
       "indigo.600",
-      // more if needed
     ];
-    const mapping = {};
-    categories.forEach((cat, index) => {
-      mapping[cat] = predefinedColors[index % predefinedColors.length];
+    const map = {};
+    categories.forEach((cat, idx) => {
+      map[cat] = palette[idx % palette.length];
     });
-    return mapping;
+    return map;
   }, [categories]);
 
-  // Distribution filter
+  // distribution filter
   const distributionFilteredData = useMemo(() => {
-    let data = [...eventData];
+    let data = [...yearFilteredData];
     if (selectedCategory !== "All") {
       data = data.filter((d) => d.category === selectedCategory);
     }
@@ -277,17 +245,21 @@ const NewPage = () => {
       data = data.filter((d) => d.subcategory === selectedSubcategory);
     }
     if (timelineRange.start) {
-      data = data.filter((d) => new Date(d.eventDate) >= new Date(timelineRange.start));
+      data = data.filter(
+        (d) => new Date(d.eventDate) >= new Date(timelineRange.start)
+      );
     }
     if (timelineRange.end) {
-      data = data.filter((d) => new Date(d.eventDate) <= new Date(timelineRange.end));
+      data = data.filter(
+        (d) => new Date(d.eventDate) <= new Date(timelineRange.end)
+      );
     }
     return data;
-  }, [eventData, selectedCategory, selectedSubcategory, timelineRange]);
+  }, [yearFilteredData, selectedCategory, selectedSubcategory, timelineRange]);
 
-  // Table filter
+  // table filter
   const tableFilteredData = useMemo(() => {
-    let data = [...eventData];
+    let data = [...yearFilteredData];
     if (tableCategoryFilter !== "All") {
       data = data.filter((d) => d.category === tableCategoryFilter);
     }
@@ -295,184 +267,155 @@ const NewPage = () => {
       data = data.filter((d) => d.subcategory === tableSubcategoryFilter);
     }
     if (timelineRange.start) {
-      data = data.filter((d) => new Date(d.eventDate) >= new Date(timelineRange.start));
+      data = data.filter(
+        (d) => new Date(d.eventDate) >= new Date(timelineRange.start)
+      );
     }
     if (timelineRange.end) {
-      data = data.filter((d) => new Date(d.eventDate) <= new Date(timelineRange.end));
+      data = data.filter(
+        (d) => new Date(d.eventDate) <= new Date(timelineRange.end)
+      );
     }
-    // Because we want the most recent at top in the table as well,
-    // we can sort again by descending date, just to be safe:
     data.sort((a, b) => new Date(b.eventDate) - new Date(a.eventDate));
     return data;
   }, [
-    eventData,
+    yearFilteredData,
     tableCategoryFilter,
     tableSubcategoryFilter,
     timelineRange,
   ]);
 
-  // Aggregated stats for distribution
-  const totalApps = useMemo(() => {
-    return distributionFilteredData.reduce((sum, d) => sum + d.appsUsers, 0);
-  }, [distributionFilteredData]);
+  // distribution stats
+  const totalApps = useMemo(() => 
+    distributionFilteredData.reduce((acc, d) => acc + d.appsUsers, 0)
+  , [distributionFilteredData]);
+  const totalSites = useMemo(() => 
+    distributionFilteredData.reduce((acc, d) => acc + d.siteUsers, 0)
+  , [distributionFilteredData]);
+  const totalCtv = useMemo(() => 
+    distributionFilteredData.reduce((acc, d) => acc + d.ctv, 0)
+  , [distributionFilteredData]);
+  const totalSubtotal = useMemo(() => 
+    distributionFilteredData.reduce((acc, d) => acc + d.subtotal, 0)
+  , [distributionFilteredData]);
+  const totalTotal = useMemo(() => 
+    distributionFilteredData.reduce((acc, d) => acc + d.total, 0)
+  , [distributionFilteredData]);
 
-  const totalSites = useMemo(() => {
-    return distributionFilteredData.reduce((sum, d) => sum + d.siteUsers, 0);
-  }, [distributionFilteredData]);
-
-  const totalCtv = useMemo(() => {
-    return distributionFilteredData.reduce((sum, d) => sum + d.ctv, 0);
-  }, [distributionFilteredData]);
-
-  const totalSubtotal = useMemo(() => {
-    return distributionFilteredData.reduce((sum, d) => sum + d.subtotal, 0);
-  }, [distributionFilteredData]);
-
-  const totalTotal = useMemo(() => {
-    return distributionFilteredData.reduce((sum, d) => sum + d.total, 0);
-  }, [distributionFilteredData]);
-
-  // AVERAGE APROV (exclude zeros/null)
   const averageAprov = useMemo(() => {
-    const aprovValues = distributionFilteredData
+    const arr = distributionFilteredData
       .map((d) => d.aprov)
       .filter((val) => val !== null && val !== 0);
-    if (aprovValues.length === 0) return "0";
-    const sumAprov = aprovValues.reduce((sum, val) => sum + val, 0);
-    return formatNumber(sumAprov / aprovValues.length);
+    if (!arr.length) return "0";
+    const sum = arr.reduce((s, v) => s + v, 0);
+    return formatNumber(sum / arr.length);
   }, [distributionFilteredData]);
 
-  // SUBTOTAL, TOTAL Averages
   const averageSubtotal = useMemo(() => {
-    if (distributionFilteredData.length === 0) return "0";
-    return formatNumber(
-      distributionFilteredData.reduce((sum, d) => sum + d.subtotal, 0) /
-        distributionFilteredData.length
-    );
+    if (!distributionFilteredData.length) return "0";
+    const sum = distributionFilteredData.reduce((a, d) => a + d.subtotal, 0);
+    return formatNumber(sum / distributionFilteredData.length);
   }, [distributionFilteredData]);
-
+  
   const averageTotal = useMemo(() => {
-    if (distributionFilteredData.length === 0) return "0";
-    return formatNumber(
-      distributionFilteredData.reduce((sum, d) => sum + d.total, 0) /
-        distributionFilteredData.length
-    );
+    if (!distributionFilteredData.length) return "0";
+    const sum = distributionFilteredData.reduce((a, d) => a + d.total, 0);
+    return formatNumber(sum / distributionFilteredData.length);
   }, [distributionFilteredData]);
-
-  // AVERAGE CTV (exclude zero)
+  
   const averageCtv = useMemo(() => {
-    const ctvValues = distributionFilteredData
+    const arr = distributionFilteredData
       .map((d) => d.ctv)
-      .filter((val) => val > 0);
-    if (ctvValues.length === 0) return "0";
-    const sumCtv = ctvValues.reduce((sum, val) => sum + val, 0);
-    return formatNumber(sumCtv / ctvValues.length);
+      .filter((v) => v > 0);
+    if (!arr.length) return "0";
+    const sum = arr.reduce((s, v) => s + v, 0);
+    return formatNumber(sum / arr.length);
   }, [distributionFilteredData]);
 
-  // TOTAL Aprov
   const totalAprov = useMemo(() => {
-    const aprovValues = distributionFilteredData
+    const arr = distributionFilteredData
       .map((d) => d.aprov)
-      .filter((val) => val !== null);
-    if (aprovValues.length === 0) return "0";
-    const sumAprov = aprovValues.reduce((sum, val) => sum + val, 0);
-    return formatNumber(sumAprov);
+      .filter((v) => v !== null);
+    if (!arr.length) return "0";
+    const sum = arr.reduce((s, v) => s + v, 0);
+    return formatNumber(sum);
   }, [distributionFilteredData]);
 
-  // Pie data
-  const pieData = useMemo(() => {
-    return [
-      {
-        values: [totalApps, totalSites, totalCtv],
-        labels: ["APPS'", "SITE", "CTV"],
-        type: "pie",
-        marker: {
-          colors: ["#36a2eb", "#ff6384", "#ffce56"],
-        },
-        hoverinfo: "label+percent",
-        textinfo: "label+value",
-        textposition: "inside",
-        textfont: {
-          color: "white",
-          size: 14,
-          family: "Arial",
-          weight: "bold",
-        },
+  const pieData = useMemo(() => [
+    {
+      values: [totalApps, totalSites, totalCtv],
+      labels: ["APPS'", "SITE", "CTV"],
+      type: "pie",
+      marker: {
+        colors: ["#36a2eb", "#ff6384", "#ffce56"],
       },
-    ];
-  }, [totalApps, totalSites, totalCtv]);
+      hoverinfo: "label+percent",
+      textinfo: "label+value",
+      textposition: "inside",
+      textfont: {
+        color: "white",
+        size: 14,
+        family: "Arial",
+        weight: "bold",
+      },
+    },
+  ], [totalApps, totalSites, totalCtv]);
 
-  // Average APPS & SITE
   const averageApps = useMemo(() => {
-    if (distributionFilteredData.length === 0) return "0";
+    if (!distributionFilteredData.length) return "0";
     return formatNumber(totalApps / distributionFilteredData.length);
   }, [totalApps, distributionFilteredData]);
 
   const averageSites = useMemo(() => {
-    if (distributionFilteredData.length === 0) return "0";
+    if (!distributionFilteredData.length) return "0";
     return formatNumber(totalSites / distributionFilteredData.length);
   }, [totalSites, distributionFilteredData]);
 
-  // Prepare data for line graph
+  // line graph data
   const lineGraphData = useMemo(() => {
-    // Sort events ascending by date for the graph
-    const eventsSorted = [...eventData].sort(
+    const sorted = [...yearFilteredData].sort(
       (a, b) => new Date(a.eventDate) - new Date(b.eventDate)
     );
-
-    const dates = eventsSorted.map((d) => d.eventDate);
-    const APPS = eventsSorted.map((d) => d.appsUsers);
-    const SITE = eventsSorted.map((d) => d.siteUsers);
-    const CTV = eventsSorted.map((d) => d.ctv);
-    const SUBTOTAL = eventsSorted.map((d) => d.subtotal);
-    const TOTAL = eventsSorted.map((d) => d.total);
-
     return {
-      dates,
-      APPS,
-      SITE,
-      CTV,
-      SUBTOTAL,
-      TOTAL,
-      events: eventsSorted,
+      dates: sorted.map((d) => d.eventDate),
+      APPS: sorted.map((d) => d.appsUsers),
+      SITE: sorted.map((d) => d.siteUsers),
+      CTV: sorted.map((d) => d.ctv),
+      SUBTOTAL: sorted.map((d) => d.subtotal),
+      TOTAL: sorted.map((d) => d.total),
+      events: sorted,
     };
-  }, [eventData]);
+  }, [yearFilteredData]);
 
-  // Handler for row selection in the table
+  // table displayed data
+  const recentEvents = useMemo(() => tableFilteredData.slice(0, 10), [tableFilteredData]);
+  const displayedTableData = useMemo(
+    () => (isTableExpanded ? tableFilteredData : recentEvents),
+    [isTableExpanded, tableFilteredData, recentEvents]
+  );
+
   const handleRowClick = (row) => {
     if (selectedRow && selectedRow.id === row.id) {
-      // Hide the pie chart if the same row is clicked
       setSelectedRow(null);
       setIsPieChartVisible(false);
     } else {
       setSelectedRow(row);
       setIsPieChartVisible(true);
+      setTimeout(() => {
+        if (pieChartRef.current) {
+          pieChartRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 100);
     }
   };
 
-  // Event Selection in line graph
-  const handleEventSelection = (e) => {
-    const selectedEventId = e.target.value;
-    if (selectedEventId && !selectedEvents.includes(selectedEventId)) {
-      setSelectedEvents([...selectedEvents, selectedEventId]);
-    }
-  };
-
-  const handleRemoveSelectedEvent = (eventId) => {
-    setSelectedEvents(selectedEvents.filter((id) => id !== eventId));
-  };
-
-  // Compare Mode
-  const handleCompareSelection = (eventId) => {
-    if (selectedCompareEvents.includes(eventId)) {
-      setSelectedCompareEvents(
-        selectedCompareEvents.filter((id) => id !== eventId)
-      );
+  const handleCompareSelection = (rowId) => {
+    if (selectedCompareEvents.includes(rowId)) {
+      setSelectedCompareEvents(selectedCompareEvents.filter((x) => x !== rowId));
     } else {
-      setSelectedCompareEvents([...selectedCompareEvents, eventId]);
+      setSelectedCompareEvents([...selectedCompareEvents, rowId]);
     }
   };
-
   const handleCompare = () => {
     if (selectedCompareEvents.length < 2) {
       toast({
@@ -486,255 +429,258 @@ const NewPage = () => {
     }
     setCompareMode(true);
   };
-
   const handleCancelCompare = () => {
     setCompareMode(false);
     setSelectedCompareEvents([]);
   };
 
-  // Determine the line graph metric
-  const lineGraphDisplayData = useMemo(() => {
-    switch (selectedGraphOption) {
-      case "APPS":
-        return {
-          y: lineGraphData.APPS,
-          name: "APPS'",
-          color: "#36a2eb",
-        };
-      case "SITE":
-        return {
-          y: lineGraphData.SITE,
-          name: "SITE",
-          color: "#ff6384",
-        };
-      case "CTV":
-        return {
-          y: lineGraphData.CTV,
-          name: "CTV",
-          color: "#ffce56",
-        };
-      case "SUBTOTAL":
-        return {
-          y: lineGraphData.SUBTOTAL,
-          name: "SUBTOTAL (APPS + SITE)",
-          color: "#4BC0C0",
-        };
-      case "ALL":
-        return {
-          y: null,
-          name: "ALL",
-          color: null,
-        };
-      default:
-        // "TOTAL"
-        return {
-          y: lineGraphData.TOTAL,
-          name: "TOTAL (SUBTOTAL + CTV)",
-          color: "#9966FF",
-        };
+  // line graph selection
+  const handleEventSelection = (e) => {
+    const val = e.target.value;
+    if (val && !selectedEvents.includes(val)) {
+      setSelectedEvents([...selectedEvents, val]);
     }
-  }, [lineGraphData, selectedGraphOption]);
+  };
+  const handleRemoveSelectedEvent = (eventId) => {
+    setSelectedEvents(selectedEvents.filter((id) => id !== eventId));
+  };
 
-  // 10 most recent events in the table
-  const recentEvents = useMemo(() => {
-    return tableFilteredData.slice(0, 10);
-  }, [tableFilteredData]);
-
-  // Displayed table data
-  const displayedTableData = useMemo(() => {
-    return isTableExpanded ? tableFilteredData : recentEvents;
-  }, [isTableExpanded, tableFilteredData, recentEvents]);
-
-  // Prepare plot data for line graph
-  const plotData = useMemo(() => {
-    if (selectedGraphOption === "ALL") {
-      // Plot APPS, SITE, and CTV all together
-      const traceAPPS = {
-        x: lineGraphData.dates,
-        y: lineGraphData.APPS,
-        type: "scatter",
-        mode: "lines+markers",
-        name: "APPS'",
-        line: { color: "#36a2eb" },
-        fill: "tozeroy",
-        fillcolor: "#36a2eb33",
-        marker: { color: "white", size: 6 },
-        hovertext: lineGraphData.events.map(
-          (e) =>
-            `${e.eventDescription} - ${formatDate(e.eventDate)}: ${formatNumber(e.appsUsers)}`
-        ),
-        hoverinfo: "text",
-        hovertemplate: "%{hovertext}<extra></extra>",
-      };
-
-      const traceSITE = {
-        x: lineGraphData.dates,
-        y: lineGraphData.SITE,
-        type: "scatter",
-        mode: "lines+markers",
-        name: "SITE",
-        line: { color: "#ff6384" },
-        fill: "tozeroy",
-        fillcolor: "#ff638433",
-        marker: { color: "white", size: 6 },
-        hovertext: lineGraphData.events.map(
-          (e) =>
-            `${e.eventDescription} - ${formatDate(e.eventDate)}: ${formatNumber(e.siteUsers)}`
-        ),
-        hoverinfo: "text",
-        hovertemplate: "%{hovertext}<extra></extra>",
-      };
-
-      const traceCTV = {
-        x: lineGraphData.dates,
-        y: lineGraphData.CTV,
-        type: "scatter",
-        mode: "lines+markers",
-        name: "CTV",
-        line: { color: "#ffce56" },
-        fill: "tozeroy",
-        fillcolor: "#ffce5633",
-        marker: { color: "white", size: 6 },
-        hovertext: lineGraphData.events.map(
-          (e) =>
-            `${e.eventDescription} - ${formatDate(e.eventDate)}: ${
-              e.ctv > 0 ? formatNumber(e.ctv) : "-"
-            }`
-        ),
-        hoverinfo: "text",
-        hovertemplate: "%{hovertext}<extra></extra>",
-      };
-
-      return [traceAPPS, traceSITE, traceCTV];
-    }
-
-    // If not "ALL", we have one main trace
-    const mainTrace = {
+  // build main traces for "ALL"
+  function getMainTracesForAll() {
+    const traceAPPS = {
       x: lineGraphData.dates,
-      y: lineGraphDisplayData.y,
+      y: lineGraphData.APPS,
       type: "scatter",
       mode: "lines+markers",
-      name: lineGraphDisplayData.name,
-      line: { color: lineGraphDisplayData.color },
+      name: "APPS'",
+      line: { color: "#36a2eb" },
       fill: "tozeroy",
-      fillcolor: lineGraphDisplayData.color ? `${lineGraphDisplayData.color}33` : null,
+      fillcolor: "#36a2eb33",
       marker: { color: "white", size: 6 },
-      hovertext: lineGraphData.events.map((e, idx) =>
-        lineGraphDisplayData.y
-          ? `${e.eventDescription} - ${formatDate(e.eventDate)}: ${formatNumber(lineGraphDisplayData.y[idx])}`
-          : `${e.eventDescription} - ${formatDate(e.eventDate)}: -`
-      ),
       hoverinfo: "text",
+      hovertext: lineGraphData.events.map(
+        (e) => `${e.eventDescription} - ${formatDate(e.eventDate)}: ${formatNumber(e.appsUsers)}`
+      ),
       hovertemplate: "%{hovertext}<extra></extra>",
     };
+    const traceSITE = {
+      x: lineGraphData.dates,
+      y: lineGraphData.SITE,
+      type: "scatter",
+      mode: "lines+markers",
+      name: "SITE",
+      line: { color: "#ff6384" },
+      fill: "tozeroy",
+      fillcolor: "#ff638433",
+      marker: { color: "white", size: 6 },
+      hoverinfo: "text",
+      hovertext: lineGraphData.events.map(
+        (e) => `${e.eventDescription} - ${formatDate(e.eventDate)}: ${formatNumber(e.siteUsers)}`
+      ),
+      hovertemplate: "%{hovertext}<extra></extra>",
+    };
+    const traceCTV = {
+      x: lineGraphData.dates,
+      y: lineGraphData.CTV,
+      type: "scatter",
+      mode: "lines+markers",
+      name: "CTV",
+      line: { color: "#ffce56" },
+      fill: "tozeroy",
+      fillcolor: "#ffce5633",
+      marker: { color: "white", size: 6 },
+      hoverinfo: "text",
+      hovertext: lineGraphData.events.map((e) => {
+        const val = e.ctv > 0 ? formatNumber(e.ctv) : "-";
+        return `${e.eventDescription} - ${formatDate(e.eventDate)}: ${val}`;
+      }),
+      hovertemplate: "%{hovertext}<extra></extra>",
+    };
+    return [traceAPPS, traceSITE, traceCTV];
+  }
 
-    // Selected events trace (optional)
-    if (selectedEvents.length === 0) {
-      return [mainTrace];
-    }
+  // build main trace single
+  function getMainTraceSingle(metricData, color, name) {
+    return {
+      x: lineGraphData.dates,
+      y: metricData,
+      type: "scatter",
+      mode: "lines+markers",
+      name,
+      line: { color },
+      fill: "tozeroy",
+      fillcolor: color ? `${color}33` : null,
+      marker: { color: "white", size: 6 },
+      hoverinfo: "text",
+      hovertext: lineGraphData.events.map((e, idx) => {
+        const val = metricData[idx];
+        return `${e.eventDescription} - ${formatDate(e.eventDate)}: ${formatNumber(val)}`;
+      }),
+      hovertemplate: "%{hovertext}<extra></extra>",
+    };
+  }
 
-    // Chronological selected events
+  // build selected traces
+  function getSelectedTraces() {
     const selectedEventData = selectedEvents
-      .map((eventId) => lineGraphData.events.find((e) => e.id === eventId))
+      .map((id) => lineGraphData.events.find((ev) => ev.id === id))
       .filter(Boolean)
       .sort((a, b) => new Date(a.eventDate) - new Date(b.eventDate));
 
-    const selectedTrace = {
-      x: selectedEventData.map((e) => e.eventDate),
-      y: selectedEventData.map((e) => {
+    // if "ALL", produce 3 lines per event
+    if (selectedGraphOption === "ALL") {
+      const lines = [];
+      selectedEventData.forEach((evt) => {
+        // APPS
+        lines.push({
+          x: [evt.eventDate],
+          y: [evt.appsUsers],
+          type: "scatter",
+          mode: "markers+lines",
+          name: `${evt.eventDescription} (${formatDate(evt.eventDate)}) - APPS'`,
+          line: { color: "#36a2eb" },
+          marker: { color: "white", size: 8 },
+          hovertemplate:
+            `${evt.eventDescription} - ${formatDate(evt.eventDate)}:<br>` + 
+            `APPS': ${formatNumber(evt.appsUsers)}<extra></extra>`,
+        });
+        // SITE
+        lines.push({
+          x: [evt.eventDate],
+          y: [evt.siteUsers],
+          type: "scatter",
+          mode: "markers+lines",
+          name: `${evt.eventDescription} (${formatDate(evt.eventDate)}) - SITE`,
+          line: { color: "#ff6384" },
+          marker: { color: "white", size: 8 },
+          hovertemplate:
+            `${evt.eventDescription} - ${formatDate(evt.eventDate)}:<br>` + 
+            `SITE: ${formatNumber(evt.siteUsers)}<extra></extra>`,
+        });
+        // CTV
+        lines.push({
+          x: [evt.eventDate],
+          y: [evt.ctv],
+          type: "scatter",
+          mode: "markers+lines",
+          name: `${evt.eventDescription} (${formatDate(evt.eventDate)}) - CTV`,
+          line: { color: "#ffce56" },
+          marker: { color: "white", size: 8 },
+          hovertemplate:
+            `${evt.eventDescription} - ${formatDate(evt.eventDate)}:<br>` + 
+            `CTV: ${evt.ctv > 0 ? formatNumber(evt.ctv) : "-"}<extra></extra>`,
+        });
+      });
+      return lines;
+    } else {
+      // one metric => single line connecting the chosen events
+      const yVals = selectedEventData.map((evt) => {
         switch (selectedGraphOption) {
-          case "APPS":
-            return e.appsUsers;
-          case "SITE":
-            return e.siteUsers;
-          case "CTV":
-            return e.ctv;
-          case "SUBTOTAL":
-            return e.subtotal;
-          case "TOTAL":
-            return e.total;
-          default:
-            return 0;
+          case "APPS":     return evt.appsUsers;
+          case "SITE":     return evt.siteUsers;
+          case "CTV":      return evt.ctv;
+          case "SUBTOTAL": return evt.subtotal;
+          case "TOTAL":    return evt.total;
+          default:         return 0;
         }
-      }),
-      type: "scatter",
-      mode: "lines+markers",
-      name: "Selected Events",
-      line: { color: "#ff6347" },
-      fill: "tozeroy",
-      fillcolor: "#ff634733",
-      marker: { color: "white", size: 8 },
-      hovertext: selectedEventData.map((evt) => {
-        let val = 0;
-        switch (selectedGraphOption) {
-          case "APPS":
-            val = evt.appsUsers;
-            break;
-          case "SITE":
-            val = evt.siteUsers;
-            break;
-          case "CTV":
-            val = evt.ctv;
-            break;
-          case "SUBTOTAL":
-            val = evt.subtotal;
-            break;
-          case "TOTAL":
-            val = evt.total;
-            break;
-          default:
-            val = 0;
-        }
-        return `${evt.eventDescription} - ${formatDate(evt.eventDate)}: ${formatNumber(val)}`;
-      }),
-      hoverinfo: "text",
-      hovertemplate: "%{hovertext}<extra></extra>",
-    };
+      });
+      return [
+        {
+          x: selectedEventData.map((ev) => ev.eventDate),
+          y: yVals,
+          type: "scatter",
+          mode: "lines+markers",
+          name: "Selected Events",
+          line: { color: "#ff6347" },
+          fill: "tozeroy",
+          fillcolor: "#ff634733",
+          marker: { color: "white", size: 8 },
+          hoverinfo: "text",
+          hovertext: selectedEventData.map((ev, idx) => {
+            const val = yVals[idx];
+            return `${ev.eventDescription} (${formatDate(ev.eventDate)}): ${formatNumber(val)}`;
+          }),
+          hovertemplate: "%{hovertext}<extra></extra>",
+        },
+      ];
+    }
+  }
 
-    // If you want BOTH the main trace and the selected events at the same time:
-    // return [mainTrace, selectedTrace];
-    // Otherwise, just the selected:
-    return [selectedTrace];
+  const plotData = useMemo(() => {
+    if (selectedGraphOption === "ALL") {
+      // if no selected events => show 3 lines for entire dataset
+      if (!selectedEvents.length) {
+        return getMainTracesForAll();
+      } else {
+        // show only selected events lines
+        return getSelectedTraces();
+      }
+    } else {
+      // single metric
+      let color = "#9966FF";
+      let name = "TOTAL";
+      let metricArr = lineGraphData.TOTAL;
+      if (selectedGraphOption === "APPS") {
+        color = "#36a2eb";
+        name = "APPS'";
+        metricArr = lineGraphData.APPS;
+      } else if (selectedGraphOption === "SITE") {
+        color = "#ff6384";
+        name = "SITE";
+        metricArr = lineGraphData.SITE;
+      } else if (selectedGraphOption === "CTV") {
+        color = "#ffce56";
+        name = "CTV";
+        metricArr = lineGraphData.CTV;
+      } else if (selectedGraphOption === "SUBTOTAL") {
+        color = "#4BC0C0";
+        name = "SUBTOTAL (APPS + SITE)";
+        metricArr = lineGraphData.SUBTOTAL;
+      }
+      const mainTrace = getMainTraceSingle(metricArr, color, name);
+
+      if (!selectedEvents.length) {
+        return [mainTrace];
+      } else {
+        // only selected events
+        return getSelectedTraces();
+      }
+    }
   }, [
-    lineGraphData,
-    lineGraphDisplayData,
     selectedGraphOption,
     selectedEvents,
-    formatDate,
+    lineGraphData,
+    getMainTracesForAll,
+    getSelectedTraces,
   ]);
 
-  // Prepare comparison data
   const comparisonData = useMemo(() => {
     if (selectedCompareEvents.length < 2) return null;
+    const evts = yearFilteredData.filter((x) => selectedCompareEvents.includes(x.id));
+    if (evts.length < 2) return null;
 
-    const eventsToCompare = eventData.filter((evt) =>
-      selectedCompareEvents.includes(evt.id)
-    );
-    if (eventsToCompare.length < 2) return null;
-
-    // Calculate % changes vs. the first in the list
-    const baseEvent = eventsToCompare[0];
-    const comparisons = eventsToCompare.slice(1).map((evt) => {
+    const base = evts[0];
+    const comps = evts.slice(1).map((evt) => {
       const appsChange =
-        baseEvent.appsUsers === 0
+        base.appsUsers === 0
           ? 0
-          : ((evt.appsUsers - baseEvent.appsUsers) / baseEvent.appsUsers) * 100;
+          : ((evt.appsUsers - base.appsUsers) / base.appsUsers) * 100;
       const siteChange =
-        baseEvent.siteUsers === 0
+        base.siteUsers === 0
           ? 0
-          : ((evt.siteUsers - baseEvent.siteUsers) / baseEvent.siteUsers) * 100;
+          : ((evt.siteUsers - base.siteUsers) / base.siteUsers) * 100;
       const ctvChange =
-        baseEvent.ctv === 0
+        base.ctv === 0
           ? 0
-          : ((evt.ctv - baseEvent.ctv) / baseEvent.ctv) * 100;
+          : ((evt.ctv - base.ctv) / base.ctv) * 100;
       const subtotalChange =
-        baseEvent.subtotal === 0
+        base.subtotal === 0
           ? 0
-          : ((evt.subtotal - baseEvent.subtotal) / baseEvent.subtotal) * 100;
+          : ((evt.subtotal - base.subtotal) / base.subtotal) * 100;
       const totalChange =
-        baseEvent.total === 0
+        base.total === 0
           ? 0
-          : ((evt.total - baseEvent.total) / baseEvent.total) * 100;
+          : ((evt.total - base.total) / base.total) * 100;
 
       return {
         eventName: evt.eventName,
@@ -747,505 +693,26 @@ const NewPage = () => {
         eventId: evt.id,
       };
     });
+    return { baseEvent: base, comparisons: comps };
+  }, [selectedCompareEvents, yearFilteredData]);
 
-    return { baseEvent, comparisons };
-  }, [selectedCompareEvents, eventData]);
-
-  // Responsive styling
   const gridTemplateColumns = useBreakpointValue({ base: "1fr", md: "1fr 1fr" });
-  const plotWidth = useBreakpointValue({ base: 300, md: 500, lg: 600 });
   const plotHeight = useBreakpointValue({ base: 300, md: 500, lg: 600 });
   const piePlotWidth = useBreakpointValue({ base: 300, md: 500, lg: 600 });
   const piePlotHeight = useBreakpointValue({ base: 300, md: 500, lg: 600 });
-  const linePlotHeight = useBreakpointValue({ base: 400, md: 500, lg: 600 });
 
-  // ------------------ Render ------------------
   return (
-    <Box p={[4, 6, 10]} pt={10} color="white" minH="100vh">
-      {/* ======= Events Table ======= */}
-      {!isLoading && !error && (
-        <Box
-          bg="linear-gradient(90deg, #000000, #7800ff)"
-          borderRadius="20px"
-          p={[4, 6]}
-          border="5px solid rgba(255, 255, 255, 0.8)"
-          boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
-          mb={6}
-        >
-          <Flex
-            justifyContent="space-between"
-            alignItems="center"
-            mb={4}
-            flexDirection={["column", "row"]}
-            gap={2}
-          >
-            <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
-              Events Table
-            </Text>
-            <Flex gap={2} flexWrap="wrap">
-              <Select
-                placeholder="Filter Category"
-                value={tableCategoryFilter}
-                onChange={(e) => {
-                  setTableCategoryFilter(e.target.value);
-                  setTableSubcategoryFilter("All");
-                }}
-                bg="white"
-                color="black"
-                size="sm"
-                width={["100%", "200px"]}
-              >
-                <option value="All">All</option>
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                placeholder="Filter Subcategory"
-                value={tableSubcategoryFilter}
-                onChange={(e) => setTableSubcategoryFilter(e.target.value)}
-                bg="white"
-                color="black"
-                size="sm"
-                width={["100%", "200px"]}
-                isDisabled={tableCategoryFilter === "All"}
-              >
-                <option value="All">All</option>
-                {tableCategoryFilter !== "All" &&
-                  Array.from(
-                    new Set(
-                      eventData
-                        .filter((d) => d.category === tableCategoryFilter)
-                        .map((d) => d.subcategory)
-                    )
-                  )
-                    .sort()
-                    .map((subcat) => (
-                      <option key={subcat} value={subcat}>
-                        {subcat}
-                      </option>
-                    ))}
-              </Select>
-              <Button
-                colorScheme={compareMode ? "red" : "teal"}
-                onClick={compareMode ? handleCancelCompare : handleCompare}
-                size="sm"
-                isDisabled={selectedCompareEvents.length < 2 && !compareMode}
-                width={["100%", "auto"]}
-              >
-                {compareMode ? "Cancel Compare" : "Compare"}
-              </Button>
-            </Flex>
-          </Flex>
-
-          {/* Table */}
-          <Box overflowX="auto">
-            <Table variant="simple" size="sm">
-              <Thead>
-                <Tr>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Select</Th>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Week</Th>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Date</Th>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Category</Th>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Subcategory</Th>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Event Name</Th>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Description</Th>
-                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                    SITE
-                  </Th>
-                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                    APPS'
-                  </Th>
-                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                    SUBTOTAL
-                  </Th>
-                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                    CTV
-                  </Th>
-                  <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                    TOTAL
-                  </Th>
-                  <Th fontSize="sm" color="white" fontWeight="bold">Aprov.</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {displayedTableData.map((row) => (
-                  <Tr
-                    key={row.id}
-                    bg={categoryColors[row.category] || "gray.600"}
-                    _hover={{ bg: "gray.600", cursor: "pointer" }}
-                    fontSize={["xs", "sm"]}
-                    onClick={() => handleRowClick(row)}
-                  >
-                    <Td>
-                      <Checkbox
-                        isChecked={selectedCompareEvents.includes(row.id)}
-                        onChange={() => handleCompareSelection(row.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </Td>
-                    <Td>{row.weekNumber}</Td>
-                    <Td>{row.eventDate}</Td>
-                    <Td>{row.category}</Td>
-                    <Td>{row.subcategory}</Td>
-                    <Td>{row.eventName}</Td>
-                    <Td>{row.eventDescription}</Td>
-                    <Td isNumeric>{formatNumber(row.siteUsers)}</Td>
-                    <Td isNumeric>{formatNumber(row.appsUsers)}</Td>
-                    <Td isNumeric>{formatNumber(row.subtotal)}</Td>
-                    <Td isNumeric>
-                      {row.ctv > 0 ? formatNumber(row.ctv) : "-"}
-                    </Td>
-                    <Td isNumeric fontWeight="bold">
-                      {formatNumber(row.total)}
-                    </Td>
-                    <Td>{row.aprov !== null ? formatNumber(row.aprov) : "-"}</Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Box>
-
-          {/* Expand/Collapse */}
-          {tableFilteredData.length > 10 && (
-            <Flex justifyContent="center" mt={2}>
-              <Button
-                size="xs"
-                onClick={() => setIsTableExpanded(!isTableExpanded)}
-                leftIcon={
-                  isTableExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />
-                }
-                colorScheme="teal"
-                width={["100%", "auto"]}
-              >
-                {isTableExpanded ? "Show Less" : "Show All"}
-              </Button>
-            </Flex>
-          )}
-
-          {/* Detailed Pie Chart for Selected Row */}
-          <Collapse in={isPieChartVisible} animateOpacity>
-            {selectedRow && (
-              <Box
-                mt={4}
-                bg="linear-gradient(90deg, #000000, #7800ff)"
-                borderRadius="20px"
-                p={[4, 6]}
-                border="5px solid rgba(255, 255, 255, 0.8)"
-                boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
-              >
-                <Text
-                  fontSize={["sm", "md"]}
-                  mb={2}
-                  textAlign="center"
-                  color="white"
-                  fontWeight="bold"
-                >
-                  Distribution for {selectedRow.eventName} on{" "}
-                  {formatDate(selectedRow.eventDate)}
-                </Text>
-                <Flex justifyContent="center">
-                  <Box
-                    width="100%"
-                    maxWidth={piePlotWidth}
-                    maxHeight={piePlotHeight}
-                  >
-                    <Plot
-                      data={[
-                        {
-                          values: [
-                            selectedRow.appsUsers,
-                            selectedRow.siteUsers,
-                            selectedRow.ctv,
-                          ],
-                          labels: ["APPS'", "SITE", "CTV"],
-                          type: "pie",
-                          marker: {
-                            colors: ["#36a2eb", "#ff6384", "#ffce56"],
-                          },
-                          hoverinfo: "label+percent+value",
-                          textinfo: "label+value",
-                          textposition: "inside",
-                          textfont: {
-                            color: "white",
-                            size: 14,
-                            family: "Arial",
-                            weight: "bold",
-                          },
-                        },
-                      ]}
-                      layout={{
-                        autosize: true,
-                        paper_bgcolor: "transparent",
-                        plot_bgcolor: "transparent",
-                        showlegend: true,
-                        legend: { orientation: "h", x: 0.3, y: -0.2 },
-                      }}
-                      config={{ displayModeBar: false }}
-                      style={{ width: "100%", height: "100%" }}
-                      useResizeHandler
-                    />
-                  </Box>
-                </Flex>
-              </Box>
-            )}
-          </Collapse>
-
-          {/* Comparison Section */}
-          {compareMode && comparisonData && (
-            <Box
-              bg="linear-gradient(90deg, #000000, #7800ff)"
-              borderRadius="20px"
-              p={[4, 6]}
-              border="5px solid rgba(255, 255, 255, 0.8)"
-              boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
-              mb={6}
-              mt={4}
-            >
-              <Flex
-                justifyContent="space-between"
-                alignItems="center"
-                mb={4}
-                flexDirection={["column", "row"]}
-                gap={2}
-              >
-                <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
-                  Comparison
-                </Text>
-                <Button
-                  colorScheme="red"
-                  onClick={handleCancelCompare}
-                  size="sm"
-                  width={["100%", "auto"]}
-                >
-                  Cancel
-                </Button>
-              </Flex>
-              <Box overflowX="auto">
-                <Table variant="simple" size="sm">
-                  <Thead>
-                    <Tr>
-                      <Th fontSize="sm" color="white" fontWeight="bold">
-                        Event Name
-                      </Th>
-                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                        APPS' Count
-                      </Th>
-                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                        SITE Count
-                      </Th>
-                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                        CTV Count
-                      </Th>
-                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                        SUBTOTAL
-                      </Th>
-                      <Th isNumeric fontSize="sm" color="white" fontWeight="bold">
-                        TOTAL
-                      </Th>
-                      <Th fontSize="sm" color="white" fontWeight="bold">
-                        APPS' Change (%)
-                      </Th>
-                      <Th fontSize="sm" color="white" fontWeight="bold">
-                        SITE Change (%)
-                      </Th>
-                      <Th fontSize="sm" color="white" fontWeight="bold">
-                        CTV Change (%)
-                      </Th>
-                      <Th fontSize="sm" color="white" fontWeight="bold">
-                        SUBTOTAL Change (%)
-                      </Th>
-                      <Th fontSize="sm" color="white" fontWeight="bold">
-                        TOTAL Change (%)
-                      </Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {/* Base Event */}
-                    {comparisonData?.baseEvent && (
-                      <Tr>
-                        <Td fontWeight="bold" color="white">
-                          {comparisonData.baseEvent.eventName} -{" "}
-                          {formatDate(comparisonData.baseEvent.eventDate)}
-                        </Td>
-                        <Td isNumeric>
-                          {formatNumber(comparisonData.baseEvent.appsUsers)}
-                        </Td>
-                        <Td isNumeric>
-                          {formatNumber(comparisonData.baseEvent.siteUsers)}
-                        </Td>
-                        <Td isNumeric>
-                          {comparisonData.baseEvent.ctv > 0
-                            ? formatNumber(comparisonData.baseEvent.ctv)
-                            : "-"}
-                        </Td>
-                        <Td isNumeric>
-                          {formatNumber(comparisonData.baseEvent.subtotal)}
-                        </Td>
-                        <Td isNumeric>
-                          {formatNumber(comparisonData.baseEvent.total)}
-                        </Td>
-                        <Td color="gray.400">-</Td>
-                        <Td color="gray.400">-</Td>
-                        <Td color="gray.400">-</Td>
-                        <Td color="gray.400">-</Td>
-                        <Td color="gray.400">-</Td>
-                      </Tr>
-                    )}
-                    {/* Comparisons */}
-                    {comparisonData.comparisons.map((comp, idx) => {
-                      const event = eventData.find((e) => e.id === comp.eventId);
-
-                      // Color coding
-                      const appsChangePositive = parseFloat(comp.appsChange) >= 0;
-                      const siteChangePositive = parseFloat(comp.siteChange) >= 0;
-                      const ctvChangePositive = parseFloat(comp.ctvChange) >= 0;
-                      const subtotalChangePositive =
-                        parseFloat(comp.subtotalChange) >= 0;
-                      const totalChangePositive = parseFloat(comp.totalChange) >= 0;
-
-                      return (
-                        <Tr key={idx}>
-                          <Td fontWeight="bold" color="white">
-                            {event
-                              ? `${event.eventName} - ${formatDate(event.eventDate)}`
-                              : `${comp.eventName} - ${formatDate(comp.eventDate)}`}
-                          </Td>
-                          <Td isNumeric>{event ? formatNumber(event.appsUsers) : "0"}</Td>
-                          <Td isNumeric>{event ? formatNumber(event.siteUsers) : "0"}</Td>
-                          <Td isNumeric>
-                            {event && event.ctv > 0
-                              ? formatNumber(event.ctv)
-                              : "-"}
-                          </Td>
-                          <Td isNumeric>
-                            {event ? formatNumber(event.subtotal) : "0"}
-                          </Td>
-                          <Td isNumeric>
-                            {event ? formatNumber(event.total) : "0"}
-                          </Td>
-                          <Td color={appsChangePositive ? "green.400" : "red.400"}>
-                            {comp.appsChange}%
-                          </Td>
-                          <Td color={siteChangePositive ? "green.400" : "red.400"}>
-                            {comp.siteChange}%
-                          </Td>
-                          <Td color={ctvChangePositive ? "green.400" : "red.400"}>
-                            {comp.ctvChange}%
-                          </Td>
-                          <Td
-                            color={
-                              subtotalChangePositive ? "green.400" : "red.400"
-                            }
-                          >
-                            {comp.subtotalChange}%
-                          </Td>
-                          <Td color={totalChangePositive ? "green.400" : "red.400"}>
-                            {comp.totalChange}%
-                          </Td>
-                        </Tr>
-                      );
-                    })}
-                  </Tbody>
-                </Table>
-              </Box>
-            </Box>
-          )}
-        </Box>
-      )}
-
-      {/* ======= Visualization Panels ======= */}
-      {!isLoading && !error && (
-        <Grid templateColumns={gridTemplateColumns} gap={6} mb={6}>
-          {/* Distribution Pie Chart */}
+    <Box p={0} minH="100vh" color="white" display="flex" flexDirection="column" alignItems="center">
+      <Flex direction="column" width="100%" maxW="1200px">
+        {/* TABLE SECTION */}
+        {!isLoading && !error && (
           <Box
             bg="linear-gradient(90deg, #000000, #7800ff)"
             borderRadius="20px"
             p={[4, 6]}
-            border="5px solid rgba(255, 255, 255, 0.8)"
-            boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
-          >
-            <Text
-              fontSize={["lg", "xl"]}
-              mb={4}
-              textAlign="center"
-              color="white"
-              fontWeight="bold"
-            >
-              Distribution of APPS', SITE, & CTV
-            </Text>
-            <Flex justifyContent="center" mb={4}>
-              {totalApps === 0 && totalSites === 0 && totalCtv === 0 ? (
-                <Text fontSize="sm" color="white">
-                  No data to display.
-                </Text>
-              ) : (
-                <Box width="100%" maxWidth={piePlotWidth} maxHeight={piePlotHeight}>
-                  <Plot
-                    data={pieData}
-                    layout={{
-                      autosize: true,
-                      paper_bgcolor: "transparent",
-                      plot_bgcolor: "transparent",
-                      showlegend: true,
-                      legend: { orientation: "h", x: 0.3, y: -0.2 },
-                    }}
-                    config={{ displayModeBar: false }}
-                    style={{ width: "100%", height: "100%" }}
-                    useResizeHandler
-                  />
-                </Box>
-              )}
-            </Flex>
-            {/* Filters for Distribution */}
-            <Flex direction="column" gap={2}>
-              <Select
-                value={selectedCategory}
-                onChange={(e) => {
-                  setSelectedCategory(e.target.value);
-                  setSelectedSubcategory("All");
-                }}
-                placeholder="Select Category"
-                bg="white"
-                color="black"
-                size="sm"
-              >
-                <option value="All">All</option>
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                value={selectedSubcategory}
-                onChange={(e) => setSelectedSubcategory(e.target.value)}
-                placeholder="Select Subcategory"
-                bg="white"
-                color="black"
-                size="sm"
-                isDisabled={selectedCategory === "All"}
-              >
-                <option value="All">All</option>
-                {selectedCategory !== "All" &&
-                  subcategories.map((subcat) => (
-                    <option key={subcat} value={subcat}>
-                      {subcat}
-                    </option>
-                  ))}
-              </Select>
-            </Flex>
-          </Box>
-
-          {/* Metrics Box (Average/Total) */}
-          <Box
-            bg="linear-gradient(90deg, #000000, #7800ff)"
-            borderRadius="20px"
-            p={[4, 6]}
-            border="5px solid rgba(255, 255, 255, 0.8)"
-            boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
+            border="2.5px solid rgba(255, 255, 255, 0.8)"
+            mb={6}
+            mt={10}
           >
             <Flex
               justifyContent="space-between"
@@ -1255,310 +722,682 @@ const NewPage = () => {
               gap={2}
             >
               <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
-                {metricsType} Metrics
+                Events Table
               </Text>
+
+              <Flex gap={2} flexWrap="wrap" alignItems="center">
+                <Select
+                  placeholder="Year Filter"
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                  bg="white"
+                  color="black"
+                  size="sm"
+                  width={["100%", "120px"]}
+                >
+                  <option value="All">All</option>
+                  <option value="2024">2024</option>
+                  <option value="2025">2025</option>
+                </Select>
+                <Select
+                  placeholder="Filter Category"
+                  value={tableCategoryFilter}
+                  onChange={(e) => {
+                    setTableCategoryFilter(e.target.value);
+                    setTableSubcategoryFilter("All");
+                  }}
+                  bg="white"
+                  color="black"
+                  size="sm"
+                  width={["100%", "200px"]}
+                >
+                  <option value="All">All</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  placeholder="Filter Subcategory"
+                  value={tableSubcategoryFilter}
+                  onChange={(e) => setTableSubcategoryFilter(e.target.value)}
+                  bg="white"
+                  color="black"
+                  size="sm"
+                  width={["100%", "200px"]}
+                  isDisabled={tableCategoryFilter === "All"}
+                >
+                  <option value="All">All</option>
+                  {tableCategoryFilter !== "All" &&
+                    Array.from(
+                      new Set(
+                        yearFilteredData
+                          .filter((d) => d.category === tableCategoryFilter)
+                          .map((d) => d.subcategory)
+                      )
+                    )
+                      .sort()
+                      .map((subcat) => (
+                        <option key={subcat} value={subcat}>
+                          {subcat}
+                        </option>
+                      ))}
+                </Select>
+                <Button
+                  colorScheme={compareMode ? "red" : "teal"}
+                  onClick={compareMode ? handleCancelCompare : handleCompare}
+                  size="sm"
+                  isDisabled={selectedCompareEvents.length < 2 && !compareMode}
+                >
+                  {compareMode ? "Cancel Compare" : "Compare"}
+                </Button>
+              </Flex>
+            </Flex>
+
+            <Box overflowX="auto">
+              <Table variant="simple" size="sm">
+                <Thead>
+                  <Tr>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Select</Th>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Week</Th>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Date</Th>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Category</Th>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Subcategory</Th>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Event Name</Th>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Description</Th>
+                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SITE</Th>
+                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">APPS'</Th>
+                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SUBTOTAL</Th>
+                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">CTV</Th>
+                    <Th isNumeric fontSize="sm" color="white" fontWeight="bold">TOTAL</Th>
+                    <Th fontSize="sm" color="white" fontWeight="bold">Aprov.</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {displayedTableData.map((row) => {
+                    const isSelected = selectedRow && selectedRow.id === row.id;
+                    return (
+                      <Tr
+                        key={row.id}
+                        bg={isSelected ? "gray.700" : categoryColors[row.category] || "gray.600"}
+                        _hover={{ bg: "gray.600", cursor: "pointer" }}
+                        fontSize={["xs", "sm"]}
+                        onClick={() => handleRowClick(row)}
+                      >
+                        <Td>
+                          <Checkbox
+                            isChecked={selectedCompareEvents.includes(row.id)}
+                            onChange={() => handleCompareSelection(row.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </Td>
+                        <Td>{row.weekNumber}</Td>
+                        <Td>{row.eventDate}</Td>
+                        <Td>{row.category}</Td>
+                        <Td>{row.subcategory}</Td>
+                        <Td>{row.eventName}</Td>
+                        <Td>{row.eventDescription}</Td>
+                        <Td isNumeric>{formatNumber(row.siteUsers)}</Td>
+                        <Td isNumeric>{formatNumber(row.appsUsers)}</Td>
+                        <Td isNumeric>{formatNumber(row.subtotal)}</Td>
+                        <Td isNumeric>{row.ctv > 0 ? formatNumber(row.ctv) : "-"}</Td>
+                        <Td isNumeric fontWeight="bold">{formatNumber(row.total)}</Td>
+                        <Td>{row.aprov != null ? formatNumber(row.aprov) : "-"}</Td>
+                      </Tr>
+                    );
+                  })}
+                </Tbody>
+              </Table>
+            </Box>
+
+            {tableFilteredData.length > 10 && (
+              <Flex justifyContent="center" mt={2}>
+                <Button
+                  size="xs"
+                  onClick={() => setIsTableExpanded(!isTableExpanded)}
+                  leftIcon={isTableExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                  colorScheme="teal"
+                  width={["100%", "auto"]}
+                >
+                  {isTableExpanded ? "Show Less" : "Show All"}
+                </Button>
+              </Flex>
+            )}
+
+            <Collapse in={isPieChartVisible} animateOpacity>
+              {selectedRow && (
+                <Box
+                  ref={pieChartRef}
+                  mt={4}
+                  bg="linear-gradient(90deg, #000000, #7800ff)"
+                  borderRadius="20px"
+                  p={[4, 6]}
+                  border="2.5px solid rgba(255, 255, 255, 0.8)"
+                >
+                  <Text
+                    fontSize={["sm", "md"]}
+                    mb={2}
+                    textAlign="center"
+                    color="white"
+                    fontWeight="bold"
+                  >
+                    Distribution for {selectedRow.eventDescription} on {formatDate(selectedRow.eventDate)}
+                  </Text>
+                  <Flex justifyContent="center">
+                    <Box width="100%" maxWidth={piePlotWidth} maxHeight={piePlotHeight}>
+                      <Plot
+                        data={[
+                          {
+                            values: [
+                              selectedRow.appsUsers,
+                              selectedRow.siteUsers,
+                              selectedRow.ctv,
+                            ],
+                            labels: ["APPS'", "SITE", "CTV"],
+                            type: "pie",
+                            marker: { colors: ["#36a2eb", "#ff6384", "#ffce56"] },
+                            hoverinfo: "label+percent+value",
+                            textinfo: "label+value",
+                            textposition: "inside",
+                            textfont: {
+                              color: "white",
+                              size: 14,
+                              family: "Arial",
+                              weight: "bold",
+                            },
+                          },
+                        ]}
+                        layout={{
+                          autosize: true,
+                          paper_bgcolor: "transparent",
+                          plot_bgcolor: "transparent",
+                          showlegend: true,
+                          legend: {
+                            orientation: "h",
+                            x: 0.3,
+                            y: -0.2,
+                            font: { color: "white", size: 12 },
+                          },
+                        }}
+                        config={{ displayModeBar: false }}
+                        style={{ width: "100%", height: "100%" }}
+                        useResizeHandler
+                      />
+                    </Box>
+                  </Flex>
+                </Box>
+              )}
+            </Collapse>
+
+            {compareMode && comparisonData && (
+              <Box
+                bg="linear-gradient(90deg, #000000, #7800ff)"
+                borderRadius="20px"
+                p={[4, 6]}
+                border="2.5px solid rgba(255, 255, 255, 0.8)"
+                mb={6}
+                mt={4}
+              >
+                <Flex
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={4}
+                  flexDirection={["column", "row"]}
+                  gap={2}
+                >
+                  <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
+                    Comparison
+                  </Text>
+                  <Button
+                    colorScheme="red"
+                    onClick={handleCancelCompare}
+                    size="sm"
+                    width={["100%", "auto"]}
+                  >
+                    Cancel
+                  </Button>
+                </Flex>
+                <Box overflowX="auto">
+                  <Table variant="simple" size="sm">
+                    <Thead>
+                      <Tr>
+                        <Th fontSize="sm" color="white" fontWeight="bold">Event Name</Th>
+                        <Th isNumeric fontSize="sm" color="white" fontWeight="bold">APPS' Count</Th>
+                        <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SITE Count</Th>
+                        <Th isNumeric fontSize="sm" color="white" fontWeight="bold">CTV Count</Th>
+                        <Th isNumeric fontSize="sm" color="white" fontWeight="bold">SUBTOTAL</Th>
+                        <Th isNumeric fontSize="sm" color="white" fontWeight="bold">TOTAL</Th>
+                        <Th fontSize="sm" color="white" fontWeight="bold">APPS' Change (%)</Th>
+                        <Th fontSize="sm" color="white" fontWeight="bold">SITE Change (%)</Th>
+                        <Th fontSize="sm" color="white" fontWeight="bold">CTV Change (%)</Th>
+                        <Th fontSize="sm" color="white" fontWeight="bold">SUBTOTAL Change (%)</Th>
+                        <Th fontSize="sm" color="white" fontWeight="bold">TOTAL Change (%)</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {comparisonData?.baseEvent && (
+                        <Tr>
+                          <Td fontWeight="bold" color="white">
+                            {comparisonData.baseEvent.eventName} - {formatDate(comparisonData.baseEvent.eventDate)}
+                          </Td>
+                          <Td isNumeric>{formatNumber(comparisonData.baseEvent.appsUsers)}</Td>
+                          <Td isNumeric>{formatNumber(comparisonData.baseEvent.siteUsers)}</Td>
+                          <Td isNumeric>
+                            {comparisonData.baseEvent.ctv > 0
+                              ? formatNumber(comparisonData.baseEvent.ctv)
+                              : "-"}
+                          </Td>
+                          <Td isNumeric>{formatNumber(comparisonData.baseEvent.subtotal)}</Td>
+                          <Td isNumeric>{formatNumber(comparisonData.baseEvent.total)}</Td>
+                          <Td color="gray.400">-</Td>
+                          <Td color="gray.400">-</Td>
+                          <Td color="gray.400">-</Td>
+                          <Td color="gray.400">-</Td>
+                          <Td color="gray.400">-</Td>
+                        </Tr>
+                      )}
+                      {comparisonData.comparisons.map((comp, idx) => {
+                        const event = yearFilteredData.find((e) => e.id === comp.eventId);
+                        const appsPos = parseFloat(comp.appsChange) >= 0;
+                        const sitePos = parseFloat(comp.siteChange) >= 0;
+                        const ctvPos = parseFloat(comp.ctvChange) >= 0;
+                        const subPos = parseFloat(comp.subtotalChange) >= 0;
+                        const totPos = parseFloat(comp.totalChange) >= 0;
+                        return (
+                          <Tr key={idx}>
+                            <Td fontWeight="bold" color="white">
+                              {event
+                                ? `${event.eventName} - ${formatDate(event.eventDate)}`
+                                : `${comp.eventName} - ${formatDate(comp.eventDate)}`}
+                            </Td>
+                            <Td isNumeric>{event ? formatNumber(event.appsUsers) : "0"}</Td>
+                            <Td isNumeric>{event ? formatNumber(event.siteUsers) : "0"}</Td>
+                            <Td isNumeric>
+                              {event && event.ctv > 0 ? formatNumber(event.ctv) : "-"}
+                            </Td>
+                            <Td isNumeric>{event ? formatNumber(event.subtotal) : "0"}</Td>
+                            <Td isNumeric>{event ? formatNumber(event.total) : "0"}</Td>
+                            <Td color={appsPos ? "green.400" : "red.400"}>{comp.appsChange}%</Td>
+                            <Td color={sitePos ? "green.400" : "red.400"}>{comp.siteChange}%</Td>
+                            <Td color={ctvPos ? "green.400" : "red.400"}>{comp.ctvChange}%</Td>
+                            <Td color={subPos ? "green.400" : "red.400"}>{comp.subtotalChange}%</Td>
+                            <Td color={totPos ? "green.400" : "red.400"}>{comp.totalChange}%</Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {/* Distribution & Metrics */}
+        {!isLoading && !error && (
+          <Grid templateColumns={gridTemplateColumns} gap={6} mb={6}>
+            <Box
+              bg="linear-gradient(90deg, #000000, #7800ff)"
+              borderRadius="20px"
+              p={[4, 6]}
+              border="2.5px solid rgba(255, 255, 255, 0.8)"
+            >
+              <Text fontSize={["lg", "xl"]} mb={4} textAlign="center" color="white" fontWeight="bold">
+                Distribution of APPS', SITE, & CTV
+              </Text>
+              <Flex justifyContent="center" mb={4}>
+                {totalApps === 0 && totalSites === 0 && totalCtv === 0 ? (
+                  <Text fontSize="sm" color="white">No data to display.</Text>
+                ) : (
+                  <Box width="100%" maxWidth={piePlotWidth} maxHeight={piePlotHeight}>
+                    <Plot
+                      data={pieData}
+                      layout={{
+                        autosize: true,
+                        paper_bgcolor: "transparent",
+                        plot_bgcolor: "transparent",
+                        showlegend: true,
+                        legend: {
+                          orientation: "h",
+                          x: 0.3,
+                          y: -0.2,
+                          font: { color: "white", size: 12 },
+                        },
+                      }}
+                      config={{ displayModeBar: false }}
+                      style={{ width: "100%", height: "100%" }}
+                      useResizeHandler
+                    />
+                  </Box>
+                )}
+              </Flex>
+              <Flex direction="column" gap={2}>
+                <Select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    setSelectedCategory(e.target.value);
+                    setSelectedSubcategory("All");
+                  }}
+                  placeholder="Select Category"
+                  bg="white"
+                  color="black"
+                  size="sm"
+                >
+                  <option value="All">All</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  value={selectedSubcategory}
+                  onChange={(e) => setSelectedSubcategory(e.target.value)}
+                  placeholder="Select Subcategory"
+                  bg="white"
+                  color="black"
+                  size="sm"
+                  isDisabled={selectedCategory === "All"}
+                >
+                  <option value="All">All</option>
+                  {selectedCategory !== "All" &&
+                    subcategories.map((subcat) => (
+                      <option key={subcat} value={subcat}>
+                        {subcat}
+                      </option>
+                    ))}
+                </Select>
+              </Flex>
+            </Box>
+
+            <Box
+              bg="linear-gradient(90deg, #000000, #7800ff)"
+              borderRadius="20px"
+              p={[4, 6]}
+              border="2.5px solid rgba(255, 255, 255, 0.8)"
+            >
+              <Flex
+                justifyContent="space-between"
+                alignItems="center"
+                mb={4}
+                flexDirection={["column", "row"]}
+                gap={2}
+              >
+                <Text fontSize={["lg", "xl"]} fontWeight="bold" color="white">
+                  {metricsType} Metrics
+                </Text>
+                <Select
+                  value={metricsType}
+                  onChange={(e) => setMetricsType(e.target.value)}
+                  bg="white"
+                  color="black"
+                  size="sm"
+                  width={["100%", "150px"]}
+                >
+                  <option value="Average">Average</option>
+                  <option value="Total">Total</option>
+                </Select>
+              </Flex>
+              <Flex direction="column" gap={4} align="center">
+                <Box
+                  bg="linear-gradient(90deg, #000000, #7800ff)"
+                  p={4}
+                  borderRadius="20px"
+                  width="100%"
+                  textAlign="center"
+                >
+                  <Text fontSize="sm" fontWeight="semibold" color="white">
+                    {metricsType} APPS'
+                  </Text>
+                  <Text fontSize="xl" fontWeight="bold" color="white">
+                    {metricsType === "Average"
+                      ? averageApps
+                      : formatNumber(totalApps)}
+                  </Text>
+                </Box>
+                <Box
+                  bg="linear-gradient(90deg, #000000, #7800ff)"
+                  p={4}
+                  borderRadius="20px"
+                  width="100%"
+                  textAlign="center"
+                >
+                  <Text fontSize="sm" fontWeight="semibold" color="white">
+                    {metricsType} SITE
+                  </Text>
+                  <Text fontSize="xl" fontWeight="bold" color="white">
+                    {metricsType === "Average"
+                      ? averageSites
+                      : formatNumber(totalSites)}
+                  </Text>
+                </Box>
+                <Box
+                  bg="linear-gradient(90deg, #000000, #7800ff)"
+                  p={4}
+                  borderRadius="20px"
+                  width="100%"
+                  textAlign="center"
+                >
+                  <Text fontSize="sm" fontWeight="semibold" color="white">
+                    {metricsType} SUBTOTAL
+                  </Text>
+                  <Text fontSize="xl" fontWeight="bold" color="white">
+                    {metricsType === "Average"
+                      ? averageSubtotal
+                      : formatNumber(totalSubtotal)}
+                  </Text>
+                </Box>
+                <Box
+                  bg="linear-gradient(90deg, #000000, #7800ff)"
+                  p={4}
+                  borderRadius="20px"
+                  width="100%"
+                  textAlign="center"
+                >
+                  <Text fontSize="sm" fontWeight="semibold" color="white">
+                    {metricsType} CTV
+                  </Text>
+                  <Text fontSize="xl" fontWeight="bold" color="white">
+                    {metricsType === "Average"
+                      ? averageCtv
+                      : formatNumber(totalCtv)}
+                  </Text>
+                </Box>
+                <Box
+                  bg="linear-gradient(90deg, #000000, #7800ff)"
+                  p={4}
+                  borderRadius="20px"
+                  width="100%"
+                  textAlign="center"
+                >
+                  <Text fontSize="sm" fontWeight="semibold" color="white">
+                    {metricsType} TOTAL
+                  </Text>
+                  <Text fontSize="xl" fontWeight="bold" color="white">
+                    {metricsType === "Average"
+                      ? averageTotal
+                      : formatNumber(totalTotal)}
+                  </Text>
+                </Box>
+                <Box
+                  bg="linear-gradient(90deg, #000000, #7800ff)"
+                  p={4}
+                  borderRadius="20px"
+                  width="100%"
+                  textAlign="center"
+                >
+                  <Text fontSize="sm" fontWeight="semibold" color="white">
+                    {metricsType} Aprov
+                  </Text>
+                  <Text fontSize="xl" fontWeight="bold" color="white">
+                    {metricsType === "Average" ? averageAprov : totalAprov}
+                  </Text>
+                </Box>
+              </Flex>
+            </Box>
+          </Grid>
+        )}
+
+        {!isLoading && !error && (
+          <Box
+            bg="linear-gradient(90deg, #000000, #7800ff)"
+            borderRadius="20px"
+            p={[4, 6]}
+            border="2.5px solid rgba(255, 255, 255, 0.8)"
+            mb={6}
+          >
+            <Text
+              fontSize={["lg", "xl"]}
+              mb={4}
+              textAlign="center"
+              color="white"
+              fontWeight="bold"
+            >
+              APPS', SITE, CTV Clicks Over Time
+            </Text>
+            <Flex direction={["column", "row"]} justifyContent="space-between" mb={4} gap={4}>
               <Select
-                value={metricsType}
-                onChange={(e) => setMetricsType(e.target.value)}
+                placeholder="Select Graph Option"
+                value={selectedGraphOption}
+                onChange={(e) => setSelectedGraphOption(e.target.value)}
                 bg="white"
                 color="black"
                 size="sm"
-                width={["100%", "150px"]}
+                width={["100%", "200px"]}
               >
-                <option value="Average">Average</option>
-                <option value="Total">Total</option>
+                <option value="APPS">APPS'</option>
+                <option value="SITE">SITE</option>
+                <option value="CTV">CTV</option>
+                <option value="SUBTOTAL">SUBTOTAL (APPS + SITE)</option>
+                <option value="TOTAL">TOTAL (SUBTOTAL + CTV)</option>
+                <option value="ALL">All</option>
               </Select>
+
+              {/* THE KEY: Include the date in the label */}
+              <Box width={["100%", "300px"]}>
+                <Select
+                  placeholder="Select Events"
+                  onChange={handleEventSelection}
+                  bg="gray.600"
+                  color="white"
+                  size="sm"
+                  value=""
+                >
+                  {lineGraphData.events
+                    .filter((evt) => !selectedEvents.includes(evt.id))
+                    .map((evt) => {
+                      // label includes date + description
+                      const label = `${formatDate(evt.eventDate)} - ${evt.eventDescription || "No Description"}`;
+                      return (
+                        <option key={evt.id} value={evt.id}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                </Select>
+                <Flex mt={2} wrap="wrap" gap={2}>
+                  {selectedEvents.map((evId) => {
+                    const found = lineGraphData.events.find((x) => x.id === evId);
+                    const label = found
+                      ? `${formatDate(found.eventDate)} - ${found.eventDescription}`
+                      : "Unknown Event";
+                    return (
+                      <Tag
+                        size="sm"
+                        key={evId}
+                        borderRadius="full"
+                        variant="solid"
+                        colorScheme="teal"
+                      >
+                        <TagLabel>{label}</TagLabel>
+                        <TagCloseButton onClick={() => handleRemoveSelectedEvent(evId)} />
+                      </Tag>
+                    );
+                  })}
+                </Flex>
+              </Box>
             </Flex>
-            <Flex direction="column" gap={4} align="center">
-              {/* APPS' */}
-              <Box
-                bg="linear-gradient(90deg, #000000, #7800ff)"
-                p={4}
-                borderRadius="20px"
-                width="100%"
-                textAlign="center"
-                border="2px solid"
-              >
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  {metricsType} APPS'
+
+            <Flex justifyContent="center">
+              {lineGraphData.dates.length === 0 ? (
+                <Text fontSize="sm" color="white">
+                  No data to display.
                 </Text>
-                <Text fontSize="xl" fontWeight="bold" color="white">
-                  {metricsType === "Average"
-                    ? averageApps
-                    : formatNumber(totalApps)}
-                </Text>
-              </Box>
-              {/* SITE */}
-              <Box
-                bg="linear-gradient(90deg, #000000, #7800ff)"
-                p={4}
-                borderRadius="20px"
-                width="100%"
-                textAlign="center"
-                border="2px solid"
-              >
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  {metricsType} SITE
-                </Text>
-                <Text fontSize="xl" fontWeight="bold" color="white">
-                  {metricsType === "Average"
-                    ? averageSites
-                    : formatNumber(totalSites)}
-                </Text>
-              </Box>
-              {/* SUBTOTAL */}
-              <Box
-                bg="linear-gradient(90deg, #000000, #7800ff)"
-                p={4}
-                borderRadius="20px"
-                width="100%"
-                textAlign="center"
-                border="2px solid"
-              >
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  {metricsType} SUBTOTAL
-                </Text>
-                <Text fontSize="xl" fontWeight="bold" color="white">
-                  {metricsType === "Average"
-                    ? averageSubtotal
-                    : formatNumber(totalSubtotal)}
-                </Text>
-              </Box>
-              {/* CTV */}
-              <Box
-                bg="linear-gradient(90deg, #000000, #7800ff)"
-                p={4}
-                borderRadius="20px"
-                width="100%"
-                textAlign="center"
-                border="2px solid"
-              >
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  {metricsType} CTV
-                </Text>
-                <Text fontSize="xl" fontWeight="bold" color="white">
-                  {metricsType === "Average"
-                    ? averageCtv
-                    : formatNumber(totalCtv)}
-                </Text>
-              </Box>
-              {/* TOTAL */}
-              <Box
-                bg="linear-gradient(90deg, #000000, #7800ff)"
-                p={4}
-                borderRadius="20px"
-                width="100%"
-                textAlign="center"
-                border="2px solid"
-              >
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  {metricsType} TOTAL
-                </Text>
-                <Text fontSize="xl" fontWeight="bold" color="white">
-                  {metricsType === "Average"
-                    ? averageTotal
-                    : formatNumber(totalTotal)}
-                </Text>
-              </Box>
-              {/* Aprov */}
-              <Box
-                bg="linear-gradient(90deg, #000000, #7800ff)"
-                p={4}
-                borderRadius="20px"
-                width="100%"
-                textAlign="center"
-                border="2px solid"
-              >
-                <Text fontSize="sm" fontWeight="semibold" color="white">
-                  {metricsType} Aprov
-                </Text>
-                <Text fontSize="xl" fontWeight="bold" color="white">
-                  {metricsType === "Average" ? averageAprov : totalAprov}
-                </Text>
-              </Box>
+              ) : (
+                <Box width="100%" height={plotHeight || 400}>
+                  <Plot
+                    data={plotData}
+                    layout={{
+                      autosize: true,
+                      paper_bgcolor: "transparent",
+                      plot_bgcolor: "transparent",
+                      xaxis: {
+                        title: "Event Date",
+                        type: "date",
+                        rangeslider: { visible: true },
+                        tickangle: -45,
+                        automargin: true,
+                        tickfont: { color: "rgba(255, 255, 255, 0.7)", size: 12 },
+                        titlefont: {
+                          color: "white",
+                          size: 14,
+                          family: "Arial",
+                          weight: "bold",
+                        },
+                        gridcolor: "rgba(255, 255, 255, 0.2)",
+                        rangeselector: {
+                          buttons: [
+                            { count: 1, label: "1m", step: "month", stepmode: "backward" },
+                            { count: 6, label: "6m", step: "month", stepmode: "backward" },
+                            { step: "all" },
+                          ],
+                        },
+                      },
+                      yaxis: {
+                        title: "Count",
+                        tickfont: { color: "rgba(255, 255, 255, 0.7)", size: 12 },
+                        titlefont: {
+                          color: "white",
+                          size: 14,
+                          family: "Arial",
+                          weight: "bold",
+                        },
+                        gridcolor: "rgba(255, 255, 255, 0.2)",
+                      },
+                      legend: {
+                        orientation: "h",
+                        x: 0.5,
+                        y: -0.2,
+                        xanchor: "center",
+                        yanchor: "top",
+                        font: {
+                          color: "white",
+                          size: 12,
+                          family: "Arial",
+                          weight: "bold",
+                        },
+                      },
+                      hoverlabel: {
+                        bgcolor: "gray",
+                        font: {
+                          color: "white",
+                          family: "Arial",
+                          size: 12,
+                          weight: "bold",
+                        },
+                      },
+                    }}
+                    config={{ displayModeBar: false }}
+                    style={{ width: "100%", height: "100%" }}
+                    useResizeHandler
+                  />
+                </Box>
+              )}
             </Flex>
           </Box>
-        </Grid>
-      )}
-
-      {/* ======= Line Graph ======= */}
-      {!isLoading && !error && (
-        <Box
-          bg="linear-gradient(90deg, #000000, #7800ff)"
-          borderRadius="20px"
-          p={[4, 6]}
-          border="5px solid rgba(255, 255, 255, 0.8)"
-          boxShadow="0px 0px 15px rgba(200, 200, 200, 0.5)"
-          mb={6}
-        >
-          <Text
-            fontSize={["lg", "xl"]}
-            mb={4}
-            textAlign="center"
-            color="white"
-            fontWeight="bold"
-          >
-            APPS', SITE, CTV Clicks Over Time
-          </Text>
-          <Flex
-            direction={["column", "row"]}
-            justifyContent="space-between"
-            mb={4}
-            gap={4}
-          >
-            <Select
-              placeholder="Select Graph Option"
-              value={selectedGraphOption}
-              onChange={(e) => setSelectedGraphOption(e.target.value)}
-              bg="white"
-              color="black"
-              size="sm"
-              width={["100%", "200px"]}
-            >
-              <option value="APPS">APPS'</option>
-              <option value="SITE">SITE</option>
-              <option value="CTV">CTV</option>
-              <option value="SUBTOTAL">SUBTOTAL (APPS + SITE)</option>
-              <option value="TOTAL">TOTAL (SUBTOTAL + CTV)</option>
-              <option value="ALL">All</option>
-            </Select>
-
-            {/* Customizable Event Selection */}
-            <Box width={["100%", "300px"]}>
-              <Select
-                placeholder="Select Events"
-                onChange={handleEventSelection}
-                bg="gray.600"
-                color="white"
-                size="sm"
-                value=""
-              >
-                {lineGraphData.events
-                  .filter((evt) => !selectedEvents.includes(evt.id))
-                  .map((evt) => (
-                    <option key={evt.id} value={evt.id}>
-                      {evt.eventDescription || "No Description"}
-                    </option>
-                  ))}
-              </Select>
-              <Flex mt={2} wrap="wrap" gap={2}>
-                {selectedEvents.map((eventId) => {
-                  const event = lineGraphData.events.find((e) => e.id === eventId);
-                  return (
-                    <Tag
-                      size="sm"
-                      key={eventId}
-                      borderRadius="full"
-                      variant="solid"
-                      colorScheme="teal"
-                    >
-                      <TagLabel>
-                        {event ? event.eventDescription || "No Description" : "Unknown"}
-                      </TagLabel>
-                      <TagCloseButton
-                        onClick={() => handleRemoveSelectedEvent(eventId)}
-                      />
-                    </Tag>
-                  );
-                })}
-              </Flex>
-            </Box>
-          </Flex>
-
-          <Flex justifyContent="center">
-            {lineGraphData.dates.length === 0 ? (
-              <Text fontSize="sm" color="white">
-                No data to display.
-              </Text>
-            ) : (
-              <Box width="100%" maxHeight={linePlotHeight}>
-                <Plot
-                  data={plotData}
-                  layout={{
-                    autosize: true,
-                    paper_bgcolor: "transparent",
-                    plot_bgcolor: "transparent",
-                    xaxis: {
-                      title: "Event Date",
-                      type: "date",
-                      rangeselector: {
-                        buttons: [
-                          {
-                            count: 1,
-                            label: "1m",
-                            step: "month",
-                            stepmode: "backward",
-                          },
-                          {
-                            count: 6,
-                            label: "6m",
-                            step: "month",
-                            stepmode: "backward",
-                          },
-                          { step: "all" },
-                        ],
-                      },
-                      rangeslider: { visible: true },
-                      tickangle: -45,
-                      automargin: true,
-                      tickfont: {
-                        color: "rgba(255, 255, 255, 0.7)",
-                        size: 12,
-                      },
-                      titlefont: {
-                        color: "white",
-                        size: 14,
-                        family: "Arial",
-                        weight: "bold",
-                      },
-                      gridcolor: "rgba(255, 255, 255, 0.2)",
-                    },
-                    yaxis: {
-                      title: "Count",
-                      tickfont: {
-                        color: "rgba(255, 255, 255, 0.7)",
-                        size: 12,
-                      },
-                      titlefont: {
-                        color: "white",
-                        size: 14,
-                        family: "Arial",
-                        weight: "bold",
-                      },
-                      gridcolor: "rgba(255, 255, 255, 0.2)",
-                    },
-                    legend: {
-                      orientation: "h",
-                      x: 0.5,
-                      y: -0.2,
-                      xanchor: "center",
-                      yanchor: "top",
-                      font: {
-                        color: "white",
-                        size: 12,
-                        family: "Arial",
-                        weight: "bold",
-                      },
-                    },
-                    hoverlabel: {
-                      bgcolor: "gray",
-                      font: {
-                        color: "white",
-                        family: "Arial",
-                        size: 12,
-                        weight: "bold",
-                      },
-                    },
-                  }}
-                  config={{ displayModeBar: false }}
-                  style={{ width: "100%", height: "100%" }}
-                  useResizeHandler
-                />
-              </Box>
-            )}
-          </Flex>
-        </Box>
-      )}
+        )}
+      </Flex>
     </Box>
   );
 };

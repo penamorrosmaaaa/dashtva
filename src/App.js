@@ -17,7 +17,7 @@ import NewPage from './NewPage/NewPage';
 import LandingPage from './LandingPage/LandingPage';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
-import TimeBox from './time-box/timebox'; // New import for TimeBox component
+import TimeBox from './time-box/timebox'; // Import for TimeBox component
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -71,8 +71,9 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
     <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
     <Route path="/Digital-Calendar" element={<NewPage />} />
 
-    {/* TimeBox Route */}
-    <Route path="/timebox" element={<TimeBox />} />
+    {/* Time-Box Routes */}
+    {/* The landing page links to "/Time-Box", so we use the same path here */}
+    <Route path="/Time-Box" element={<TimeBox />} />
 
     {/* Main Application Route */}
     <Route

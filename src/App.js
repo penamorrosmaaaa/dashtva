@@ -1,5 +1,3 @@
-// src/App.js
-
 import React, { useState, useEffect } from 'react';
 import { ChakraProvider, Box } from '@chakra-ui/react';
 import {
@@ -19,6 +17,7 @@ import NewPage from './NewPage/NewPage';
 import LandingPage from './LandingPage/LandingPage';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
+import TimeBox from './time-box/timebox'; // New import for TimeBox component
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -71,6 +70,9 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
     <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
     <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
     <Route path="/Digital-Calendar" element={<NewPage />} />
+
+    {/* TimeBox Route */}
+    <Route path="/timebox" element={<TimeBox />} />
 
     {/* Main Application Route */}
     <Route

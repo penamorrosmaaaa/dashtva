@@ -18,6 +18,7 @@ import LandingPage from './LandingPage/LandingPage';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
 import TimeBox from './time-box/timebox'; // Import for TimeBox component
+import TimeBoxAdmin from './time-box/timeboxadmin'; // ✅ Added this import
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -69,6 +70,7 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
     {/* Admin Routes */}
     <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
     <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
+    <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} /> {/* ✅ Added this route */}
     <Route path="/Digital-Calendar" element={<NewPage />} />
 
     {/* Time-Box Routes */}

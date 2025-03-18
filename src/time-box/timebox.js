@@ -1,4 +1,3 @@
-
 /***************************************
  * App.js (React + Firebase Firestore)
  * A single-file version that properly
@@ -190,9 +189,9 @@ async function syncUsersFromSheet() {
         if (adminNumbers.includes(empNumber)) {
           role = "admin";
           const adminAllowedAreasMap = {
-            "1050028": ["Gudiño"],
+            "1050028": ["Cindy"],
             "1163755": ["Gabriel"],
-            "60092284": ["Cindy"],
+            "60092284": ["Cindy"], // updated for jgudiño
             "1129781": ["Charly"],
           };
           allowedAreas = adminAllowedAreasMap[empNumber] || [];
@@ -287,22 +286,19 @@ async function saveUserToFirestore(userObj) {
     let existingDoc = {};
     const snap = await getDoc(docRef);
     if (snap.exists()) {
-      existingDoc = snap.data(); // the doc's current data
+      existingDoc = snap.data();
     }
 
     // 2) Merge existing timeBox with userObj.timeBox
-    // If userObj.timeBox is undefined, treat it as empty
     const oldTimeBox = existingDoc.timeBox || {};
     const newTimeBox = userObj.timeBox || {};
     const mergedTimeBox = { ...oldTimeBox, ...newTimeBox };
 
     // 3) Now build an object with top-level merges
-    // We'll preserve the other top-level fields from Firestore too.
-    // But anything in userObj (like defaultStartHour) should override the old doc.
     const finalData = {
       ...existingDoc,
       ...userObj,
-      timeBox: mergedTimeBox, // ensure we never lose old days
+      timeBox: mergedTimeBox,
     };
 
     // 4) Write finalData with { merge: true }
@@ -689,6 +685,18 @@ function ReportsModal({
   );
 }
 
+/** Helper function to check if a day's data has any user-entered content */
+function dayHasContent(day) {
+  const hasPriorities =
+    day.priorities && day.priorities.some((p) => p.text && p.text.trim() !== "");
+  const hasBrainDump =
+    day.brainDump && day.brainDump.some((b) => b.text && b.text.trim() !== "");
+  const hasSchedule =
+    day.schedule &&
+    Object.values(day.schedule).some((entry) => entry.text && entry.text.trim() !== "");
+  return hasPriorities || hasBrainDump || hasSchedule;
+}
+
 /** Main App Component */
 export default function App() {
   // Logged-in user (the admin or employee who typed username+password)
@@ -728,6 +736,49 @@ export default function App() {
   const activeData = viewingTarget && displayUser ? displayUser : loggedInUser;
   const canViewAgenda = !!activeData && isLoggedIn;
 
+  // Instead of auto-creating day data on view, simply use an empty object if no data exists.
+  const dayObj = canViewAgenda ? (activeData.timeBox[currentDateStr] || {}) : {};
+  const {
+    startHour = 7,
+    endHour = 23,
+    priorities = [],
+    brainDump = [],
+    homeOffice = false,
+  } = dayObj;
+
+  // Calculate incomplete tasks
+  const totalIncomplete =
+    priorities.filter((p) => !p.completed).length +
+    brainDump.filter((b) => !b.completed).length;
+
+  // Helper to safely update the active user object.
+  // If day data is created but remains empty, it is removed.
+  function updateActiveData(fn) {
+    if (!activeData) return;
+    let copy;
+    if (viewingTarget) {
+      copy = { ...displayUser, timeBox: { ...displayUser.timeBox } };
+    } else {
+      copy = { ...loggedInUser, timeBox: { ...loggedInUser.timeBox } };
+    }
+    const originallyExisted =
+      copy.timeBox && copy.timeBox[currentDateStr] !== undefined;
+    fn(copy);
+    if (copy.timeBox && copy.timeBox[currentDateStr]) {
+      if (!originallyExisted && !dayHasContent(copy.timeBox[currentDateStr])) {
+        delete copy.timeBox[currentDateStr];
+      }
+    }
+    if (viewingTarget) {
+      setDisplayUser(copy);
+    } else {
+      setLoggedInUser(copy);
+    }
+    if (!viewMode) {
+      saveUserToFirestore(copy);
+    }
+  }
+
   // On mount, fetch from Google Sheets & store in Firestore (for new users).
   useEffect(() => {
     async function init() {
@@ -757,7 +808,6 @@ export default function App() {
   async function loadUserRecord(record, isEmployeeView) {
     try {
       const updatedRecord = await loadUserFromFirestore(record);
-      // For admin or user
       if (!isEmployeeView) {
         setLoggedInUser(updatedRecord);
         setDisplayUser(updatedRecord);
@@ -772,13 +822,11 @@ export default function App() {
       const cats = pickCategoryTreeForUser(updatedRecord);
       setCategoryTree(cats);
 
-      // If typed password doesn't match what's in Firestore, warn
       if (updatedRecord.password !== password && !isEmployeeView) {
         setMessage("Incorrect password (or blank if brand-new user).");
       }
     } catch (err) {
       console.error("Error loading user from Firestore:", err);
-      // fallback if Firestore fails
       if (!isEmployeeView) {
         setLoggedInUser(record);
         setDisplayUser(record);
@@ -795,17 +843,16 @@ export default function App() {
     }
   }
 
-  // Whenever displayUser changes, auto-save to Firestore unless we're in read-only mode
+  // Auto-save on changes to displayUser and loggedInUser
   useEffect(() => {
     if (!displayUser) return;
-    if (viewMode) return; // read-only => skip
+    if (viewMode) return;
     saveUserToFirestore(displayUser);
   }, [displayUser, viewMode]);
 
-  // Whenever loggedInUser changes, auto-save to Firestore (unless admin is viewing target)
   useEffect(() => {
     if (!loggedInUser) return;
-    if (viewMode && viewingTarget) return; // skip if admin is viewing target
+    if (viewMode && viewingTarget) return;
     saveUserToFirestore(loggedInUser);
   }, [loggedInUser, viewMode, viewingTarget]);
 
@@ -815,7 +862,6 @@ export default function App() {
     const user = syncedUsers[norm];
     if (!user) return null;
 
-    // Return a copy with safe defaults
     return {
       ...user,
       timeBox: user.timeBox || {},
@@ -847,7 +893,6 @@ export default function App() {
     if (!targetUser) return;
     let employeeRecord = getUserRecord(targetUser);
     if (!employeeRecord) {
-      // If not found in local synced list, create a brand-new user
       employeeRecord = {
         role: "employee",
         password: "",
@@ -873,222 +918,157 @@ export default function App() {
     setCategoryTree(cats);
   }
 
-  // Guarantee we have day data for the displayed user
-  function ensureDayData(u, ds) {
-    if (!u.timeBox[ds]) {
-      u.timeBox[ds] = {
-        startHour: u.defaultStartHour ?? 7,
-        endHour: u.defaultEndHour ?? 23,
-        priorities: [],
-        brainDump: [],
-        schedule: {},
-        homeOffice: false,
-        confettiShown: false,
-      };
-    }
-  }
-
-  if (canViewAgenda) {
-    ensureDayData(activeData, currentDateStr);
-  }
-  const dayObj = canViewAgenda ? activeData.timeBox[currentDateStr] : {};
-  const {
-    startHour = 7,
-    endHour = 23,
-    priorities = [],
-    brainDump = [],
-    homeOffice = false,
-  } = dayObj;
-
-  // Calculate incomplete tasks
-  const totalIncomplete =
-    priorities.filter((p) => !p.completed).length +
-    brainDump.filter((b) => !b.completed).length;
-
-  // Helper to safely update the active user object
-  function updateActiveData(fn) {
-    if (!activeData) return;
-    if (viewingTarget) {
-      // read-only user is 'displayUser'
-      const copy = { ...displayUser, timeBox: { ...displayUser.timeBox } };
-      ensureDayData(copy, currentDateStr);
-      fn(copy);
-      setDisplayUser(copy);
-    } else {
-      // normal user is 'loggedInUser'
-      const copy = { ...loggedInUser, timeBox: { ...loggedInUser.timeBox } };
-      ensureDayData(copy, currentDateStr);
-      fn(copy);
-      setLoggedInUser(copy);
-    }
-  }
-
-  // Show confetti if all tasks completed
-  useEffect(() => {
-    if (!canViewAgenda) return;
-    if (totalIncomplete === 0 && (priorities.length > 0 || brainDump.length > 0)) {
-      if (!dayObj.confettiShown) {
-        setShowConfetti(true);
-        updateActiveData((draft) => {
-          draft.timeBox[currentDateStr].confettiShown = true;
-        });
-        setTimeout(() => setShowConfetti(false), 4000);
-      }
-    } else {
-      setShowConfetti(false);
-    }
-  }, [canViewAgenda, totalIncomplete, priorities, brainDump, dayObj.confettiShown, currentDateStr]);
-
-  // Auto-load repeated slots from previous day/week
-  useEffect(() => {
-    if (!canViewAgenda) return;
-    if (viewMode) return; // skip if read-only
-
-    updateActiveData((draft) => {
-      const ds = currentDateStr;
-      const today = draft.timeBox[ds];
-      const slots = getQuarterHourSlots(today.startHour, today.endHour);
-
-      // day-1
-      const yest = new Date(currentDate);
-      yest.setDate(yest.getDate() - 1);
-      const yStr = formatDate(yest);
-
-      // day-7
-      const wAgo = new Date(currentDate);
-      wAgo.setDate(wAgo.getDate() - 7);
-      const wStr = formatDate(wAgo);
-
-      slots.forEach(({ hour, minute }) => {
-        const label = formatTime(hour, minute);
-        const currentSlot = today.schedule[label] || {};
-        if (!currentSlot.text) {
-          // daily?
-          const ySlot = draft.timeBox[yStr]?.schedule?.[label];
-          if (ySlot && ySlot.repeat === "daily" && ySlot.text) {
-            today.schedule[label] = { ...ySlot };
-            return;
-          }
-          // weekly?
-          const wSlot = draft.timeBox[wStr]?.schedule?.[label];
-          if (wSlot && wSlot.repeat === "weekly" && wSlot.text) {
-            today.schedule[label] = { ...wSlot };
-            return;
-          }
-        }
-      });
-    });
-  }, [canViewAgenda, currentDateStr, currentDate, viewMode]);
-
-  // Admin: filter employees by area
-  let filteredEmployees = [];
-  if (isAdmin && loggedInUser.allowedAreas) {
-    const allowed = loggedInUser.allowedAreas;
-    filteredEmployees = Object.keys(syncedUsers)
-      .filter((uname) => {
-        const emp = syncedUsers[uname];
-        if (!emp || emp.role !== "employee") return false;
-        return allowed.includes(emp.sheet);
-      })
-      .map((uname) => ({
-        username: uname,
-        fullName: syncedUsers[uname].fullName,
-        sheet: syncedUsers[uname].sheet,
-        password: syncedUsers[uname].password,
-      }));
-  }
-
-  // date navigation
-  function handleDateChange(e) {
-    const d = new Date(e.target.value);
-    if (!isNaN(d.getTime())) {
-      setCurrentDate(d);
-    }
-  }
-  function goPrevDay() {
-    setCurrentDate(getPrevDay(currentDate));
-  }
-  function goNextDay() {
-    setCurrentDate(getNextDay(currentDate));
-  }
-
-  // priorities
+  // Priorities
   function addPriority() {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
+      if (!draft.timeBox) draft.timeBox = {};
+      if (!draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr] = {
+          priorities: [],
+          brainDump: [],
+          schedule: {},
+          homeOffice: false,
+          confettiShown: false,
+          startHour: draft.defaultStartHour || 7,
+          endHour: draft.defaultEndHour || 23,
+        };
+      }
       draft.timeBox[currentDateStr].priorities.push({ text: "", completed: false });
     });
   }
   function togglePriorityCompleted(idx) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      draft.timeBox[currentDateStr].priorities[idx].completed =
-        !draft.timeBox[currentDateStr].priorities[idx].completed;
+      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].priorities) {
+        draft.timeBox[currentDateStr].priorities[idx].completed =
+          !draft.timeBox[currentDateStr].priorities[idx].completed;
+      }
     });
   }
   function updatePriorityText(idx, txt) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
+      if (!draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr] = {
+          priorities: [],
+          brainDump: [],
+          schedule: {},
+          homeOffice: false,
+          confettiShown: false,
+          startHour: draft.defaultStartHour || 7,
+          endHour: draft.defaultEndHour || 23,
+        };
+      }
       draft.timeBox[currentDateStr].priorities[idx].text = txt;
     });
   }
   function removePriority(idx) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      draft.timeBox[currentDateStr].priorities.splice(idx, 1);
+      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].priorities) {
+        draft.timeBox[currentDateStr].priorities.splice(idx, 1);
+      }
     });
   }
 
-  // brain dump
+  // Brain Dump
   function addBrainDumpItem() {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
+      if (!draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr] = {
+          priorities: [],
+          brainDump: [],
+          schedule: {},
+          homeOffice: false,
+          confettiShown: false,
+          startHour: draft.defaultStartHour || 7,
+          endHour: draft.defaultEndHour || 23,
+        };
+      }
       draft.timeBox[currentDateStr].brainDump.push({ text: "", completed: false });
     });
   }
   function toggleBrainDumpCompleted(i) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      draft.timeBox[currentDateStr].brainDump[i].completed =
-        !draft.timeBox[currentDateStr].brainDump[i].completed;
+      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].brainDump) {
+        draft.timeBox[currentDateStr].brainDump[i].completed =
+          !draft.timeBox[currentDateStr].brainDump[i].completed;
+      }
     });
   }
   function updateBrainDumpText(i, txt) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
+      if (!draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr] = {
+          priorities: [],
+          brainDump: [],
+          schedule: {},
+          homeOffice: false,
+          confettiShown: false,
+          startHour: draft.defaultStartHour || 7,
+          endHour: draft.defaultEndHour || 23,
+        };
+      }
       draft.timeBox[currentDateStr].brainDump[i].text = txt;
     });
   }
   function removeBrainDumpItem(i) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      draft.timeBox[currentDateStr].brainDump.splice(i, 1);
+      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].brainDump) {
+        draft.timeBox[currentDateStr].brainDump.splice(i, 1);
+      }
     });
   }
 
-  // schedule
+  // Schedule
   function updateScheduleSlot(label, newEntry) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
+      if (!draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr] = {
+          priorities: [],
+          brainDump: [],
+          schedule: {},
+          homeOffice: false,
+          confettiShown: false,
+          startHour: draft.defaultStartHour || 7,
+          endHour: draft.defaultEndHour || 23,
+        };
+      }
       draft.timeBox[currentDateStr].schedule[label] = newEntry;
     });
   }
 
-  // start/end hour
+  // Start/End Hour (Account Settings)
   function setStartHourVal(h) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      draft.timeBox[currentDateStr].startHour = parseInt(h, 10);
+      draft.defaultStartHour = parseInt(h, 10);
+      if (!draft.defaultPreset) draft.defaultPreset = {};
+      draft.defaultPreset.start = parseInt(h, 10);
+      if (draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr].startHour = parseInt(h, 10);
+      }
     });
   }
   function setEndHourVal(h) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      draft.timeBox[currentDateStr].endHour = parseInt(h, 10);
+      draft.defaultEndHour = parseInt(h, 10);
+      if (!draft.defaultPreset) draft.defaultPreset = {};
+      draft.defaultPreset.end = parseInt(h, 10);
+      if (draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr].endHour = parseInt(h, 10);
+      }
     });
   }
 
-  // For the 3 charts in ReportsModal
+  // Report functions
   function parseDateStr(ds) {
     const [y, m, d] = ds.split("-").map(Number);
     return new Date(y, m - 1, d);
@@ -1099,7 +1079,7 @@ export default function App() {
   function usageInSingleDay(dt) {
     const ds = formatDate(dt);
     const day = activeData?.timeBox[ds];
-    if (!day) return { usageMap: {}, freeHours: 0, totalHours: 0 };
+    if (!day || !dayHasContent(day)) return { usageMap: {}, freeHours: 0, totalHours: 0 };
     const { startHour = 7, endHour = 23, schedule = {} } = day;
     let freeHours = 0;
     let totalHours = 0;
@@ -1139,7 +1119,7 @@ export default function App() {
       const dt = parseDateStr(ds);
       if (boundary && dt < boundary) return;
       const day = activeData.timeBox[ds];
-      if (!day) return;
+      if (!day || !dayHasContent(day)) return;
       const slots = getQuarterHourSlots(day.startHour, day.endHour);
       slots.forEach(({ hour, minute }) => {
         totalHours += 0.25;
@@ -1166,7 +1146,7 @@ export default function App() {
   const usageResult = computeReportData();
   const { usageMap, freeHours, totalHours } = usageResult;
 
-  // For home office chart
+  // Home office chart calculations
   let homeOfficeDays = 0;
   let nonHomeOfficeDays = 0;
   if (canViewAgenda && activeData?.timeBox) {
@@ -1180,6 +1160,77 @@ export default function App() {
 
   // Build schedule rows
   const quarterSlots = canViewAgenda ? getQuarterHourSlots(startHour, endHour) : [];
+
+  // Show confetti if all tasks completed
+  useEffect(() => {
+    if (!canViewAgenda) return;
+    if (totalIncomplete === 0 && (priorities.length > 0 || brainDump.length > 0)) {
+      if (!dayObj.confettiShown) {
+        setShowConfetti(true);
+        updateActiveData((draft) => {
+          if (!draft.timeBox[currentDateStr]) {
+            draft.timeBox[currentDateStr] = {
+              priorities: [],
+              brainDump: [],
+              schedule: {},
+              homeOffice: false,
+              confettiShown: false,
+              startHour: draft.defaultStartHour || 7,
+              endHour: draft.defaultEndHour || 23,
+            };
+          }
+          draft.timeBox[currentDateStr].confettiShown = true;
+        });
+        setTimeout(() => setShowConfetti(false), 4000);
+      }
+    } else {
+      setShowConfetti(false);
+    }
+  }, [canViewAgenda, totalIncomplete, priorities, brainDump, dayObj.confettiShown, currentDateStr]);
+
+  // Auto-load repeated slots from previous day/week
+  useEffect(() => {
+    if (!canViewAgenda) return;
+    if (viewMode) return;
+
+    updateActiveData((draft) => {
+      const ds = currentDateStr;
+      let today = draft.timeBox[ds] || {
+        startHour: draft.defaultStartHour || 7,
+        endHour: draft.defaultEndHour || 23,
+        schedule: {},
+      };
+      const slots = getQuarterHourSlots(today.startHour, today.endHour);
+
+      // day-1
+      const yest = new Date(currentDate);
+      yest.setDate(yest.getDate() - 1);
+      const yStr = formatDate(yest);
+
+      // day-7
+      const wAgo = new Date(currentDate);
+      wAgo.setDate(wAgo.getDate() - 7);
+      const wStr = formatDate(wAgo);
+
+      slots.forEach(({ hour, minute }) => {
+        const label = formatTime(hour, minute);
+        const currentSlot = today.schedule[label] || {};
+        if (!currentSlot.text) {
+          const ySlot = draft.timeBox[yStr]?.schedule?.[label];
+          if (ySlot && ySlot.repeat === "daily" && ySlot.text) {
+            today.schedule[label] = { ...ySlot };
+            return;
+          }
+          const wSlot = draft.timeBox[wStr]?.schedule?.[label];
+          if (wSlot && wSlot.repeat === "weekly" && wSlot.text) {
+            today.schedule[label] = { ...wSlot };
+            return;
+          }
+        }
+      });
+      draft.timeBox[ds] = today;
+    });
+  }, [canViewAgenda, currentDateStr, currentDate, viewMode]);
 
   return (
     <div className="container">
@@ -1327,11 +1378,17 @@ export default function App() {
                     style={{ marginLeft: 8 }}
                   >
                     <option value="">-- Select Employee --</option>
-                    {filteredEmployees.map((emp) => (
-                      <option key={emp.username} value={emp.username}>
-                        {emp.fullName} ({emp.sheet})
-                      </option>
-                    ))}
+                    {Object.keys(syncedUsers)
+                      .filter((uname) => {
+                        const emp = syncedUsers[uname];
+                        if (!emp || emp.role !== "employee") return false;
+                        return isAdmin && loggedInUser.allowedAreas && loggedInUser.allowedAreas.includes(emp.sheet);
+                      })
+                      .map((uname) => (
+                        <option key={uname} value={uname}>
+                          {syncedUsers[uname].fullName} ({syncedUsers[uname].sheet})
+                        </option>
+                      ))}
                   </select>
                   <button onClick={handleLoadEmployee} style={{ marginLeft: 8 }}>
                     Load Employee Agenda
@@ -1355,10 +1412,7 @@ export default function App() {
                     value={activeData?.defaultStartHour}
                     onChange={(e) => {
                       if (viewMode) return;
-                      updateActiveData((draft) => {
-                        draft.defaultStartHour = parseInt(e.target.value, 10);
-                        draft.defaultPreset.start = parseInt(e.target.value, 10);
-                      });
+                      setStartHourVal(e.target.value);
                     }}
                     style={{ marginLeft: 5 }}
                   >
@@ -1375,10 +1429,7 @@ export default function App() {
                     value={activeData?.defaultEndHour}
                     onChange={(e) => {
                       if (viewMode) return;
-                      updateActiveData((draft) => {
-                        draft.defaultEndHour = parseInt(e.target.value, 10);
-                        draft.defaultPreset.end = parseInt(e.target.value, 10);
-                      });
+                      setEndHourVal(e.target.value);
                     }}
                     style={{ marginLeft: 5 }}
                   >
@@ -1401,9 +1452,14 @@ export default function App() {
           <>
             <div className="date-row">
               <label>Date:</label>
-              <input type="date" value={formatDate(currentDate)} onChange={handleDateChange} />
-              <button onClick={goPrevDay}>&lt;</button>
-              <button onClick={goNextDay}>&gt;</button>
+              <input type="date" value={formatDate(currentDate)} onChange={(e) => {
+                const d = new Date(e.target.value);
+                if (!isNaN(d.getTime())) {
+                  setCurrentDate(d);
+                }
+              }} />
+              <button onClick={() => setCurrentDate(getPrevDay(currentDate))}>&lt;</button>
+              <button onClick={() => setCurrentDate(getNextDay(currentDate))}>&gt;</button>
             </div>
 
             <div style={{ marginBottom: 10 }}>
@@ -1414,6 +1470,17 @@ export default function App() {
                 onChange={(e) => {
                   if (!viewMode) {
                     updateActiveData((draft) => {
+                      if (!draft.timeBox[currentDateStr]) {
+                        draft.timeBox[currentDateStr] = {
+                          priorities: [],
+                          brainDump: [],
+                          schedule: {},
+                          homeOffice: false,
+                          confettiShown: false,
+                          startHour: draft.defaultStartHour || 7,
+                          endHour: draft.defaultEndHour || 23,
+                        };
+                      }
                       draft.timeBox[currentDateStr].homeOffice = e.target.checked;
                     });
                   }

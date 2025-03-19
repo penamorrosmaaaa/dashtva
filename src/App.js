@@ -7,7 +7,7 @@ import {
   Navigate,
 } from 'react-router-dom';
 
-// Import your components with correct paths
+// Component imports
 import HomeAdmin from './HomeAdmin/HomeAdmin';
 import NewPageAdmin from './NewPageAdmin/NewPageAdmin';
 import General from './General/General';
@@ -17,8 +17,8 @@ import NewPage from './NewPage/NewPage';
 import LandingPage from './LandingPage/LandingPage';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
-import TimeBox from './time-box/timebox'; // Import for TimeBox component
-import TimeBoxAdmin from './time-box/timeboxadmin'; // ✅ Added this import
+import TimeBox from './time-box/timebox';
+import TimeBoxAdmin from './time-box/timeboxadmin';
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -44,7 +44,7 @@ const App = () => {
         width="100vw"
         minHeight="100vh"
         bg="linear-gradient(90deg, #000000, #7800ff)"
-        color="white"
+        color="black" // ✅ Explicitly force all text black
       >
         <Router>
           {isAuthenticated ? (
@@ -61,20 +61,16 @@ const App = () => {
 const AuthenticatedRoutes = ({ handleLogout }) => (
   <Routes>
     <Route path="/login" element={<Navigate to="/landing" replace />} />
-    <Route
-      path="/landing"
-      element={<LandingPage handleLogout={handleLogout} />}
-    />
+    <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
     <Route path="/" element={<Navigate to="/landing" replace />} />
 
     {/* Admin Routes */}
     <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
     <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
-    <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} /> {/* ✅ Added this route */}
+    <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} />
     <Route path="/Digital-Calendar" element={<NewPage />} />
 
     {/* Time-Box Routes */}
-    {/* The landing page links to "/Time-Box", so we use the same path here */}
     <Route path="/Time-Box" element={<TimeBox />} />
 
     {/* Main Application Route */}
@@ -82,8 +78,7 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
       path="/*"
       element={
         <MainLayout>
-          {/* Main Content */}
-          <Box maxW="1600px" py={10} bg="transparent">
+          <Box maxW="1600px" py={10} bg="transparent" color="black">
             <General />
             <RequestCountGraph />
             <DataTable />

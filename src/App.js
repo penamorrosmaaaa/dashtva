@@ -40,11 +40,15 @@ const App = () => {
 
   return (
     <ChakraProvider>
+      {/* 
+        Force white text globally with color="white". 
+        Use a dark/gradient background so white text is visible. 
+      */}
       <Box
         width="100vw"
         minHeight="100vh"
         bg="linear-gradient(90deg, #000000, #7800ff)"
-        color="black" // ✅ Explicitly force all text black
+        color="white" 
       >
         <Router>
           {isAuthenticated ? (
@@ -78,7 +82,11 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
       path="/*"
       element={
         <MainLayout>
-          <Box maxW="1600px" py={10} bg="transparent" color="black">
+          {/* 
+            No need to set color="white" again here— 
+            it inherits from the parent. 
+          */}
+          <Box maxW="1600px" py={10} bg="transparent">
             <General />
             <RequestCountGraph />
             <DataTable />

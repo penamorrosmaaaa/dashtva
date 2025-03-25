@@ -99,7 +99,7 @@ function getQuarterHourSlots(startHour, endHour) {
   const slots = [];
   if (startHour >= endHour) return slots;
   for (let h = startHour; h < endHour; h++) {
-    for (let m = 0; m < 60; m += 15) {
+    for (let m = 0; m < 60; m += 30) {
       slots.push({ hour: h, minute: m });
     }
   }
@@ -458,7 +458,7 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
       <div style={{ flexGrow: 1 }}>
         {categoryTree && categoryTree.length > 0 ? (
           <HierarchicalSelect
@@ -717,7 +717,12 @@ function dayHasContent(day) {
     day.brainDump && day.brainDump.some((b) => b.text && b.text.trim() !== "");
   const hasSchedule =
     day.schedule &&
-    Object.values(day.schedule).some((entry) => entry.text && entry.text.trim() !== "");
+    Object.values(day.schedule).some((entry) => {
+      if (Array.isArray(entry)) {
+        return entry.some((e) => e.text && e.text.trim() !== "");
+      }
+      return entry.text && entry.text.trim() !== "";
+    });
   return hasPriorities || hasBrainDump || hasSchedule;
 }
 
@@ -767,15 +772,10 @@ export default function App() {
     if (storedUser && storedPass) {
       setUsername(storedUser);
       setPassword(storedPass);
-      // We'll call handleLogin after setting these
-      // but only if the user is not already logged in
-      // (avoid infinite loop).
       if (!loggedInUser) {
-        // Slight delay so states update first
         setTimeout(() => handleLogin(), 50);
       }
     }
-    // eslint-disable-next-line
   }, []);
 
   // If day exists, destructure; else defaults.
@@ -795,7 +795,6 @@ export default function App() {
     brainDump.filter((b) => !b.completed).length;
 
   // Helper to safely update the active user object.
-  // If day data is created but remains empty, it is removed.
   function updateActiveData(fn) {
     if (!activeData) return;
     let copy;
@@ -825,9 +824,8 @@ export default function App() {
   // On mount, fetch from Google Sheets & store in Firestore (for new users).
   useEffect(() => {
     async function init() {
-      const users = await syncUsersFromSheet(); // merges new users
+      const users = await syncUsersFromSheet();
       setSyncedUsers(users);
-
       const catsMap = await fetchCategoriesBySheet();
       setCategoriesBySheet(catsMap);
     }
@@ -860,12 +858,9 @@ export default function App() {
         setViewingTarget(true);
       }
       setViewMode(isEmployeeView);
-
       setMessage("");
       const cats = pickCategoryTreeForUser(updatedRecord);
       setCategoryTree(cats);
-
-      // If password mismatches, user won't see their data
       if (updatedRecord.password !== password && !isEmployeeView) {
         setMessage("Incorrect password (or blank if brand-new user).");
       }
@@ -880,7 +875,6 @@ export default function App() {
         setViewingTarget(true);
       }
       setViewMode(isEmployeeView);
-
       const cats = pickCategoryTreeForUser(record);
       setCategoryTree(cats);
       setMessage("Could not fetch from Firestore, using local fallback.");
@@ -905,7 +899,6 @@ export default function App() {
     const norm = uname.trim().toLowerCase();
     const user = syncedUsers[norm];
     if (!user) return null;
-
     return {
       ...user,
       timeBox: user.timeBox || {},
@@ -930,7 +923,6 @@ export default function App() {
       return;
     }
     loadUserRecord(record, false);
-    // If success, store in localStorage for auto-login
     localStorage.setItem("username", username);
     localStorage.setItem("password", password);
   }
@@ -1077,7 +1069,8 @@ export default function App() {
   }
 
   // Schedule
-  function updateScheduleSlot(label, newEntry) {
+  // Modified updateScheduleSlot now supports multiple tasks per time slot
+  function updateScheduleSlot(label, newEntry, index = 0) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
       if (!draft.timeBox[currentDateStr]) {
@@ -1092,7 +1085,40 @@ export default function App() {
           endHour: draft.defaultEndHour || 23,
         };
       }
-      draft.timeBox[currentDateStr].schedule[label] = newEntry;
+      if (!draft.timeBox[currentDateStr].schedule[label]) {
+        draft.timeBox[currentDateStr].schedule[label] = [newEntry];
+      } else {
+        if (!Array.isArray(draft.timeBox[currentDateStr].schedule[label])) {
+          draft.timeBox[currentDateStr].schedule[label] = [draft.timeBox[currentDateStr].schedule[label]];
+        }
+        draft.timeBox[currentDateStr].schedule[label][index] = newEntry;
+      }
+    });
+  }
+  // New function to add an additional task for a given time slot
+  function addScheduleTask(label) {
+    if (!canViewAgenda || viewMode) return;
+    updateActiveData((draft) => {
+      if (!draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr] = {
+          priorities: [],
+          brainDump: [],
+          schedule: {},
+          homeOffice: false,
+          vacation: false,
+          confettiShown: false,
+          startHour: draft.defaultStartHour || 7,
+          endHour: draft.defaultEndHour || 23,
+        };
+      }
+      if (!draft.timeBox[currentDateStr].schedule[label]) {
+        draft.timeBox[currentDateStr].schedule[label] = [{ text: "", repeat: "none" }];
+      } else {
+        if (!Array.isArray(draft.timeBox[currentDateStr].schedule[label])) {
+          draft.timeBox[currentDateStr].schedule[label] = [draft.timeBox[currentDateStr].schedule[label]];
+        }
+        draft.timeBox[currentDateStr].schedule[label].push({ text: "", repeat: "none" });
+      }
     });
   }
 
@@ -1281,17 +1307,31 @@ export default function App() {
 
       slots.forEach(({ hour, minute }) => {
         const label = formatTime(hour, minute);
-        const currentSlot = today.schedule[label] || {};
-        if (!currentSlot.text) {
+        let currentSlot = today.schedule[label];
+        if (!currentSlot) {
+          currentSlot = [{}];
+          today.schedule[label] = currentSlot;
+        } else if (!Array.isArray(currentSlot)) {
+          currentSlot = [currentSlot];
+          today.schedule[label] = currentSlot;
+        }
+        // Ensure we have an element to check
+        if (!currentSlot[0] || !currentSlot[0].text) {
           const ySlot = draft.timeBox[yStr]?.schedule?.[label];
-          if (ySlot && ySlot.repeat === "daily" && ySlot.text) {
-            today.schedule[label] = { ...ySlot };
-            return;
+          if (ySlot) {
+            const arrYSlot = Array.isArray(ySlot) ? ySlot : [ySlot];
+            if (arrYSlot[0] && arrYSlot[0].repeat === "daily" && arrYSlot[0].text) {
+              today.schedule[label] = [...arrYSlot];
+              return;
+            }
           }
           const wSlot = draft.timeBox[wStr]?.schedule?.[label];
-          if (wSlot && wSlot.repeat === "weekly" && wSlot.text) {
-            today.schedule[label] = { ...wSlot };
-            return;
+          if (wSlot) {
+            const arrWSlot = Array.isArray(wSlot) ? wSlot : [wSlot];
+            if (arrWSlot[0] && arrWSlot[0].repeat === "weekly" && arrWSlot[0].text) {
+              today.schedule[label] = [...arrWSlot];
+              return;
+            }
           }
         }
       });
@@ -1479,7 +1519,17 @@ export default function App() {
       <div className="right-column">
         {canViewAgenda && (
           <>
-            <div className="date-row">
+            {/* Combined Date Row and Controls in one horizontal flex container */}
+            <div
+              className="date-row"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px",
+                marginBottom: 20,
+              }}
+            >
               <label>Date:</label>
               <input
                 type="date"
@@ -1493,96 +1543,92 @@ export default function App() {
               />
               <button onClick={() => setCurrentDate(getPrevDay(currentDate))}>&lt;</button>
               <button onClick={() => setCurrentDate(getNextDay(currentDate))}>&gt;</button>
-            </div>
-
-            {/* Mark Home Office / Mark Vacation */}
-            <div style={{ marginBottom: 10 }}>
-              <input
-                type="checkbox"
-                disabled={viewMode}
-                checked={homeOffice}
-                onChange={(e) => {
-                  if (!viewMode) {
-                    updateActiveData((draft) => {
-                      if (!draft.timeBox[currentDateStr]) {
-                        draft.timeBox[currentDateStr] = {
-                          priorities: [],
-                          brainDump: [],
-                          schedule: {},
-                          homeOffice: false,
-                          vacation: false,
-                          confettiShown: false,
-                          startHour: draft.defaultStartHour || 7,
-                          endHour: draft.defaultEndHour || 23,
-                        };
-                      }
-                      draft.timeBox[currentDateStr].homeOffice = e.target.checked;
-                    });
-                  }
-                }}
-              />
-              <label style={{ marginLeft: 5 }}>Mark Home Office</label>
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <input
-                type="checkbox"
-                disabled={viewMode}
-                checked={vacation}
-                onChange={(e) => {
-                  if (!viewMode) {
-                    updateActiveData((draft) => {
-                      if (!draft.timeBox[currentDateStr]) {
-                        draft.timeBox[currentDateStr] = {
-                          priorities: [],
-                          brainDump: [],
-                          schedule: {},
-                          homeOffice: false,
-                          vacation: false,
-                          confettiShown: false,
-                          startHour: draft.defaultStartHour || 7,
-                          endHour: draft.defaultEndHour || 23,
-                        };
-                      }
-                      draft.timeBox[currentDateStr].vacation = e.target.checked;
-                    });
-                  }
-                }}
-              />
-              <label style={{ marginLeft: 5 }}>Mark Vacation</label>
-            </div>
-
-            {/* Start/End Hour (Day-based) */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ marginRight: 10 }}>
-                Start Hour:
-                <select
-                  onChange={(e) => setStartHourVal(e.target.value)}
-                  value={startHour}
+              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                <input
+                  type="checkbox"
                   disabled={viewMode}
-                  style={{ marginLeft: 5 }}
-                >
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <option key={i} value={i}>
-                      {i}:00
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                End Hour:
-                <select
-                  onChange={(e) => setEndHourVal(e.target.value)}
-                  value={endHour}
+                  checked={homeOffice}
+                  onChange={(e) => {
+                    if (!viewMode) {
+                      updateActiveData((draft) => {
+                        if (!draft.timeBox[currentDateStr]) {
+                          draft.timeBox[currentDateStr] = {
+                            priorities: [],
+                            brainDump: [],
+                            schedule: {},
+                            homeOffice: false,
+                            vacation: false,
+                            confettiShown: false,
+                            startHour: draft.defaultStartHour || 7,
+                            endHour: draft.defaultEndHour || 23,
+                          };
+                        }
+                        draft.timeBox[currentDateStr].homeOffice = e.target.checked;
+                      });
+                    }
+                  }}
+                />
+                <label>Mark Home Office</label>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                <input
+                  type="checkbox"
                   disabled={viewMode}
-                  style={{ marginLeft: 5 }}
-                >
-                  {Array.from({ length: 25 }, (_, i) => (
-                    <option key={i} value={i}>
-                      {i}:00
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  checked={vacation}
+                  onChange={(e) => {
+                    if (!viewMode) {
+                      updateActiveData((draft) => {
+                        if (!draft.timeBox[currentDateStr]) {
+                          draft.timeBox[currentDateStr] = {
+                            priorities: [],
+                            brainDump: [],
+                            schedule: {},
+                            homeOffice: false,
+                            vacation: false,
+                            confettiShown: false,
+                            startHour: draft.defaultStartHour || 7,
+                            endHour: draft.defaultEndHour || 23,
+                          };
+                        }
+                        draft.timeBox[currentDateStr].vacation = e.target.checked;
+                      });
+                    }
+                  }}
+                />
+                <label>Mark Vacation</label>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                <label>
+                  Start Hour:
+                  <select
+                    onChange={(e) => setStartHourVal(e.target.value)}
+                    value={startHour}
+                    disabled={viewMode}
+                    style={{ marginLeft: 5 }}
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {i}:00
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  End Hour:
+                  <select
+                    onChange={(e) => setEndHourVal(e.target.value)}
+                    value={endHour}
+                    disabled={viewMode}
+                    style={{ marginLeft: 5 }}
+                  >
+                    {Array.from({ length: 25 }, (_, i) => (
+                      <option key={i} value={i}>
+                        {i}:00
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
 
             {/* If it's weekend or vacation, block the schedule */}
@@ -1605,18 +1651,33 @@ export default function App() {
                 <tbody>
                   {quarterSlots.map(({ hour, minute }, idx) => {
                     const label = formatTime(hour, minute);
-                    const entry = dayObj.schedule?.[label] || { text: "", repeat: "none" };
+                    let tasks = dayObj.schedule?.[label];
+                    if (tasks) {
+                      if (!Array.isArray(tasks)) {
+                        tasks = [tasks];
+                      }
+                    } else {
+                      tasks = [{ text: "", repeat: "none" }];
+                    }
                     return (
                       <tr key={idx}>
                         <td className="hour-cell">{label}</td>
                         <td>
-                          <ScheduleSlot
-                            label={label}
-                            scheduleEntry={entry}
-                            updateEntry={(newVal) => updateScheduleSlot(label, newVal)}
-                            viewMode={viewMode}
-                            categoryTree={categoryTree}
-                          />
+                          {tasks.map((task, taskIndex) => (
+                            <ScheduleSlot
+                              key={taskIndex}
+                              label={label}
+                              scheduleEntry={task}
+                              updateEntry={(newVal) => updateScheduleSlot(label, newVal, taskIndex)}
+                              viewMode={viewMode}
+                              categoryTree={categoryTree}
+                            />
+                          ))}
+                          {!viewMode && (
+                            <button className="add-task-btn" onClick={() => addScheduleTask(label)}>
+                              + Add Task
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

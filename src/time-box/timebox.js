@@ -56,18 +56,24 @@ ChartJS.register(BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend,
 const GOOGLE_SHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vS4qcyZ0P11t2tZ6SDAr10nIBP9twgHq2weqhR0kTu47BWox5-nW3_gYF2zplWNDAFa807qASM0D3S5/pubhtml";
 
-// Known sheet names
-const SHEET_NAMES = ["Charly", "Cindy", "Gudiño", "Gabriel"];
+// Known sheet names (added "Gudiño1")
+const SHEET_NAMES = ["Charly", "Gudino", "Gabriel", "Cindy"];
 
 /** Helpers for date/time formatting */
 function getNextDay(date) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + 1);
+  // Skip weekends (Sat=6, Sun=0) going forward
+  let d = new Date(date);
+  do {
+    d.setDate(d.getDate() + 1);
+  } while (d.getDay() === 0 || d.getDay() === 6);
   return d;
 }
 function getPrevDay(date) {
-  const d = new Date(date);
-  d.setDate(d.getDate() - 1);
+  // Skip weekends (Sat=6, Sun=0) going backward
+  let d = new Date(date);
+  do {
+    d.setDate(d.getDate() - 1);
+  } while (d.getDay() === 0 || d.getDay() === 6);
   return d;
 }
 function formatDate(date) {
@@ -188,11 +194,12 @@ async function syncUsersFromSheet() {
         let allowedAreas = [];
         if (adminNumbers.includes(empNumber)) {
           role = "admin";
+          // Updated map so certain admins can see additional areas:
           const adminAllowedAreasMap = {
-            "1050028": ["Cindy"],
-            "1163755": ["Gabriel"],
-            "60092284": ["Cindy"], // updated for jgudiño
-            "1129781": ["Charly"],
+            "1050028": ["Gudino"],    // jgudiño
+            "1163755": ["Gabriel"],    // gmancera
+            "60092284": ["Cindy"],              // stays mapped to Cindy
+            "1129781": ["Charly"],     // jgutierrez
           };
           allowedAreas = adminAllowedAreasMap[empNumber] || [];
         }
@@ -309,7 +316,8 @@ async function saveUserToFirestore(userObj) {
   }
 }
 
-/** HierarchicalSelect component for picking categories in nested form. */
+/** HierarchicalSelect component for picking categories in nested form. 
+ *  (Fixed the "Other" bug so that prior chain is preserved.) */
 function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
   const [selectedPath, setSelectedPath] = useState([]);
   const [otherValue, setOtherValue] = useState("");
@@ -322,26 +330,35 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       setIsOther(false);
       return;
     }
+    // Split the chain: e.g. "junta / apps / other"
     const chain = value.split(" / ");
     let nodes = categoryTree || [];
     let matchedAll = true;
     const tempPath = [];
     for (let part of chain) {
-      const found = nodes.find((n) => n.name === part);
-      if (!found) {
+      const found = nodes.find((n) => n.name === part || n.name.startsWith("Other:"));
+      if (!found && !part.startsWith("Other:") && part !== "Other") {
         matchedAll = false;
         break;
       }
       tempPath.push(part);
-      nodes = found.children || [];
+      // If it's a real node, traverse down
+      const nodeObj = nodes.find((x) => x.name === part);
+      if (!nodeObj) {
+        // Possibly the node is "Other"
+        continue;
+      }
+      nodes = nodeObj.children || [];
     }
     if (!matchedAll) {
+      // If chain not recognized, treat as "Other"
       setIsOther(true);
       setOtherValue(value);
       setSelectedPath([]);
     } else {
-      setIsOther(false);
-      setOtherValue("");
+      // The chain is recognized or ended in "Other"
+      setIsOther(tempPath.some((x) => x === "Other" || x.startsWith("Other:")));
+      setOtherValue(tempPath.find((x) => x.startsWith("Other:")) || "");
       setSelectedPath(tempPath);
     }
   }, [value, categoryTree]);
@@ -362,14 +379,18 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       return;
     }
     if (sel === "Other") {
+      // Append "Other" without losing previous chain
+      const newPath = [...selectedPath.slice(0, level), "Other"];
       setIsOther(true);
-      setSelectedPath([...selectedPath.slice(0, level), "Other"]);
-      onChange(otherValue);
+      setSelectedPath(newPath);
+      onChange(newPath.join(" / "));
       return;
     }
+    // Normal category selection
     const newPath = [...selectedPath.slice(0, level), sel];
-    setSelectedPath(newPath);
     setIsOther(false);
+    setOtherValue("");
+    setSelectedPath(newPath);
     onChange(newPath.join(" / "));
   }
 
@@ -392,7 +413,7 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
         ))}
       </select>
     );
-    if (sel === "Select" || sel === "Other") break;
+    if (sel === "Select" || sel === "Other" || sel.startsWith("Other:")) break;
     const found = nodes.find((n) => n.name === sel);
     if (!found || !found.children || found.children.length === 0) break;
     nodes = found.children;
@@ -404,12 +425,15 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       {isOther && (
         <input
           type="text"
-          value={otherValue}
+          value={otherValue.startsWith("Other:") ? otherValue.slice(6).trim() : otherValue}
           disabled={viewMode}
           onChange={(e) => {
             if (!viewMode) {
-              setOtherValue(e.target.value);
-              onChange(e.target.value);
+              const typed = e.target.value;
+              setOtherValue("Other: " + typed);
+              // Merge with prior chain, but replace the last node with "Other: typed"
+              const newChain = [...selectedPath.slice(0, -1), "Other: " + typed].join(" / ");
+              onChange(newChain);
             }
           }}
           style={{ marginLeft: 5 }}
@@ -730,13 +754,31 @@ export default function App() {
   const [showReports, setShowReports] = useState(false);
   const [reportRange, setReportRange] = useState("daily");
 
-  // Determine roles
+  // Local helper for roles
   const isLoggedIn = !!loggedInUser && loggedInUser.password === password;
   const isAdmin = isLoggedIn && loggedInUser.role === "admin";
   const activeData = viewingTarget && displayUser ? displayUser : loggedInUser;
   const canViewAgenda = !!activeData && isLoggedIn;
 
-  // Instead of auto-creating day data on view, simply use an empty object if no data exists.
+  // On mount, try auto-login if stored in localStorage
+  useEffect(() => {
+    const storedUser = localStorage.getItem("username");
+    const storedPass = localStorage.getItem("password");
+    if (storedUser && storedPass) {
+      setUsername(storedUser);
+      setPassword(storedPass);
+      // We'll call handleLogin after setting these
+      // but only if the user is not already logged in
+      // (avoid infinite loop).
+      if (!loggedInUser) {
+        // Slight delay so states update first
+        setTimeout(() => handleLogin(), 50);
+      }
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // If day exists, destructure; else defaults.
   const dayObj = canViewAgenda ? (activeData.timeBox[currentDateStr] || {}) : {};
   const {
     startHour = 7,
@@ -744,6 +786,7 @@ export default function App() {
     priorities = [],
     brainDump = [],
     homeOffice = false,
+    vacation = false,
   } = dayObj;
 
   // Calculate incomplete tasks
@@ -822,6 +865,7 @@ export default function App() {
       const cats = pickCategoryTreeForUser(updatedRecord);
       setCategoryTree(cats);
 
+      // If password mismatches, user won't see their data
       if (updatedRecord.password !== password && !isEmployeeView) {
         setMessage("Incorrect password (or blank if brand-new user).");
       }
@@ -886,6 +930,9 @@ export default function App() {
       return;
     }
     loadUserRecord(record, false);
+    // If success, store in localStorage for auto-login
+    localStorage.setItem("username", username);
+    localStorage.setItem("password", password);
   }
 
   // Admin: load an employee's agenda read-only
@@ -929,6 +976,7 @@ export default function App() {
           brainDump: [],
           schedule: {},
           homeOffice: false,
+          vacation: false,
           confettiShown: false,
           startHour: draft.defaultStartHour || 7,
           endHour: draft.defaultEndHour || 23,
@@ -955,6 +1003,7 @@ export default function App() {
           brainDump: [],
           schedule: {},
           homeOffice: false,
+          vacation: false,
           confettiShown: false,
           startHour: draft.defaultStartHour || 7,
           endHour: draft.defaultEndHour || 23,
@@ -982,6 +1031,7 @@ export default function App() {
           brainDump: [],
           schedule: {},
           homeOffice: false,
+          vacation: false,
           confettiShown: false,
           startHour: draft.defaultStartHour || 7,
           endHour: draft.defaultEndHour || 23,
@@ -1008,6 +1058,7 @@ export default function App() {
           brainDump: [],
           schedule: {},
           homeOffice: false,
+          vacation: false,
           confettiShown: false,
           startHour: draft.defaultStartHour || 7,
           endHour: draft.defaultEndHour || 23,
@@ -1035,6 +1086,7 @@ export default function App() {
           brainDump: [],
           schedule: {},
           homeOffice: false,
+          vacation: false,
           confettiShown: false,
           startHour: draft.defaultStartHour || 7,
           endHour: draft.defaultEndHour || 23,
@@ -1044,7 +1096,7 @@ export default function App() {
     });
   }
 
-  // Start/End Hour (Account Settings)
+  // Start/End Hour (Day-based)
   function setStartHourVal(h) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1077,9 +1129,16 @@ export default function App() {
     return activeData?.timeBox ? Object.keys(activeData.timeBox) : [];
   }
   function usageInSingleDay(dt) {
+    // Skip if weekend
+    if (dt.getDay() === 0 || dt.getDay() === 6) {
+      return { usageMap: {}, freeHours: 0, totalHours: 0 };
+    }
     const ds = formatDate(dt);
     const day = activeData?.timeBox[ds];
-    if (!day || !dayHasContent(day)) return { usageMap: {}, freeHours: 0, totalHours: 0 };
+    // Also skip if vacation
+    if (!day || !dayHasContent(day) || day.vacation) {
+      return { usageMap: {}, freeHours: 0, totalHours: 0 };
+    }
     const { startHour = 7, endHour = 23, schedule = {} } = day;
     let freeHours = 0;
     let totalHours = 0;
@@ -1118,8 +1177,11 @@ export default function App() {
     dateKeys.forEach((ds) => {
       const dt = parseDateStr(ds);
       if (boundary && dt < boundary) return;
+      // Skip weekends or vacation
+      if (dt.getDay() === 0 || dt.getDay() === 6) return;
       const day = activeData.timeBox[ds];
-      if (!day || !dayHasContent(day)) return;
+      if (!day || !dayHasContent(day) || day.vacation) return;
+
       const slots = getQuarterHourSlots(day.startHour, day.endHour);
       slots.forEach(({ hour, minute }) => {
         totalHours += 0.25;
@@ -1153,7 +1215,7 @@ export default function App() {
     const dateKeys = Object.keys(activeData.timeBox);
     dateKeys.forEach((ds) => {
       const day = activeData.timeBox[ds];
-      if (day.homeOffice) homeOfficeDays++;
+      if (day?.homeOffice) homeOfficeDays++;
       else nonHomeOfficeDays++;
     });
   }
@@ -1174,6 +1236,7 @@ export default function App() {
               brainDump: [],
               schedule: {},
               homeOffice: false,
+              vacation: false,
               confettiShown: false,
               startHour: draft.defaultStartHour || 7,
               endHour: draft.defaultEndHour || 23,
@@ -1200,6 +1263,10 @@ export default function App() {
         endHour: draft.defaultEndHour || 23,
         schedule: {},
       };
+
+      // If day is vacation, skip
+      if (today.vacation) return;
+
       const slots = getQuarterHourSlots(today.startHour, today.endHour);
 
       // day-1
@@ -1232,8 +1299,11 @@ export default function App() {
     });
   }, [canViewAgenda, currentDateStr, currentDate, viewMode]);
 
+  // Determine if weekend
+  const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+
   return (
-    <div className="container">
+    <div className="container" style={{ color: "black" }}>
       {isLoggedIn && showConfetti && (
         <Confetti width={window.innerWidth} height={window.innerHeight} />
       )}
@@ -1358,90 +1428,49 @@ export default function App() {
           </div>
         )}
 
-        {isLoggedIn && (
+        {isLoggedIn && isAdmin && (
           <div style={{ marginTop: 30 }}>
-            {isAdmin && (
-              <>
-                <button
-                  className="reports-btn"
-                  onClick={() => {
-                    setShowReports(!showReports);
-                  }}
-                >
-                  Reports
+            <button
+              className="reports-btn"
+              onClick={() => {
+                setShowReports(!showReports);
+              }}
+            >
+              Reports
+            </button>
+            <div style={{ marginTop: 10 }}>
+              <label>Select Employee:</label>
+              <select
+                value={targetUser}
+                onChange={(e) => setTargetUser(e.target.value)}
+                style={{ marginLeft: 8 }}
+              >
+                <option value="">-- Select Employee --</option>
+                {Object.keys(syncedUsers)
+                  .filter((uname) => {
+                    const emp = syncedUsers[uname];
+                    if (!emp || emp.role !== "employee") return false;
+                    return (
+                      isAdmin &&
+                      loggedInUser.allowedAreas &&
+                      loggedInUser.allowedAreas.includes(emp.sheet)
+                    );
+                  })
+                  .map((uname) => (
+                    <option key={uname} value={uname}>
+                      {syncedUsers[uname].fullName} ({syncedUsers[uname].sheet})
+                    </option>
+                  ))}
+              </select>
+              <button onClick={handleLoadEmployee} style={{ marginLeft: 8 }}>
+                Load Employee Agenda
+              </button>
+              {viewingTarget && (
+                <button onClick={handleBackToMyAgenda} style={{ marginLeft: 8 }}>
+                  Back to My Agenda
                 </button>
-                <div style={{ marginTop: 10 }}>
-                  <label>Select Employee:</label>
-                  <select
-                    value={targetUser}
-                    onChange={(e) => setTargetUser(e.target.value)}
-                    style={{ marginLeft: 8 }}
-                  >
-                    <option value="">-- Select Employee --</option>
-                    {Object.keys(syncedUsers)
-                      .filter((uname) => {
-                        const emp = syncedUsers[uname];
-                        if (!emp || emp.role !== "employee") return false;
-                        return isAdmin && loggedInUser.allowedAreas && loggedInUser.allowedAreas.includes(emp.sheet);
-                      })
-                      .map((uname) => (
-                        <option key={uname} value={uname}>
-                          {syncedUsers[uname].fullName} ({syncedUsers[uname].sheet})
-                        </option>
-                      ))}
-                  </select>
-                  <button onClick={handleLoadEmployee} style={{ marginLeft: 8 }}>
-                    Load Employee Agenda
-                  </button>
-                  {viewingTarget && (
-                    <button onClick={handleBackToMyAgenda} style={{ marginLeft: 8 }}>
-                      Back to My Agenda
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-
-            {canViewAgenda && (
-              <div className="section" style={{ borderTop: "1px solid #ccc", marginTop: 20 }}>
-                <h3>Account Settings</h3>
-                <div style={{ marginBottom: 10 }}>
-                  <label>Default Start Hour:</label>
-                  <select
-                    disabled={viewMode}
-                    value={activeData?.defaultStartHour}
-                    onChange={(e) => {
-                      if (viewMode) return;
-                      setStartHourVal(e.target.value);
-                    }}
-                    style={{ marginLeft: 5 }}
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>
-                        {i}:00
-                      </option>
-                    ))}
-                  </select>
-
-                  <label style={{ marginLeft: 10 }}>Default End Hour:</label>
-                  <select
-                    disabled={viewMode}
-                    value={activeData?.defaultEndHour}
-                    onChange={(e) => {
-                      if (viewMode) return;
-                      setEndHourVal(e.target.value);
-                    }}
-                    style={{ marginLeft: 5 }}
-                  >
-                    {Array.from({ length: 25 }, (_, i) => (
-                      <option key={i} value={i}>
-                        {i}:00
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -1452,16 +1481,21 @@ export default function App() {
           <>
             <div className="date-row">
               <label>Date:</label>
-              <input type="date" value={formatDate(currentDate)} onChange={(e) => {
-                const d = new Date(e.target.value);
-                if (!isNaN(d.getTime())) {
-                  setCurrentDate(d);
-                }
-              }} />
+              <input
+                type="date"
+                value={formatDate(currentDate)}
+                onChange={(e) => {
+                  const d = new Date(e.target.value);
+                  if (!isNaN(d.getTime())) {
+                    setCurrentDate(d);
+                  }
+                }}
+              />
               <button onClick={() => setCurrentDate(getPrevDay(currentDate))}>&lt;</button>
               <button onClick={() => setCurrentDate(getNextDay(currentDate))}>&gt;</button>
             </div>
 
+            {/* Mark Home Office / Mark Vacation */}
             <div style={{ marginBottom: 10 }}>
               <input
                 type="checkbox"
@@ -1476,6 +1510,7 @@ export default function App() {
                           brainDump: [],
                           schedule: {},
                           homeOffice: false,
+                          vacation: false,
                           confettiShown: false,
                           startHour: draft.defaultStartHour || 7,
                           endHour: draft.defaultEndHour || 23,
@@ -1488,7 +1523,35 @@ export default function App() {
               />
               <label style={{ marginLeft: 5 }}>Mark Home Office</label>
             </div>
+            <div style={{ marginBottom: 20 }}>
+              <input
+                type="checkbox"
+                disabled={viewMode}
+                checked={vacation}
+                onChange={(e) => {
+                  if (!viewMode) {
+                    updateActiveData((draft) => {
+                      if (!draft.timeBox[currentDateStr]) {
+                        draft.timeBox[currentDateStr] = {
+                          priorities: [],
+                          brainDump: [],
+                          schedule: {},
+                          homeOffice: false,
+                          vacation: false,
+                          confettiShown: false,
+                          startHour: draft.defaultStartHour || 7,
+                          endHour: draft.defaultEndHour || 23,
+                        };
+                      }
+                      draft.timeBox[currentDateStr].vacation = e.target.checked;
+                    });
+                  }
+                }}
+              />
+              <label style={{ marginLeft: 5 }}>Mark Vacation</label>
+            </div>
 
+            {/* Start/End Hour (Day-based) */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ marginRight: 10 }}>
                 Start Hour:
@@ -1522,34 +1585,45 @@ export default function App() {
               </label>
             </div>
 
-            <table className="schedule-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Task / Activity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quarterSlots.map(({ hour, minute }, idx) => {
-                  const label = formatTime(hour, minute);
-                  const entry = dayObj.schedule?.[label] || { text: "", repeat: "none" };
-                  return (
-                    <tr key={idx}>
-                      <td className="hour-cell">{label}</td>
-                      <td>
-                        <ScheduleSlot
-                          label={label}
-                          scheduleEntry={entry}
-                          updateEntry={(newVal) => updateScheduleSlot(label, newVal)}
-                          viewMode={viewMode}
-                          categoryTree={categoryTree}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {/* If it's weekend or vacation, block the schedule */}
+            {isWeekend ? (
+              <div style={{ color: "red", marginTop: 10 }}>
+                This is a weekend. No schedule available.
+              </div>
+            ) : vacation ? (
+              <div style={{ color: "blue", marginTop: 10 }}>
+                This day is marked as Vacation. Schedule is blocked.
+              </div>
+            ) : (
+              <table className="schedule-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Task / Activity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quarterSlots.map(({ hour, minute }, idx) => {
+                    const label = formatTime(hour, minute);
+                    const entry = dayObj.schedule?.[label] || { text: "", repeat: "none" };
+                    return (
+                      <tr key={idx}>
+                        <td className="hour-cell">{label}</td>
+                        <td>
+                          <ScheduleSlot
+                            label={label}
+                            scheduleEntry={entry}
+                            updateEntry={(newVal) => updateScheduleSlot(label, newVal)}
+                            viewMode={viewMode}
+                            categoryTree={categoryTree}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </>
         )}
       </div>

@@ -560,8 +560,8 @@ function ReportsModal({
     return (
       <div
         style={{
-          width: "90%",
-          maxWidth: 1000,
+          width: "100%",
+          maxWidth: 4000,
           height: 400,
           border: "1px solid #ccc",
           marginBottom: 40,
@@ -570,7 +570,35 @@ function ReportsModal({
           alignItems: "center",
         }}
       >
-        <Bar data={data} options={{ responsive: false, maintainAspectRatio: false }} />
+        <Bar
+  data={data}
+  width={1000}  // width in pixels
+  height={500}  // height in pixels
+  options={{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          font: { size: 18 }, // bigger legend text
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: {
+          font: { size: 16 },
+        },
+      },
+      y: {
+        ticks: {
+          font: { size: 16 },
+        },
+      },
+    },
+  }}
+/>
+
       </div>
     );
   }
@@ -1121,6 +1149,21 @@ export default function App() {
       }
     });
   }
+  // New function to remove a task from a schedule slot
+  function removeScheduleTask(label, taskIndex) {
+    if (!canViewAgenda || viewMode) return;
+    updateActiveData((draft) => {
+      if (draft.timeBox[currentDateStr] &&
+          draft.timeBox[currentDateStr].schedule &&
+          draft.timeBox[currentDateStr].schedule[label]) {
+        if (Array.isArray(draft.timeBox[currentDateStr].schedule[label])) {
+          draft.timeBox[currentDateStr].schedule[label].splice(taskIndex, 1);
+        } else {
+          delete draft.timeBox[currentDateStr].schedule[label];
+        }
+      }
+    });
+  }
 
   // Start/End Hour (Day-based)
   function setStartHourVal(h) {
@@ -1173,7 +1216,8 @@ export default function App() {
     slots.forEach(({ hour, minute }) => {
       totalHours += 0.25;
       const label = formatTime(hour, minute);
-      const entry = schedule[label] || {};
+      let tasks = schedule[label] ? (Array.isArray(schedule[label]) ? schedule[label] : [schedule[label]]) : [];
+      const entry = tasks[0] || {};
       if (!entry.text) {
         freeHours += 0.25;
       } else {
@@ -1212,7 +1256,8 @@ export default function App() {
       slots.forEach(({ hour, minute }) => {
         totalHours += 0.25;
         const label = formatTime(hour, minute);
-        const entry = day.schedule[label] || {};
+        let tasks = day.schedule[label] ? (Array.isArray(day.schedule[label]) ? day.schedule[label] : [day.schedule[label]]) : [];
+        const entry = tasks[0] || {};
         if (!entry.text) {
           freeHours += 0.25;
         } else {
@@ -1664,14 +1709,23 @@ export default function App() {
                         <td className="hour-cell">{label}</td>
                         <td>
                           {tasks.map((task, taskIndex) => (
-                            <ScheduleSlot
+                            <div
                               key={taskIndex}
-                              label={label}
-                              scheduleEntry={task}
-                              updateEntry={(newVal) => updateScheduleSlot(label, newVal, taskIndex)}
-                              viewMode={viewMode}
-                              categoryTree={categoryTree}
-                            />
+                              style={{ display: "flex", alignItems: "center", marginBottom: 4 }}
+                            >
+                              <ScheduleSlot
+                                label={label}
+                                scheduleEntry={task}
+                                updateEntry={(newVal) => updateScheduleSlot(label, newVal, taskIndex)}
+                                viewMode={viewMode}
+                                categoryTree={categoryTree}
+                              />
+                              {!viewMode && (
+                                <button className="remove-btn" onClick={() => removeScheduleTask(label, taskIndex)}>
+                                  ✕
+                                </button>
+                              )}
+                            </div>
                           ))}
                           {!viewMode && (
                             <button className="add-task-btn" onClick={() => addScheduleTask(label)}>

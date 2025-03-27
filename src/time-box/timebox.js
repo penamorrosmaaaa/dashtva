@@ -1217,7 +1217,7 @@ export default function App() {
     const usageMap = {};
     const slots = getQuarterHourSlots(startHour, endHour);
     slots.forEach(({ hour, minute }) => {
-      totalHours += 0.25;
+      totalHours += 0.5;
       const label = formatTime(hour, minute);
       let tasks = schedule[label] ? (Array.isArray(schedule[label]) ? schedule[label] : [schedule[label]]) : [];
       const entry = tasks[0] || {};

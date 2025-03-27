@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from "react";
 import { Bar, Pie } from "react-chartjs-2";
 import Confetti from "react-confetti";
-import { FaEllipsisH } from "react-icons/fa";
+import { FaEllipsisH, FaGripVertical } from "react-icons/fa";
 import {
   Chart as ChartJS,
   BarElement,
@@ -19,15 +19,12 @@ import {
   ArcElement,
 } from "chart.js";
 import "./App.css";
-
-// 1) Import Firebase & Firestore
 import { initializeApp } from "firebase/app";
 import {
   getFirestore,
   doc,
   getDoc,
   setDoc
-  // or updateDoc if you want partial merges
 } from "firebase/firestore";
 
 // 2) Your Firebase config
@@ -51,7 +48,6 @@ ChartJS.register(BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend,
 
 /** 
  * Example "public" Google Sheet URL for user info and categories.
- * If you no longer need to fetch from a sheet, remove these references.
  */
 const GOOGLE_SHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vS4qcyZ0P11t2tZ6SDAr10nIBP9twgHq2weqhR0kTu47BWox5-nW3_gYF2zplWNDAFa807qASM0D3S5/pubhtml";
@@ -105,7 +101,7 @@ function getQuarterHourSlots(startHour, endHour) {
   return slots;
 }
 
-/** Build a hierarchy of categories from ID/name/parentId (for your 'HierarchicalSelect'). */
+/** Build a hierarchy of categories from ID/name/parentId. */
 function buildHierarchy(rows) {
   const nodeMap = {};
   rows.forEach((r) => {
@@ -125,7 +121,7 @@ function buildHierarchy(rows) {
   return roots;
 }
 
-/** Fetch categories from each sheet => { "Charly": [...], "Cindy": [...], ... } */
+/** Fetch categories from each sheet */
 async function fetchCategoriesBySheet() {
   const sheetCatsMap = {};
   try {
@@ -413,8 +409,21 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
   );
 }
 
-/** Single schedule slot row with category + repeat options. */
-function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTree }) {
+/** 
+ * Single schedule slot row with category + repeat options.
+ * MODIFIED: Added drag functionality that copies the entire slot.
+ */
+function ScheduleSlot({
+  label,
+  scheduleEntry,
+  updateEntry,
+  viewMode,
+  categoryTree,
+  slotIndex,    // index of this slot (from quarterSlots)
+  taskIndex,    // index of the task in the cell
+  onDragRange,  // callback to update a range of slots
+  allTasks,     // the entire tasks array for the current time slot
+}) {
   const [showRepeatOptions, setShowRepeatOptions] = useState(false);
   const repeatVal = scheduleEntry.repeat || "none";
 
@@ -428,7 +437,15 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
   };
 
   return (
-    <div className="schedule-slot">
+    <div className="schedule-slot" 
+         onDragOver={(e) => e.preventDefault()}
+         onDrop={(e) => {
+           e.preventDefault();
+           if (window.dragData && window.dragData.startIndex !== undefined) {
+             onDragRange(window.dragData.startIndex, slotIndex, window.dragData.allTasks);
+           }
+         }}
+    >
       <div style={{ flexGrow: 1 }}>
         {categoryTree && categoryTree.length > 0 ? (
           <HierarchicalSelect
@@ -444,6 +461,33 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
             value={scheduleEntry.text || ""}
             onChange={(e) => handleTextChange(e.target.value)}
           />
+        )}
+        {/* Drag Button appears only on the first task of the slot */}
+        {!viewMode && taskIndex === 0 && (
+          <button
+            className="drag-btn"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData("text/plain", "drag");
+              window.dragData = {
+                startIndex: slotIndex,
+                allTasks: allTasks,
+              };
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (window.dragData && window.dragData.startIndex !== undefined) {
+                onDragRange(window.dragData.startIndex, slotIndex, window.dragData.allTasks);
+              }
+            }}
+            onDragEnd={(e) => {
+              window.dragData = {};
+            }}
+            style={{ marginLeft: "5px", cursor: "move" }}
+          >
+            <FaGripVertical />
+          </button>
         )}
       </div>
       <div style={{ marginLeft: 5, position: "relative" }}>
@@ -924,7 +968,7 @@ export default function App() {
     setCategoryTree(cats);
   }
 
-  // Priorities
+  // PRIORITIES FUNCTIONS
   function addPriority() {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -941,7 +985,8 @@ export default function App() {
           endHour: draft.defaultEndHour || 23,
         };
       }
-      draft.timeBox[currentDateStr].priorities.push({ text: "", completed: false });
+      // NEW: add default "priority" field set to "medium"
+      draft.timeBox[currentDateStr].priorities.push({ text: "", completed: false, priority: "medium" });
     });
   }
   function togglePriorityCompleted(idx) {
@@ -979,8 +1024,32 @@ export default function App() {
       }
     });
   }
+  // NEW: Function to update the priority level and sort the priorities
+  function updatePriorityLevel(idx, level) {
+    if (!canViewAgenda || viewMode) return;
+    updateActiveData((draft) => {
+      if (!draft.timeBox[currentDateStr]) {
+        draft.timeBox[currentDateStr] = {
+          priorities: [],
+          brainDump: [],
+          schedule: {},
+          homeOffice: false,
+          vacation: false,
+          confettiShown: false,
+          startHour: draft.defaultStartHour || 7,
+          endHour: draft.defaultEndHour || 23,
+        };
+      }
+      draft.timeBox[currentDateStr].priorities[idx].priority = level;
+      // Sort priorities so that high > medium > low
+      draft.timeBox[currentDateStr].priorities.sort((a, b) => {
+        const levels = { high: 3, medium: 2, low: 1 };
+        return levels[b.priority || "medium"] - levels[a.priority || "medium"];
+      });
+    });
+  }
 
-  // Brain Dump
+  // BRAIN DUMP FUNCTIONS
   function addBrainDumpItem() {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1035,7 +1104,7 @@ export default function App() {
     });
   }
 
-  // Schedule
+  // SCHEDULE FUNCTIONS
   function updateScheduleSlot(label, newEntry, index = 0) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1101,7 +1170,7 @@ export default function App() {
     });
   }
 
-  // Start/End Hour (Day-based)
+  // START/END HOUR FUNCTIONS
   function setStartHourVal(h) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1125,7 +1194,7 @@ export default function App() {
     });
   }
 
-  // Report functions
+  // REPORT FUNCTIONS
   function parseDateStr(ds) {
     const [y, m, d] = ds.split("-").map(Number);
     return new Date(y, m - 1, d);
@@ -1223,6 +1292,21 @@ export default function App() {
   }
 
   const quarterSlots = canViewAgenda ? getQuarterHourSlots(startHour, endHour) : [];
+
+  // NEW: Function to update a range of schedule slots via drag
+  function updateScheduleRange(startIndex, endIndex, allTasks) {
+    if (!canViewAgenda || viewMode) return;
+    const start = Math.min(startIndex, endIndex);
+    const end = Math.max(startIndex, endIndex);
+    updateActiveData((draft) => {
+      for (let i = start; i <= end; i++) {
+        const slot = quarterSlots[i];
+        if (!slot) continue;
+        const slotLabel = formatTime(slot.hour, slot.minute);
+        draft.timeBox[currentDateStr].schedule[slotLabel] = [...allTasks];
+      }
+    });
+  }
 
   useEffect(() => {
     if (!canViewAgenda) return;
@@ -1358,28 +1442,56 @@ export default function App() {
         {canViewAgenda && (
           <div className="section">
             <h3>Top Priorities</h3>
-            {priorities.map((p, idx) => (
-              <div className="priority-row" key={idx}>
-                <input
-                  type="checkbox"
-                  disabled={viewMode}
-                  checked={p.completed}
-                  onChange={() => togglePriorityCompleted(idx)}
-                />
-                <input
-                  type="text"
-                  className={p.completed ? "completed" : ""}
-                  disabled={viewMode}
-                  value={p.text}
-                  onChange={(e) => updatePriorityText(idx, e.target.value)}
-                />
-                {!viewMode && (
-                  <button className="remove-btn" onClick={() => removePriority(idx)}>
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
+            {[...priorities]
+              .sort((a, b) => {
+                const levels = { high: 3, medium: 2, low: 1 };
+                return levels[b.priority || "medium"] - levels[a.priority || "medium"];
+              })
+              .map((p) => {
+                const originalIdx = priorities.indexOf(p);
+                return (
+                  <div
+                    className="priority-row"
+                    key={originalIdx}
+                    style={{
+                      borderLeft: `4px solid ${
+                        p.priority === "high" ? "red" : p.priority === "medium" ? "orange" : "green"
+                      }`,
+                      paddingLeft: "5px",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={viewMode}
+                      checked={p.completed}
+                      onChange={() => togglePriorityCompleted(originalIdx)}
+                    />
+                    <input
+                      type="text"
+                      className={p.completed ? "completed" : ""}
+                      disabled={viewMode}
+                      value={p.text}
+                      onChange={(e) => updatePriorityText(originalIdx, e.target.value)}
+                    />
+                    <select
+                      value={p.priority || "medium"}
+                      disabled={viewMode}
+                      onChange={(e) => updatePriorityLevel(originalIdx, e.target.value)}
+                      style={{ marginLeft: "5px" }}
+                    >
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                    {!viewMode && (
+                      <button className="remove-btn" onClick={() => removePriority(originalIdx)}>
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             {!viewMode && (
               <button className="add-btn" onClick={addPriority}>
                 + Add Priority
@@ -1593,6 +1705,10 @@ export default function App() {
                 <tbody>
                   {quarterSlots.map(({ hour, minute }, idx) => {
                     const label = formatTime(hour, minute);
+                    const dayTotalMinutes = (endHour - startHour) * 60;
+                    const slotMinutes = ((hour - startHour) * 60 + minute);
+                    const progressPercentage = Math.min(Math.max((slotMinutes / dayTotalMinutes) * 100, 0), 100);
+                    
                     let tasks = dayObj.schedule?.[label];
                     if (tasks) {
                       if (!Array.isArray(tasks)) {
@@ -1603,7 +1719,27 @@ export default function App() {
                     }
                     return (
                       <tr key={idx}>
-                        <td className="hour-cell">{label}</td>
+                        <td className="hour-cell">
+                          {label}
+                          <div
+                            className="progress-bar"
+                            style={{
+                              marginTop: "4px",
+                              height: "8px",
+                              backgroundColor: "#e0e0e0",
+                              borderRadius: "4px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${progressPercentage}%`,
+                                height: "100%",
+                                backgroundColor: "#76c7c0",
+                                borderRadius: "4px",
+                              }}
+                            ></div>
+                          </div>
+                        </td>
                         <td>
                           {tasks.map((task, taskIndex) => (
                             <div key={taskIndex} style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
@@ -1613,6 +1749,10 @@ export default function App() {
                                 updateEntry={(newVal) => updateScheduleSlot(label, newVal, taskIndex)}
                                 viewMode={viewMode}
                                 categoryTree={categoryTree}
+                                slotIndex={idx}
+                                taskIndex={taskIndex}
+                                onDragRange={updateScheduleRange}
+                                allTasks={tasks}
                               />
                               {!viewMode && (
                                 <button className="remove-btn" onClick={() => removeScheduleTask(label, taskIndex)}>

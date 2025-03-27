@@ -61,7 +61,6 @@ const SHEET_NAMES = ["Charly", "Gudino", "Gabriel", "Cindy"];
 
 /** Helpers for date/time formatting */
 function getNextDay(date) {
-  // Skip weekends (Sat=6, Sun=0) going forward
   let d = new Date(date);
   do {
     d.setDate(d.getDate() + 1);
@@ -69,7 +68,6 @@ function getNextDay(date) {
   return d;
 }
 function getPrevDay(date) {
-  // Skip weekends (Sat=6, Sun=0) going backward
   let d = new Date(date);
   do {
     d.setDate(d.getDate() - 1);
@@ -183,48 +181,40 @@ async function syncUsersFromSheet() {
         const cells = rows[r].querySelectorAll("td");
         if (cells.length < 2) continue;
 
-        const empNumber = cells[0].textContent.trim(); // e.g. "1050028"
-        const fullName = cells[1].textContent.trim();  // e.g. "John Smith"
+        const empNumber = cells[0].textContent.trim();
+        const fullName = cells[1].textContent.trim();
         if (!fullName) continue;
 
         const username = fullName.toLowerCase();
-        // Identify admins
         const adminNumbers = ["1050028", "1163755", "60092284", "1129781"];
         let role = "employee";
         let allowedAreas = [];
         if (adminNumbers.includes(empNumber)) {
           role = "admin";
-          // Updated map so certain admins can see additional areas:
           const adminAllowedAreasMap = {
-            "1050028": ["Gudino"],    // jgudiño
-            "1163755": ["Gabriel"],    // gmancera
-            "60092284": ["Cindy"],              // stays mapped to Cindy
-            "1129781": ["Charly"],     // jgutierrez
+            "1050028": ["Gudino"],
+            "1163755": ["Gabriel"],
+            "60092284": ["Cindy"],
+            "1129781": ["Charly"],
           };
           allowedAreas = adminAllowedAreasMap[empNumber] || [];
         }
 
-        // Only define top-level fields here—NOT an empty `timeBox`
-        // We'll let Firestore merges handle the rest.
         const userObj = {
           role,
-          password: empNumber, // password is the empNumber
+          password: empNumber,
           fullName,
           sheet: sheetName,
           ...(role === "admin"
             ? { allowedAreas }
             : { area: sheetName.toLowerCase() }),
-
-          // Provide *defaults* for new users:
           defaultStartHour: 7,
           defaultEndHour: 23,
           defaultPreset: { start: 7, end: 23 },
         };
 
-        // Only save if we haven't seen this user in this run
         if (!syncedUsers[username]) {
           syncedUsers[username] = userObj;
-          // If there's no existing doc, this will create it with `merge: true`.
           saveUserToFirestore(userObj);
         }
       }
@@ -237,8 +227,7 @@ async function syncUsersFromSheet() {
 }
 
 /** 
- * Load the user's doc from Firestore. 
- * This ensures we get the *existing* timeBox data, if any.
+ * Load the user's doc from Firestore.
  */
 async function loadUserFromFirestore(userObj) {
   const key = userObj.fullName.toLowerCase();
@@ -250,11 +239,7 @@ async function loadUserFromFirestore(userObj) {
     if (docSnap.exists()) {
       const data = docSnap.data();
       console.log("Firestore doc found for:", key, data);
-
-      // Merge everything from Firestore into userObj
       Object.assign(userObj, data);
-
-      // Ensure minimal defaults if missing
       if (!userObj.timeBox) userObj.timeBox = {};
       if (typeof userObj.defaultStartHour !== "number") {
         userObj.defaultStartHour = 7;
@@ -267,7 +252,6 @@ async function loadUserFromFirestore(userObj) {
       }
     } else {
       console.warn("No Firestore doc found for:", key);
-      // It's a truly new user if doc doesn't exist
       if (!userObj.timeBox) userObj.timeBox = {};
     }
   } catch (err) {
@@ -277,8 +261,7 @@ async function loadUserFromFirestore(userObj) {
 }
 
 /**
- * Save the user's data to Firestore in a way that 
- * does NOT overwrite the entire doc or erase old timeBox days.
+ * Save the user's data to Firestore without erasing old timeBox days.
  */
 async function saveUserToFirestore(userObj) {
   if (!userObj?.fullName) {
@@ -289,26 +272,22 @@ async function saveUserToFirestore(userObj) {
   const docRef = doc(db, "users", key);
 
   try {
-    // 1) Load existing doc so we can preserve older days in timeBox
     let existingDoc = {};
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       existingDoc = snap.data();
     }
 
-    // 2) Merge existing timeBox with userObj.timeBox
     const oldTimeBox = existingDoc.timeBox || {};
     const newTimeBox = userObj.timeBox || {};
     const mergedTimeBox = { ...oldTimeBox, ...newTimeBox };
 
-    // 3) Now build an object with top-level merges
     const finalData = {
       ...existingDoc,
       ...userObj,
       timeBox: mergedTimeBox,
     };
 
-    // 4) Write finalData with { merge: true }
     await setDoc(docRef, finalData, { merge: true });
     console.log(`User "${key}" saved to Firestore successfully (merge=true).`);
   } catch (error) {
@@ -316,8 +295,7 @@ async function saveUserToFirestore(userObj) {
   }
 }
 
-/** HierarchicalSelect component for picking categories in nested form. 
- *  (Fixed the "Other" bug so that prior chain is preserved.) */
+/** HierarchicalSelect component for picking categories in nested form. */
 function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
   const [selectedPath, setSelectedPath] = useState([]);
   const [otherValue, setOtherValue] = useState("");
@@ -330,7 +308,6 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       setIsOther(false);
       return;
     }
-    // Split the chain: e.g. "junta / apps / other"
     const chain = value.split(" / ");
     let nodes = categoryTree || [];
     let matchedAll = true;
@@ -342,21 +319,17 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
         break;
       }
       tempPath.push(part);
-      // If it's a real node, traverse down
       const nodeObj = nodes.find((x) => x.name === part);
       if (!nodeObj) {
-        // Possibly the node is "Other"
         continue;
       }
       nodes = nodeObj.children || [];
     }
     if (!matchedAll) {
-      // If chain not recognized, treat as "Other"
       setIsOther(true);
       setOtherValue(value);
       setSelectedPath([]);
     } else {
-      // The chain is recognized or ended in "Other"
       setIsOther(tempPath.some((x) => x === "Other" || x.startsWith("Other:")));
       setOtherValue(tempPath.find((x) => x.startsWith("Other:")) || "");
       setSelectedPath(tempPath);
@@ -379,14 +352,12 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       return;
     }
     if (sel === "Other") {
-      // Append "Other" without losing previous chain
       const newPath = [...selectedPath.slice(0, level), "Other"];
       setIsOther(true);
       setSelectedPath(newPath);
       onChange(newPath.join(" / "));
       return;
     }
-    // Normal category selection
     const newPath = [...selectedPath.slice(0, level), sel];
     setIsOther(false);
     setOtherValue("");
@@ -424,20 +395,19 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       {dropdowns}
       {isOther && (
         <input
-        type="text"
-        value={otherValue.replace(/^Other:\s*/, "")}
-        disabled={viewMode}
-        onChange={(e) => {
-          if (!viewMode) {
-            const typed = e.target.value;
-            setOtherValue("Other: " + typed);
-            const newChain = [...selectedPath.slice(0, -1), "Other: " + typed].join(" / ");
-            onChange(newChain);
-          }
-        }}
-        style={{ marginLeft: 5 }}
-      />
-      
+          type="text"
+          value={otherValue.replace(/^Other:\s*/, "")}
+          disabled={viewMode}
+          onChange={(e) => {
+            if (!viewMode) {
+              const typed = e.target.value;
+              setOtherValue("Other: " + typed);
+              const newChain = [...selectedPath.slice(0, -1), "Other: " + typed].join(" / ");
+              onChange(newChain);
+            }
+          }}
+          style={{ marginLeft: 5 }}
+        />
       )}
     </div>
   );
@@ -458,7 +428,7 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
+    <div className="schedule-slot">
       <div style={{ flexGrow: 1 }}>
         {categoryTree && categoryTree.length > 0 ? (
           <HierarchicalSelect
@@ -516,10 +486,7 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
 }
 
 /**
- * Full-Screen Modal for usage reports:
- *  - Bar chart for category usage
- *  - Pie chart for free vs busy
- *  - Bar chart for home office vs non-home
+ * Full-Screen Modal for usage reports.
  */
 function ReportsModal({
   usageMap,
@@ -571,34 +538,33 @@ function ReportsModal({
         }}
       >
         <Bar
-  data={data}
-  width={1000}  // width in pixels
-  height={500}  // height in pixels
-  options={{
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        labels: {
-          font: { size: 18 }, // bigger legend text
-        },
-      },
-    },
-    scales: {
-      x: {
-        ticks: {
-          font: { size: 16 },
-        },
-      },
-      y: {
-        ticks: {
-          font: { size: 16 },
-        },
-      },
-    },
-  }}
-/>
-
+          data={data}
+          width={1000}
+          height={500}
+          options={{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: {
+                  font: { size: 18 },
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: {
+                  font: { size: 16 },
+                },
+              },
+              y: {
+                ticks: {
+                  font: { size: 16 },
+                },
+              },
+            },
+          }}
+        />
       </div>
     );
   }
@@ -756,44 +722,28 @@ function dayHasContent(day) {
 
 /** Main App Component */
 export default function App() {
-  // Logged-in user (the admin or employee who typed username+password)
   const [loggedInUser, setLoggedInUser] = useState(null);
-  // For admins: the user whose agenda is being viewed
   const [displayUser, setDisplayUser] = useState(null);
-
-  // Local caches
   const [syncedUsers, setSyncedUsers] = useState({});
   const [categoriesBySheet, setCategoriesBySheet] = useState({});
   const [categoryTree, setCategoryTree] = useState([]);
-
-  // For login
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
-
-  // Agenda states
   const [currentDate, setCurrentDate] = useState(new Date());
   const currentDateStr = formatDate(currentDate);
-
-  // UI states
   const [showConfetti, setShowConfetti] = useState(false);
-
-  // Admin
   const [targetUser, setTargetUser] = useState("");
   const [viewingTarget, setViewingTarget] = useState(false);
   const [viewMode, setViewMode] = useState(false);
-
-  // Full-screen reports
   const [showReports, setShowReports] = useState(false);
   const [reportRange, setReportRange] = useState("daily");
 
-  // Local helper for roles
   const isLoggedIn = !!loggedInUser && loggedInUser.password === password;
   const isAdmin = isLoggedIn && loggedInUser.role === "admin";
   const activeData = viewingTarget && displayUser ? displayUser : loggedInUser;
   const canViewAgenda = !!activeData && isLoggedIn;
 
-  // On mount, try auto-login if stored in localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem("username");
     const storedPass = localStorage.getItem("password");
@@ -806,7 +756,6 @@ export default function App() {
     }
   }, []);
 
-  // If day exists, destructure; else defaults.
   const dayObj = canViewAgenda ? (activeData.timeBox[currentDateStr] || {}) : {};
   const {
     startHour = 7,
@@ -817,12 +766,10 @@ export default function App() {
     vacation = false,
   } = dayObj;
 
-  // Calculate incomplete tasks
   const totalIncomplete =
     priorities.filter((p) => !p.completed).length +
     brainDump.filter((b) => !b.completed).length;
 
-  // Helper to safely update the active user object.
   function updateActiveData(fn) {
     if (!activeData) return;
     let copy;
@@ -849,7 +796,6 @@ export default function App() {
     }
   }
 
-  // On mount, fetch from Google Sheets & store in Firestore (for new users).
   useEffect(() => {
     async function init() {
       const users = await syncUsersFromSheet();
@@ -860,7 +806,6 @@ export default function App() {
     init();
   }, []);
 
-  /** Combine categories for admins or pick single sheet for employees. */
   function pickCategoryTreeForUser(u) {
     if (!u) return [];
     if (u.role === "employee") {
@@ -873,7 +818,6 @@ export default function App() {
     return [];
   }
 
-  // Load doc from Firestore => merges in old data => set state
   async function loadUserRecord(record, isEmployeeView) {
     try {
       const updatedRecord = await loadUserFromFirestore(record);
@@ -909,7 +853,6 @@ export default function App() {
     }
   }
 
-  // Auto-save on changes to displayUser and loggedInUser
   useEffect(() => {
     if (!displayUser) return;
     if (viewMode) return;
@@ -922,7 +865,6 @@ export default function App() {
     saveUserToFirestore(loggedInUser);
   }, [loggedInUser, viewMode, viewingTarget]);
 
-  /** Return a local copy of the user from sync, or null if not found. */
   function getUserRecord(uname) {
     const norm = uname.trim().toLowerCase();
     const user = syncedUsers[norm];
@@ -939,7 +881,6 @@ export default function App() {
     };
   }
 
-  // Basic login
   function handleLogin() {
     if (!username) {
       setMessage("Please enter a username.");
@@ -955,7 +896,6 @@ export default function App() {
     localStorage.setItem("password", password);
   }
 
-  // Admin: load an employee's agenda read-only
   function handleLoadEmployee() {
     if (!targetUser) return;
     let employeeRecord = getUserRecord(targetUser);
@@ -975,7 +915,6 @@ export default function App() {
     setMessage(`Loaded agenda for ${targetUser}`);
   }
 
-  // Admin: back to your own agenda
   function handleBackToMyAgenda() {
     setDisplayUser(loggedInUser);
     setViewingTarget(false);
@@ -1097,7 +1036,6 @@ export default function App() {
   }
 
   // Schedule
-  // Modified updateScheduleSlot now supports multiple tasks per time slot
   function updateScheduleSlot(label, newEntry, index = 0) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1123,7 +1061,6 @@ export default function App() {
       }
     });
   }
-  // New function to add an additional task for a given time slot
   function addScheduleTask(label) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1149,7 +1086,6 @@ export default function App() {
       }
     });
   }
-  // New function to remove a task from a schedule slot
   function removeScheduleTask(label, taskIndex) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1198,13 +1134,11 @@ export default function App() {
     return activeData?.timeBox ? Object.keys(activeData.timeBox) : [];
   }
   function usageInSingleDay(dt) {
-    // Skip if weekend
     if (dt.getDay() === 0 || dt.getDay() === 6) {
       return { usageMap: {}, freeHours: 0, totalHours: 0 };
     }
     const ds = formatDate(dt);
     const day = activeData?.timeBox[ds];
-    // Also skip if vacation
     if (!day || !dayHasContent(day) || day.vacation) {
       return { usageMap: {}, freeHours: 0, totalHours: 0 };
     }
@@ -1247,11 +1181,9 @@ export default function App() {
     dateKeys.forEach((ds) => {
       const dt = parseDateStr(ds);
       if (boundary && dt < boundary) return;
-      // Skip weekends or vacation
       if (dt.getDay() === 0 || dt.getDay() === 6) return;
       const day = activeData.timeBox[ds];
       if (!day || !dayHasContent(day) || day.vacation) return;
-
       const slots = getQuarterHourSlots(day.startHour, day.endHour);
       slots.forEach(({ hour, minute }) => {
         totalHours += 0.25;
@@ -1279,7 +1211,6 @@ export default function App() {
   const usageResult = computeReportData();
   const { usageMap, freeHours, totalHours } = usageResult;
 
-  // Home office chart calculations
   let homeOfficeDays = 0;
   let nonHomeOfficeDays = 0;
   if (canViewAgenda && activeData?.timeBox) {
@@ -1291,10 +1222,8 @@ export default function App() {
     });
   }
 
-  // Build schedule rows
   const quarterSlots = canViewAgenda ? getQuarterHourSlots(startHour, endHour) : [];
 
-  // Show confetti if all tasks completed
   useEffect(() => {
     if (!canViewAgenda) return;
     if (totalIncomplete === 0 && (priorities.length > 0 || brainDump.length > 0)) {
@@ -1322,11 +1251,9 @@ export default function App() {
     }
   }, [canViewAgenda, totalIncomplete, priorities, brainDump, dayObj.confettiShown, currentDateStr]);
 
-  // Auto-load repeated slots from previous day/week
   useEffect(() => {
     if (!canViewAgenda) return;
     if (viewMode) return;
-
     updateActiveData((draft) => {
       const ds = currentDateStr;
       let today = draft.timeBox[ds] || {
@@ -1334,22 +1261,14 @@ export default function App() {
         endHour: draft.defaultEndHour || 23,
         schedule: {},
       };
-
-      // If day is vacation, skip
       if (today.vacation) return;
-
       const slots = getQuarterHourSlots(today.startHour, today.endHour);
-
-      // day-1
       const yest = new Date(currentDate);
       yest.setDate(yest.getDate() - 1);
       const yStr = formatDate(yest);
-
-      // day-7
       const wAgo = new Date(currentDate);
       wAgo.setDate(wAgo.getDate() - 7);
       const wStr = formatDate(wAgo);
-
       slots.forEach(({ hour, minute }) => {
         const label = formatTime(hour, minute);
         let currentSlot = today.schedule[label];
@@ -1360,7 +1279,6 @@ export default function App() {
           currentSlot = [currentSlot];
           today.schedule[label] = currentSlot;
         }
-        // Ensure we have an element to check
         if (!currentSlot[0] || !currentSlot[0].text) {
           const ySlot = draft.timeBox[yStr]?.schedule?.[label];
           if (ySlot) {
@@ -1384,7 +1302,6 @@ export default function App() {
     });
   }, [canViewAgenda, currentDateStr, currentDate, viewMode]);
 
-  // Determine if weekend
   const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
 
   return (
@@ -1392,7 +1309,6 @@ export default function App() {
       {isLoggedIn && showConfetti && (
         <Confetti width={window.innerWidth} height={window.innerHeight} />
       )}
-
       {showReports && isAdmin && (
         <ReportsModal
           usageMap={usageMap}
@@ -1405,11 +1321,9 @@ export default function App() {
           onClose={() => setShowReports(false)}
         />
       )}
-
       {/* LEFT COLUMN */}
       <div className="left-column">
         <div className="logo">The Time Box</div>
-
         <div className="login-section">
           <label>Username:</label>
           <input
@@ -1433,20 +1347,14 @@ export default function App() {
             </button>
           )}
         </div>
-
         {message && <div style={{ color: "blue", marginTop: 6 }}>{message}</div>}
-
         {isLoggedIn && (
-          <div
-            className={`incomplete-msg ${totalIncomplete > 0 ? "show" : ""}`}
-            style={{ marginTop: 10 }}
-          >
+          <div className={`incomplete-msg ${totalIncomplete > 0 ? "show" : ""}`} style={{ marginTop: 10 }}>
             {totalIncomplete > 0
               ? `You have ${totalIncomplete} incomplete item(s) today.`
               : "All tasks complete for today!"}
           </div>
         )}
-
         {canViewAgenda && (
           <div className="section">
             <h3>Top Priorities</h3>
@@ -1479,7 +1387,6 @@ export default function App() {
             )}
           </div>
         )}
-
         {canViewAgenda && (
           <div className="section">
             <h3>Brain Dump</h3>
@@ -1512,15 +1419,9 @@ export default function App() {
             )}
           </div>
         )}
-
         {isLoggedIn && isAdmin && (
           <div style={{ marginTop: 30 }}>
-            <button
-              className="reports-btn"
-              onClick={() => {
-                setShowReports(!showReports);
-              }}
-            >
+            <button className="reports-btn" onClick={() => setShowReports(!showReports)}>
               Reports
             </button>
             <div style={{ marginTop: 10 }}>
@@ -1559,12 +1460,10 @@ export default function App() {
           </div>
         )}
       </div>
-
       {/* RIGHT COLUMN: Schedule Table */}
       <div className="right-column">
         {canViewAgenda && (
           <>
-            {/* Combined Date Row and Controls in one horizontal flex container */}
             <div
               className="date-row"
               style={{
@@ -1675,8 +1574,6 @@ export default function App() {
                 </label>
               </div>
             </div>
-
-            {/* If it's weekend or vacation, block the schedule */}
             {isWeekend ? (
               <div style={{ color: "red", marginTop: 10 }}>
                 This is a weekend. No schedule available.
@@ -1709,10 +1606,7 @@ export default function App() {
                         <td className="hour-cell">{label}</td>
                         <td>
                           {tasks.map((task, taskIndex) => (
-                            <div
-                              key={taskIndex}
-                              style={{ display: "flex", alignItems: "center", marginBottom: 4 }}
-                            >
+                            <div key={taskIndex} style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
                               <ScheduleSlot
                                 label={label}
                                 scheduleEntry={task}

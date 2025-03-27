@@ -424,20 +424,20 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       {dropdowns}
       {isOther && (
         <input
-          type="text"
-          value={otherValue.startsWith("Other:") ? otherValue.slice(6).trim() : otherValue}
-          disabled={viewMode}
-          onChange={(e) => {
-            if (!viewMode) {
-              const typed = e.target.value;
-              setOtherValue("Other: " + typed);
-              // Merge with prior chain, but replace the last node with "Other: typed"
-              const newChain = [...selectedPath.slice(0, -1), "Other: " + typed].join(" / ");
-              onChange(newChain);
-            }
-          }}
-          style={{ marginLeft: 5 }}
-        />
+        type="text"
+        value={otherValue.replace(/^Other:\s*/, "")}
+        disabled={viewMode}
+        onChange={(e) => {
+          if (!viewMode) {
+            const typed = e.target.value;
+            setOtherValue("Other: " + typed);
+            const newChain = [...selectedPath.slice(0, -1), "Other: " + typed].join(" / ");
+            onChange(newChain);
+          }
+        }}
+        style={{ marginLeft: 5 }}
+      />
+      
       )}
     </div>
   );

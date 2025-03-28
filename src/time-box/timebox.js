@@ -3,6 +3,7 @@
  * A single-file version that properly
  * merges the 'timeBox' without erasing
  * historical data on each login.
+ * + Real-time Chat in Chat.js
  ***************************************/
 import React, { useState, useEffect } from "react";
 import { Bar, Pie } from "react-chartjs-2";
@@ -27,9 +28,12 @@ import {
   setDoc
 } from "firebase/firestore";
 
+// <-- ADD THIS LINE:
+import Chat from "./Chat";  // your newly created Chat component
+
 // 2) Your Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyCR9IO7GQatt5oU33OLxW-vDyEtiZ4Og4I",
+  apiKey: "AIzaSyCR9IO7GQ...",
   authDomain: "my-timebox-project.firebaseapp.com",
   projectId: "my-timebox-project",
   storageBucket: "my-timebox-project.appspot.com",
@@ -52,7 +56,7 @@ ChartJS.register(BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend,
 const GOOGLE_SHEET_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vS4qcyZ0P11t2tZ6SDAr10nIBP9twgHq2weqhR0kTu47BWox5-nW3_gYF2zplWNDAFa807qASM0D3S5/pubhtml";
 
-// Known sheet names (added "Gudiño1")
+// Known sheet names
 const SHEET_NAMES = ["Charly", "Gudino", "Gabriel", "Cindy"];
 
 /** Helpers for date/time formatting */
@@ -1222,9 +1226,9 @@ export default function App() {
       let tasks = schedule[label] ? (Array.isArray(schedule[label]) ? schedule[label] : [schedule[label]]) : [];
       const entry = tasks[0] || {};
       if (!entry.text) {
-        freeHours += 0.25;
+        freeHours += 0.5;
       } else {
-        usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.25;
+        usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.5;
       }
     });
     return { usageMap, freeHours, totalHours };
@@ -1255,14 +1259,14 @@ export default function App() {
       if (!day || !dayHasContent(day) || day.vacation) return;
       const slots = getQuarterHourSlots(day.startHour, day.endHour);
       slots.forEach(({ hour, minute }) => {
-        totalHours += 0.25;
+        totalHours += 0.5;
         const label = formatTime(hour, minute);
         let tasks = day.schedule[label] ? (Array.isArray(day.schedule[label]) ? day.schedule[label] : [day.schedule[label]]) : [];
         const entry = tasks[0] || {};
         if (!entry.text) {
-          freeHours += 0.25;
+          freeHours += 0.5;
         } else {
-          usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.25;
+          usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.5;
         }
       });
     });
@@ -1571,7 +1575,15 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* <-- ADD YOUR CHAT COMPONENT HERE, VISIBLE ONLY IF LOGGED IN --> */}
+        {isLoggedIn && (
+          <div style={{ marginTop: "30px" }}>
+            <Chat currentUser={loggedInUser} />
+          </div>
+        )}
       </div>
+
       {/* RIGHT COLUMN: Schedule Table */}
       <div className="right-column">
         {canViewAgenda && (

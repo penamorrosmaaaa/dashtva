@@ -19,6 +19,7 @@
 }
 
 :root.dark-theme {
+  /* NEW CODE ADDED HERE: Dark theme overrides */
   --primary-color: #7C4DFF;
   --primary-hover: #5E35B1;
   --secondary-color: #D1C4E9;
@@ -50,6 +51,7 @@ body, html {
   font-family: var(--font-family);
   background-color: var(--light-background);
   -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--transition);
 }
 
 /* Header / Top Navigation */
@@ -487,6 +489,101 @@ input[type="checkbox"]:checked {
   color: var(--primary-hover);
   text-decoration: underline;
   transform: translateY(-1px);
+}
+
+/* NEW CODE ADDED HERE */
+
+/* Subtasks / Notes styling */
+.subtasks-container {
+  margin-left: 24px;
+  margin-top: 4px;
+}
+.subtask-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.subtask-item input[type="text"] {
+  flex: 1;
+  margin-left: 8px;
+}
+.show-subtasks-btn {
+  margin-left: 8px;
+  font-size: 0.7rem;
+  background-color: var(--secondary-color);
+  color: var(--white);
+  border: none;
+  border-radius: var(--border-radius);
+  padding: 4px 6px;
+  cursor: pointer;
+}
+.show-subtasks-btn:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-2px);
+}
+
+/* Customizable labels */
+.label-input {
+  margin-left: 8px;
+  font-size: 0.85rem;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: var(--border-radius);
+}
+
+/* Weekly / Monthly Calendar */
+.calendar-toggle {
+  margin-bottom: 10px;
+}
+.calendar-toggle button {
+  margin-right: 8px;
+  padding: 8px 12px;
+  background-color: var(--primary-color);
+  color: var(--white);
+  border: none;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: background-color var(--transition), transform var(--transition);
+}
+.calendar-toggle button:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-2px);
+}
+.weekly-view,
+.monthly-view {
+  border: 1px solid #ccc;
+  border-radius: var(--border-radius);
+  padding: 10px;
+  margin-top: 10px;
+}
+.weekly-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.weekly-day {
+  flex: 1;
+  background-color: #f9f9f9;
+  border: 1px dashed #ccc;
+  padding: 8px;
+  border-radius: var(--border-radius);
+}
+.monthly-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.monthly-cell {
+  background-color: #f9f9f9;
+  border: 1px dashed #ccc;
+  min-height: 80px;
+  border-radius: var(--border-radius);
+  padding: 4px;
+  font-size: 0.75rem;
+  position: relative;
+}
+.monthly-cell span {
+  font-weight: bold;
 }
 
 /* Responsive/adaptive design for mobile view */

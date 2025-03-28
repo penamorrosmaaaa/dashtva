@@ -1,0 +1,97 @@
+.chat-outer-container {
+    position: relative;
+  }
+  
+  .chat-toggle-btn {
+    position: relative;
+    border: none;
+    background: #007bff;
+    color: #fff;
+    border-radius: 50%;
+    padding: 8px;
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+  
+  .notif-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: red;
+    color: white;
+    border-radius: 12px;
+    padding: 2px 6px;
+    font-size: 0.75rem;
+  }
+  
+  .chat-container {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    width: 320px;
+    height: 450px;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    background: #fefefe;
+  }
+  
+  .chat-messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-bottom: 8px;
+    padding-right: 8px;
+  }
+  
+  .chat-bubble {
+    background: #ddd;
+    padding: 8px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    max-width: 80%;
+    word-wrap: break-word;
+    font-size: 0.9rem;
+  }
+  
+  .chat-bubble.me {
+    background: #cce5ff;
+    margin-left: auto;
+  }
+  
+  .sender-name {
+    font-weight: bold;
+    margin-bottom: 2px;
+  }
+  
+  .message-text {
+    white-space: pre-wrap;
+  }
+  
+  .message-time {
+    font-size: 0.75rem;
+    color: #666;
+    margin-top: 2px;
+    text-align: right;
+  }
+  
+  .chat-input-area {
+    display: flex;
+    gap: 6px;
+  }
+  
+  .chat-input {
+    flex-grow: 1;
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 0.9rem;
+    border: 1px solid #ccc;
+  }
+  
+  .chat-send-btn {
+    border: none;
+    background: #007bff;
+    color: #fff;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  

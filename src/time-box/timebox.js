@@ -1206,6 +1206,8 @@ export default function App() {
   function getAllDates() {
     return activeData?.timeBox ? Object.keys(activeData.timeBox) : [];
   }
+
+  // -- FIXED: usageInSingleDay now counts ALL tasks for each slot. --
   function usageInSingleDay(dt) {
     if (dt.getDay() === 0 || dt.getDay() === 6) {
       return { usageMap: {}, freeHours: 0, totalHours: 0 };
@@ -1220,19 +1222,38 @@ export default function App() {
     let totalHours = 0;
     const usageMap = {};
     const slots = getQuarterHourSlots(startHour, endHour);
+
     slots.forEach(({ hour, minute }) => {
-      totalHours += 0.5;
+      totalHours += 0.5; // each slot is half an hour
       const label = formatTime(hour, minute);
-      let tasks = schedule[label] ? (Array.isArray(schedule[label]) ? schedule[label] : [schedule[label]]) : [];
-      const entry = tasks[0] || {};
-      if (!entry.text) {
+      const tasks = schedule[label]
+        ? Array.isArray(schedule[label]) 
+          ? schedule[label] 
+          : [schedule[label]]
+        : [];
+
+      // If no tasks, count this as free time
+      if (tasks.length === 0) {
         freeHours += 0.5;
       } else {
-        usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.5;
+        // Count usage for EVERY task that has a non-blank text
+        let anyText = false;
+        tasks.forEach((t) => {
+          if (t.text && t.text.trim() !== "") {
+            anyText = true;
+            usageMap[t.text] = (usageMap[t.text] || 0) + 0.5;
+          }
+        });
+        // If all tasks are blank, it's still free
+        if (!anyText) {
+          freeHours += 0.5;
+        }
       }
     });
     return { usageMap, freeHours, totalHours };
   }
+
+  // -- FIXED: usageInRange does the same for each day. --
   function usageInRange({ days = null, months = null, years = null } = {}) {
     const dateKeys = getAllDates();
     if (!dateKeys.length) return { usageMap: {}, freeHours: 0, totalHours: 0 };
@@ -1248,30 +1269,47 @@ export default function App() {
       boundary = new Date(now);
       boundary.setFullYear(boundary.getFullYear() - years);
     }
+
     let freeHours = 0;
     let totalHours = 0;
     const usageMap = {};
+
     dateKeys.forEach((ds) => {
       const dt = parseDateStr(ds);
       if (boundary && dt < boundary) return;
       if (dt.getDay() === 0 || dt.getDay() === 6) return;
       const day = activeData.timeBox[ds];
       if (!day || !dayHasContent(day) || day.vacation) return;
+
       const slots = getQuarterHourSlots(day.startHour, day.endHour);
       slots.forEach(({ hour, minute }) => {
         totalHours += 0.5;
         const label = formatTime(hour, minute);
-        let tasks = day.schedule[label] ? (Array.isArray(day.schedule[label]) ? day.schedule[label] : [day.schedule[label]]) : [];
-        const entry = tasks[0] || {};
-        if (!entry.text) {
+        const tasks = day.schedule[label]
+          ? Array.isArray(day.schedule[label]) 
+            ? day.schedule[label]
+            : [day.schedule[label]]
+          : [];
+
+        if (tasks.length === 0) {
           freeHours += 0.5;
         } else {
-          usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.5;
+          let anyText = false;
+          tasks.forEach((t) => {
+            if (t.text && t.text.trim() !== "") {
+              anyText = true;
+              usageMap[t.text] = (usageMap[t.text] || 0) + 0.5;
+            }
+          });
+          if (!anyText) {
+            freeHours += 0.5;
+          }
         }
       });
     });
     return { usageMap, freeHours, totalHours };
   }
+
   function computeReportData() {
     if (!canViewAgenda || !isAdmin) return { usageMap: {}, freeHours: 0, totalHours: 0 };
     if (reportRange === "daily") return usageInSingleDay(currentDate);

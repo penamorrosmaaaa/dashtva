@@ -1,5 +1,5 @@
 /***************************************
- * App.css
+ * App.css - Mobile Responsive Version
  ***************************************/
 
 /* 1) Import the Livvic font from Google Fonts */
@@ -35,7 +35,7 @@
   --primary-color: rgba(118,62,188,1);
   --primary-hover: rgba(98,42,168,1);
   --secondary-color: #4A148C;
-  --light-background: #d0d0d0;
+  --light-background: #F9F7FD;
   --white: #FFFFFF;
   --border-radius: 8px;
   --box-shadow: 0 2px 6px rgba(0,0,0,0.08);
@@ -49,6 +49,7 @@ body, html {
   padding: 0;
   font-family: var(--font-family);
   background-color: var(--light-background);
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Header / Top Navigation */
@@ -138,6 +139,7 @@ body, html {
   margin-bottom: 10px;
   border: 1px solid #ccc;
   border-radius: var(--border-radius);
+  font-size: 1rem;
 }
 .login-section button {
   padding: 10px;
@@ -208,6 +210,14 @@ body, html {
   text-decoration: line-through;
   color: #777;
   background-color: #f0f0f0;
+}
+
+/* Animate checkmarks (checkboxes) */
+input[type="checkbox"] {
+  transition: transform 0.2s ease-in-out;
+}
+input[type="checkbox"]:checked {
+  transform: scale(1.2);
 }
 
 /* Consistent button styling */
@@ -283,6 +293,7 @@ body, html {
   padding: 8px;
   border: 1px solid #ccc;
   border-radius: var(--border-radius);
+  font-size: 1rem;
 }
 .date-row button {
   padding: 8px 12px;
@@ -307,6 +318,7 @@ body, html {
   border-radius: var(--border-radius);
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  font-size: 0.9rem;
 }
 .schedule-table thead {
   background-color: var(--primary-color);
@@ -315,7 +327,7 @@ body, html {
 .schedule-table th,
 .schedule-table td {
   padding: 12px;
-  border-bottom: 1px dotted #ccc; /* dotted separator for agenda style */
+  border-bottom: 1px dotted #ccc;
   text-align: left;
 }
 .schedule-table th {
@@ -326,6 +338,7 @@ body, html {
 }
 .schedule-table tbody tr:hover {
   background-color: #F0EBFB;
+  cursor: pointer;
 }
 .hour-cell {
   width: 70px;
@@ -333,9 +346,27 @@ body, html {
   font-weight: bold;
   color: var(--secondary-color);
   border-right: 1px dotted #ccc;
+  position: relative;
 }
 
-/* Highlight current time row (if applicable) */
+/* Hour progress bar inside the hour cell */
+.hour-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background-color: #ddd;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  overflow: hidden;
+}
+.hour-progress {
+  height: 100%;
+  background-color: var(--primary-color);
+  transition: width 0.5s ease-out;
+}
+
+/* Highlight current time row */
 .current-time-row {
   background-color: #EEE4F8;
   border-left: 3px solid var(--primary-color);
@@ -395,18 +426,12 @@ body, html {
   color: var(--secondary-color);
 }
 
-/* -------------- */
-/* Schedule Slot */
-/* -------------- */
-
-/* Container for each schedule slot row (HierarchicalSelect, repeat icon, remove btn) */
+/* Schedule Slot styles */
 .schedule-slot {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
-/* HierarchicalSelect <select> elements */
 .schedule-slot select {
   min-width: 120px;
   padding: 6px 8px;
@@ -420,8 +445,6 @@ body, html {
   border-color: var(--primary-color);
   outline: none;
 }
-
-/* Inline 'Other' text input styling */
 .schedule-slot input[type="text"] {
   min-width: 120px;
   padding: 6px 8px;
@@ -434,8 +457,6 @@ body, html {
   border-color: var(--primary-color);
   outline: none;
 }
-
-/* 3-dot repeat button */
 .repeat-button {
   background: #f0f0f0;
   border: none;
@@ -451,8 +472,6 @@ body, html {
   background: #e0e0e0;
   transform: translateY(-2px);
 }
-
-/* '+ Add Task' button or link */
 .add-task-btn {
   display: inline-flex;
   align-items: center;
@@ -470,37 +489,64 @@ body, html {
   transform: translateY(-1px);
 }
 
-/* Optional: Category Badge styling */
-.category-badge {
-  display: inline-block;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  color: #fff;
-  margin-right: 6px;
-  background-color: #888;
-}
-.category-badge.meeting {
-  background-color: #EF5350;
-}
-.category-badge.design {
-  background-color: #AB47BC;
-}
-.category-badge.personal {
-  background-color: #29B6F6;
+/* Responsive/adaptive design for mobile view */
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+    padding: 10px;
+  }
+  .left-column {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 20px;
+    padding: 15px;
+  }
+  .right-column {
+    width: 100%;
+    padding: 15px;
+  }
+  .app-header h1 {
+    font-size: 1.3rem;
+  }
+  .login-section input, 
+  .date-row input[type="date"],
+  .login-section button,
+  .date-row button {
+    font-size: 0.9rem;
+    padding: 6px 8px;
+  }
+  .logo {
+    font-size: 1.5rem;
+  }
+  .schedule-table {
+    font-size: 0.8rem;
+  }
 }
 
-/* Quick Add button styling */
-.quick-add-btn {
-  background: var(--primary-color);
-  color: var(--white);
-  border: none;
-  border-radius: var(--border-radius);
-  padding: 6px 10px;
-  cursor: pointer;
-  transition: background-color var(--transition), transform var(--transition);
-}
-.quick-add-btn:hover {
-  background: var(--primary-hover);
-  transform: translateY(-2px);
+@media (max-width: 480px) {
+  .app-header {
+    flex-direction: column;
+    text-align: center;
+  }
+  .app-header h1 {
+    margin-bottom: 8px;
+  }
+  .login-section input, 
+  .date-row input[type="date"],
+  .login-section button,
+  .date-row button {
+    font-size: 0.8rem;
+    padding: 5px 6px;
+  }
+  .logo {
+    font-size: 1.3rem;
+  }
+  .schedule-table th, .schedule-table td {
+    padding: 8px;
+  }
+  .schedule-slot select,
+  .schedule-slot input[type="text"] {
+    min-width: 100px;
+    padding: 4px 6px;
+  }
 }

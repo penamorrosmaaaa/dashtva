@@ -11,7 +11,7 @@ import {
 import { Link as RouterLink } from 'react-router-dom';
 import { FaLock } from 'react-icons/fa';
 import { AiOutlineEye, AiOutlineCalendar, AiOutlineClockCircle } from 'react-icons/ai';
-import nasaImage from '../assets/nasa-Q1p7bh3SHj8-unsplash.jpg';
+import nasaImage from '../assets/sandro-katalina-k1bO_VTiZSs-unsplash.jpg';
 import logoImage from '../assets/Diseño sin título (1).png';
 
 const LandingPage = ({ handleLogout }) => {

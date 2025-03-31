@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Button, Input, FormControl, FormLabel, VStack, Image } from '@chakra-ui/react';
-import nasaImage from '../assets/sandro-katalina-k1bO_VTiZSs-unsplash.jpg';
+import nasaImage from './assets/sandro-katalina-k1bO_VTiZSs-unsplash.jpg';
 import logoImage from './assets/Diseño sin título (1).png';
 
 const LoginPage = ({ onLogin }) => {

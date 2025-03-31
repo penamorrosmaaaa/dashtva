@@ -5,6 +5,8 @@ import {
   Route,
   Routes,
   Navigate,
+  useLocation,
+  useNavigate,
 } from 'react-router-dom';
 
 // Component imports
@@ -21,71 +23,75 @@ import TimeBox from './time-box/timebox';
 import TimeBoxAdmin from './time-box/timeboxadmin';
 
 const App = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    const authStatus = localStorage.getItem('isAuthenticated');
-    setIsAuthenticated(authStatus === 'true');
-  }, []);
-
-  const handleLogin = () => {
-    localStorage.setItem('isAuthenticated', 'true');
-    setIsAuthenticated(true);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    setIsAuthenticated(false);
-  };
-
   return (
     <ChakraProvider>
-      {/* 
-        Force white text globally with color="white". 
-        Use a dark/gradient background so white text is visible. 
-      */}
-      <Box
-        width="100vw"
-        minHeight="100vh"
-        bg="linear-gradient(90deg, #000000, #7800ff)"
-        color="white" 
-      >
+      <Box width="100vw" minHeight="100vh" bg="linear-gradient(90deg, #000000, #7800ff)" color="white">
         <Router>
-          {isAuthenticated ? (
-            <AuthenticatedRoutes handleLogout={handleLogout} />
-          ) : (
-            <UnauthenticatedRoutes handleLogin={handleLogin} />
-          )}
+          <AppContent />
         </Router>
       </Box>
     </ChakraProvider>
   );
 };
 
+const AppContent = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(null); // null = loading
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const authStatus = localStorage.getItem('isAuthenticated');
+    setIsAuthenticated(authStatus === 'true');
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && location.pathname !== '/login') {
+      localStorage.setItem('lastPath', location.pathname);
+    }
+  }, [location.pathname, isAuthenticated]);
+
+  const handleLogin = () => {
+    localStorage.setItem('isAuthenticated', 'true');
+    setIsAuthenticated(true);
+
+    const lastPath = localStorage.getItem('lastPath') || '/landing';
+    navigate(lastPath, { replace: true });
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('lastPath');
+    setIsAuthenticated(false);
+    navigate('/login', { replace: true });
+  };
+
+  // Wait for auth status to be known
+  if (isAuthenticated === null) return null;
+
+  return isAuthenticated ? (
+    <AuthenticatedRoutes handleLogout={handleLogout} />
+  ) : (
+    <UnauthenticatedRoutes handleLogin={handleLogin} />
+  );
+};
+
 const AuthenticatedRoutes = ({ handleLogout }) => (
   <Routes>
-    <Route path="/login" element={<Navigate to="/landing" replace />} />
     <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
-    <Route path="/" element={<Navigate to="/landing" replace />} />
-
-    {/* Admin Routes */}
     <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
     <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
     <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} />
     <Route path="/Digital-Calendar" element={<NewPage />} />
-
-    {/* Time-Box Routes */}
     <Route path="/Time-Box" element={<TimeBox />} />
 
-    {/* Main Application Route */}
+    <Route
+      path="/"
+      element={<Navigate to={localStorage.getItem('lastPath') || '/landing'} replace />}
+    />
     <Route
       path="/*"
       element={
         <MainLayout>
-          {/* 
-            No need to set color="white" again here— 
-            it inherits from the parent. 
-          */}
           <Box maxW="1600px" py={10} bg="transparent">
             <General />
             <RequestCountGraph />
@@ -94,16 +100,13 @@ const AuthenticatedRoutes = ({ handleLogout }) => (
         </MainLayout>
       }
     />
-
-    {/* Catch-all Route */}
-    <Route path="*" element={<Navigate to="/landing" replace />} />
   </Routes>
 );
 
 const UnauthenticatedRoutes = ({ handleLogin }) => (
   <Routes>
-    <Route path="*" element={<Navigate to="/login" replace />} />
     <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+    <Route path="*" element={<Navigate to="/login" replace />} />
   </Routes>
 );
 

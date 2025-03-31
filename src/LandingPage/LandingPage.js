@@ -3,15 +3,15 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Flex,
-  Image,
   Text,
   Button,
   useBreakpointValue,
+  Image,
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { FaLock } from 'react-icons/fa';
 import { AiOutlineEye, AiOutlineCalendar, AiOutlineClockCircle } from 'react-icons/ai';
-import nasaImage from '../assets/150253-798222949.mp4';
+import nasaVideo from '../assets/150253-798222949.mp4';
 import logoImage from '../assets/Diseño sin título (1).png';
 
 const LandingPage = ({ handleLogout }) => {
@@ -42,22 +42,29 @@ const LandingPage = ({ handleLogout }) => {
       minHeight="100vh"
       position="relative"
       overflow="auto"
-      bg="linear-gradient(90deg, #000000, #7800ff)"
       py={8}
       px={4}
     >
-      <Image
-        src={nasaImage}
-        alt="NASA background"
-        position="absolute"
-        top="0"
-        left="0"
-        width="100%"
-        height="100%"
-        objectFit="cover"
-        opacity="0.6"
-        zIndex="0"
-      />
+      {/* ✅ Background video instead of image */}
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          opacity: 0.6,
+          zIndex: 0,
+        }}
+      >
+        <source src={nasaVideo} type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
 
       {/* Logout Button */}
       <Button

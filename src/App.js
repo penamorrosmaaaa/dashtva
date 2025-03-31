@@ -44,11 +44,23 @@ const AppContent = () => {
     setIsAuthenticated(authStatus === 'true');
   }, []);
 
+  // Save lastPath only if NOT /login or /landing
   useEffect(() => {
-    if (isAuthenticated && location.pathname !== '/login') {
+    if (
+      isAuthenticated &&
+      location.pathname !== '/login' &&
+      location.pathname !== '/landing'
+    ) {
       localStorage.setItem('lastPath', location.pathname);
     }
   }, [location.pathname, isAuthenticated]);
+
+  // Optional: Clear lastPath when on /landing
+  useEffect(() => {
+    if (location.pathname === '/landing') {
+      localStorage.removeItem('lastPath');
+    }
+  }, [location.pathname]);
 
   const handleLogin = () => {
     localStorage.setItem('isAuthenticated', 'true');
@@ -65,7 +77,7 @@ const AppContent = () => {
     navigate('/login', { replace: true });
   };
 
-  // Wait for auth status to be known
+  // Wait for auth status before rendering routes
   if (isAuthenticated === null) return null;
 
   return isAuthenticated ? (

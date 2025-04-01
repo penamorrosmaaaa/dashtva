@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Input, FormControl, FormLabel, VStack, Image } from '@chakra-ui/react';
+import {
+  Box,
+  Button,
+  Input,
+  FormControl,
+  FormLabel,
+  VStack,
+  Image,
+} from '@chakra-ui/react';
 import nasaImage from './assets/sandro-katalina-k1bO_VTiZSs-unsplash.jpg';
 import logoImage from './assets/Diseño sin título (1).png';
 import Papa from 'papaparse';
@@ -11,16 +19,21 @@ const LoginPage = ({ onLogin }) => {
   const [credentials, setCredentials] = useState([]);
 
   useEffect(() => {
-    // Fetch and parse the CSV from Google Sheets
-    Papa.parse('https://docs.google.com/spreadsheets/d/e/2PACX-1vQj8n4z0RMdgG8HPRjpXN38WVg-BsISD28dDS9D9nbScWsp0sPAyzFTo-I9usPafbDJ9kXANakp2rQ6/pub?output=csv', {
-      download: true,
-      header: false,
-      complete: (result) => {
-        const rows = result.data;
-        const creds = rows.map(([user, pass]) => ({ username: user, password: pass }));
-        setCredentials(creds);
-      },
-    });
+    Papa.parse(
+      'https://docs.google.com/spreadsheets/d/e/2PACX-1vQj8n4z0RMdgG8HPRjpXN38WVg-BsISD28dDS9D9nbScWsp0sPAyzFTo-I9usPafbDJ9kXANakp2rQ6/pub?output=csv',
+      {
+        download: true,
+        header: false,
+        complete: (result) => {
+          const rows = result.data;
+          const creds = rows.map(([user, pass]) => ({
+            username: user,
+            password: pass,
+          }));
+          setCredentials(creds);
+        },
+      }
+    );
   }, []);
 
   const handleSubmit = (e) => {
@@ -29,6 +42,8 @@ const LoginPage = ({ onLogin }) => {
       (cred) => cred.username === username && cred.password === password
     );
     if (matchedUser) {
+      localStorage.setItem('isAuthenticated', 'true'); // ✅ Persist login
+      localStorage.setItem('userName', matchedUser.username); // ✅ Save username
       onLogin();
     } else {
       setError('Invalid credentials. Please try again.');
@@ -37,9 +52,38 @@ const LoginPage = ({ onLogin }) => {
 
   return (
     <Box width="100vw" height="100vh" position="relative" overflow="hidden">
-      <Box width="100vw" height="100vh" bg="linear-gradient(90deg, #000000, #7800ff)" position="absolute" top="0" left="0" opacity="0.9" zIndex="0" />
-      <Image src={nasaImage} alt="NASA background" position="absolute" top="0" left="0" width="100%" height="100%" objectFit="cover" opacity="0.6" zIndex="1" />
-      <Box display="flex" alignItems="center" justifyContent="center" height="100%" position="relative" zIndex="2" color="white" flexDirection="column">
+      <Box
+        width="100vw"
+        height="100vh"
+        bg="linear-gradient(90deg, #000000, #7800ff)"
+        position="absolute"
+        top="0"
+        left="0"
+        opacity="0.9"
+        zIndex="0"
+      />
+      <Image
+        src={nasaImage}
+        alt="NASA background"
+        position="absolute"
+        top="0"
+        left="0"
+        width="100%"
+        height="100%"
+        objectFit="cover"
+        opacity="0.6"
+        zIndex="1"
+      />
+      <Box
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        height="100%"
+        position="relative"
+        zIndex="2"
+        color="white"
+        flexDirection="column"
+      >
         <Image src={logoImage} alt="Logo" width="200px" mb={8} />
         <VStack spacing={4} align="stretch" width="300px">
           <form onSubmit={handleSubmit}>

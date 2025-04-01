@@ -47,14 +47,17 @@ const AppContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Hide the Header on /login or /landing
   const hideHeader =
     location.pathname === '/login' || location.pathname === '/landing';
 
+  // Check localStorage for auth status on first render
   useEffect(() => {
     const authStatus = localStorage.getItem('isAuthenticated');
     setIsAuthenticated(authStatus === 'true');
   }, []);
 
+  // Save the last path visited, so we can redirect back after login
   useEffect(() => {
     if (
       isAuthenticated &&
@@ -65,6 +68,7 @@ const AppContent = () => {
     }
   }, [location.pathname, isAuthenticated]);
 
+  // Clear the lastPath if the user is on /landing
   useEffect(() => {
     if (location.pathname === '/landing') {
       localStorage.removeItem('lastPath');
@@ -75,6 +79,7 @@ const AppContent = () => {
     localStorage.setItem('isAuthenticated', 'true');
     setIsAuthenticated(true);
 
+    // Use whatever path was last visited or default to /landing
     const lastPath = localStorage.getItem('lastPath') || '/landing';
     navigate(lastPath, { replace: true });
   };
@@ -86,6 +91,7 @@ const AppContent = () => {
     navigate('/login', { replace: true });
   };
 
+  // Show nothing until we've determined auth status
   if (isAuthenticated === null) return null;
 
   return (
@@ -104,10 +110,15 @@ const AppContent = () => {
 const AuthenticatedRoutes = ({ handleLogout }) => {
   return (
     <Routes>
+      {/* Redirect root path '/' to /landing */}
+      <Route path="/" element={<Navigate to="/landing" replace />} />
+
+      {/* Admin routes */}
       <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
       <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
       <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} />
 
+      {/* Regular user routes */}
       <Route
         path="/Time-Box"
         element={
@@ -116,7 +127,6 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
           </Box>
         }
       />
-
       <Route
         path="/Digital-Calendar"
         element={
@@ -126,10 +136,10 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
         }
       />
 
-      {/* Correct position for /landing so it's not caught by * */}
+      {/* Landing page route */}
       <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
 
-      {/* Fallback: General Dashboard */}
+      {/* Default to the General Dashboard */}
       <Route
         path="*"
         element={
@@ -149,6 +159,7 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
 const UnauthenticatedRoutes = ({ handleLogin }) => (
   <Routes>
     <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+    {/* If not logged in, any other route sends user to /login */}
     <Route path="*" element={<Navigate to="/login" replace />} />
   </Routes>
 );

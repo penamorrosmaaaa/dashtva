@@ -1,11 +1,12 @@
-// src/layouts/MainLayout.js
-
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 
 const MainLayout = ({ children }) => {
   return (
-    <Box position="relative" minHeight="100vh">
+    <Box 
+      pt="120px" // Enough top padding to ensure content starts below fixed header
+      px="20px"
+    >
       {children}
     </Box>
   );

@@ -16,11 +16,16 @@ import logoImage from '../assets/Diseño sin título (1).png';
 const LandingPage = ({ handleLogout }) => {
   const [showLock, setShowLock] = useState(null);
   const [contentVisible, setContentVisible] = useState(false);
+  const [userName, setUserName] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setContentVisible(true);
     }, 300);
+
+    const storedName = localStorage.getItem('userName');
+    if (storedName) setUserName(storedName);
+
     return () => clearTimeout(timer);
   }, []);
 
@@ -40,11 +45,9 @@ const LandingPage = ({ handleLogout }) => {
       width="100vw"
       minHeight="100vh"
       position="relative"
-      // REMOVED overflow="auto" so entire window scrolls
       py={8}
       px={4}
     >
-      {/* Background video */}
       <video
         autoPlay
         muted
@@ -65,7 +68,6 @@ const LandingPage = ({ handleLogout }) => {
         Your browser does not support the video tag.
       </video>
 
-      {/* Logout Button */}
       <Button
         position="fixed"
         top="20px"
@@ -94,15 +96,26 @@ const LandingPage = ({ handleLogout }) => {
           transition: 'opacity 1.5s ease, transform 1.5s ease',
         }}
       >
-        {/* Clickable Digital Benchmark Logo */}
         <RouterLink to="/landing">
           <Image
             src={logoImage}
             alt="Digital Benchmarks Logo"
             width={logoSize}
-            mb={8}
+            mb={4}
           />
         </RouterLink>
+
+        {userName && (
+          <Text
+            fontSize={['3xl', '4xl']}
+            textAlign="center"
+            fontFamily="'The Youngest Script', cursive"
+            mt={-4}
+            mb={4}
+          >
+            Welcome back, {userName}.
+          </Text>
+        )}
 
         <Flex
           direction={flexDirection}

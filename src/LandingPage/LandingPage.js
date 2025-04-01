@@ -1,4 +1,3 @@
-// src/LandingPage/LandingPage.js
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -41,11 +40,11 @@ const LandingPage = ({ handleLogout }) => {
       width="100vw"
       minHeight="100vh"
       position="relative"
-      overflow="auto"
+      // REMOVED overflow="auto" so entire window scrolls
       py={8}
       px={4}
     >
-      {/* ✅ Background video instead of image */}
+      {/* Background video */}
       <video
         autoPlay
         muted
@@ -95,12 +94,15 @@ const LandingPage = ({ handleLogout }) => {
           transition: 'opacity 1.5s ease, transform 1.5s ease',
         }}
       >
-        <Image
-          src={logoImage}
-          alt="Digital Benchmarks Logo"
-          width={logoSize}
-          mb={8}
-        />
+        {/* Clickable Digital Benchmark Logo */}
+        <RouterLink to="/landing">
+          <Image
+            src={logoImage}
+            alt="Digital Benchmarks Logo"
+            width={logoSize}
+            mb={8}
+          />
+        </RouterLink>
 
         <Flex
           direction={flexDirection}
@@ -128,7 +130,6 @@ const LandingPage = ({ handleLogout }) => {
             onMouseLeave={handleMouseLeave}
             transition="transform 0.3s ease"
             cursor="pointer"
-            mb={{ base: 4, md: 0 }}
           >
             {showLock === 'popular' && (
               <Button
@@ -182,7 +183,6 @@ const LandingPage = ({ handleLogout }) => {
             onMouseLeave={handleMouseLeave}
             transition="transform 0.3s ease"
             cursor="pointer"
-            mb={{ base: 4, md: 0 }}
           >
             {showLock === 'calendar' && (
               <Button
@@ -236,7 +236,6 @@ const LandingPage = ({ handleLogout }) => {
             onMouseLeave={handleMouseLeave}
             transition="transform 0.3s ease"
             cursor="pointer"
-            mb={{ base: 4, md: 0 }}
           >
             {showLock === 'timebox' && (
               <Button

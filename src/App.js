@@ -9,6 +9,9 @@ import {
   useNavigate,
 } from 'react-router-dom';
 
+// Global Header import
+import Header from './Header';
+
 // Component imports
 import HomeAdmin from './HomeAdmin/HomeAdmin';
 import NewPageAdmin from './NewPageAdmin/NewPageAdmin';
@@ -25,7 +28,12 @@ import TimeBoxAdmin from './time-box/timeboxadmin';
 const App = () => {
   return (
     <ChakraProvider>
-      <Box width="100vw" minHeight="100vh" bg="linear-gradient(90deg, #000000, #7800ff)" color="white">
+      <Box
+        width="100vw"
+        minHeight="100vh"
+        bg="linear-gradient(90deg, #000000, #7800ff)"
+        color="white"
+      >
         <Router>
           <AppContent />
         </Router>
@@ -35,16 +43,18 @@ const App = () => {
 };
 
 const AppContent = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(null); // null = loading
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
+
+  const hideHeader =
+    location.pathname === '/login' || location.pathname === '/landing';
 
   useEffect(() => {
     const authStatus = localStorage.getItem('isAuthenticated');
     setIsAuthenticated(authStatus === 'true');
   }, []);
 
-  // Save lastPath only if NOT /login or /landing
   useEffect(() => {
     if (
       isAuthenticated &&
@@ -55,7 +65,6 @@ const AppContent = () => {
     }
   }, [location.pathname, isAuthenticated]);
 
-  // Optional: Clear lastPath when on /landing
   useEffect(() => {
     if (location.pathname === '/landing') {
       localStorage.removeItem('lastPath');
@@ -77,43 +86,65 @@ const AppContent = () => {
     navigate('/login', { replace: true });
   };
 
-  // Wait for auth status before rendering routes
   if (isAuthenticated === null) return null;
 
-  return isAuthenticated ? (
-    <AuthenticatedRoutes handleLogout={handleLogout} />
-  ) : (
-    <UnauthenticatedRoutes handleLogin={handleLogin} />
+  return (
+    <>
+      {!hideHeader && <Header />}
+
+      {isAuthenticated ? (
+        <AuthenticatedRoutes handleLogout={handleLogout} />
+      ) : (
+        <UnauthenticatedRoutes handleLogin={handleLogin} />
+      )}
+    </>
   );
 };
 
-const AuthenticatedRoutes = ({ handleLogout }) => (
-  <Routes>
-    <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
-    <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
-    <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
-    <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} />
-    <Route path="/Digital-Calendar" element={<NewPage />} />
-    <Route path="/Time-Box" element={<TimeBox />} />
+const AuthenticatedRoutes = ({ handleLogout }) => {
+  return (
+    <Routes>
+      <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
+      <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
+      <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} />
 
-    <Route
-      path="/"
-      element={<Navigate to={localStorage.getItem('lastPath') || '/landing'} replace />}
-    />
-    <Route
-      path="/*"
-      element={
-        <MainLayout>
-          <Box maxW="1600px" py={10} bg="transparent">
-            <General />
-            <RequestCountGraph />
-            <DataTable />
+      <Route
+        path="/Time-Box"
+        element={
+          <Box pt="200px">
+            <TimeBox />
           </Box>
-        </MainLayout>
-      }
-    />
-  </Routes>
-);
+        }
+      />
+
+      <Route
+        path="/Digital-Calendar"
+        element={
+          <Box pt="200px">
+            <NewPage />
+          </Box>
+        }
+      />
+
+      {/* Correct position for /landing so it's not caught by * */}
+      <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
+
+      {/* Fallback: General Dashboard */}
+      <Route
+        path="*"
+        element={
+          <MainLayout>
+            <Box pt="100px" maxW="1600px" py={20} bg="transparent">
+              <General />
+              <RequestCountGraph />
+              <DataTable />
+            </Box>
+          </MainLayout>
+        }
+      />
+    </Routes>
+  );
+};
 
 const UnauthenticatedRoutes = ({ handleLogin }) => (
   <Routes>

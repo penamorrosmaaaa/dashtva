@@ -9,7 +9,11 @@ import {
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { FaLock } from 'react-icons/fa';
-import { AiOutlineEye, AiOutlineCalendar, AiOutlineClockCircle } from 'react-icons/ai';
+import {
+  AiOutlineEye,
+  AiOutlineCalendar,
+  AiOutlineClockCircle,
+} from 'react-icons/ai';
 import nasaVideo from '../assets/150253-798222949.mp4';
 import logoImage from '../assets/Diseño sin título (1).png';
 
@@ -34,10 +38,10 @@ const LandingPage = ({ handleLogout }) => {
 
   const flexDirection = useBreakpointValue({ base: 'column', lg: 'row' });
   const boxWidth = useBreakpointValue({ base: '90%', md: '300px' });
-  const boxHeight = useBreakpointValue({ base: '160px', md: '150px' });
+  const boxHeight = useBreakpointValue({ base: '180px', md: '160px' });
   const gap = useBreakpointValue({ base: 6, lg: 10 });
   const iconSize = useBreakpointValue({ base: '50px', md: '60px' });
-  const logoSize = useBreakpointValue({ base: '150px', md: '200px' });
+  const logoSize = useBreakpointValue({ base: '140px', md: '180px' });
 
   return (
     <Box
@@ -47,6 +51,7 @@ const LandingPage = ({ handleLogout }) => {
       position="relative"
       py={8}
       px={4}
+      overflowX="hidden"
     >
       <video
         autoPlay
@@ -60,7 +65,7 @@ const LandingPage = ({ handleLogout }) => {
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          opacity: 0.6,
+          opacity: 0.4,
           zIndex: 0,
         }}
       >
@@ -68,32 +73,36 @@ const LandingPage = ({ handleLogout }) => {
         Your browser does not support the video tag.
       </video>
 
+      {/* Logout */}
       <Button
         position="fixed"
         top="20px"
         right="20px"
-        variant="link"
+        variant="outline"
+        borderColor="whiteAlpha.600"
         color="white"
+        size="sm"
+        zIndex="10"
         onClick={handleLogout}
-        aria-label="Logout"
-        zIndex="1000"
-        _hover={{ textDecoration: 'none', color: 'white' }}
-        _active={{ bg: 'transparent' }}
+        _hover={{ bg: 'whiteAlpha.200' }}
+        _active={{ bg: 'whiteAlpha.300' }}
       >
         Logout
       </Button>
 
+      {/* Main Container */}
       <Flex
         direction="column"
         align="center"
-        justify="flex-start"
+        justify="center"
         zIndex="1"
         position="relative"
-        gap={10}
+        mt={6}
+        gap={6}
         style={{
           opacity: contentVisible ? 1 : 0,
-          transform: contentVisible ? 'scale(1)' : 'scale(0.5)',
-          transition: 'opacity 1.5s ease, transform 1.5s ease',
+          transform: contentVisible ? 'scale(1)' : 'scale(0.95)',
+          transition: 'opacity 1.5s ease, transform 1.2s ease',
         }}
       >
         <RouterLink to="/landing">
@@ -101,188 +110,116 @@ const LandingPage = ({ handleLogout }) => {
             src={logoImage}
             alt="Digital Benchmarks Logo"
             width={logoSize}
-            mb={4}
+            mb={2}
           />
         </RouterLink>
 
         {userName && (
           <Text
-            fontSize={['3xl', '4xl']}
+            fontSize={['2xl', '3xl']}
+            fontWeight="medium"
             textAlign="center"
             fontFamily="'The Youngest Script', cursive"
-            mt={-4}
-            mb={4}
+            bg="rgba(0,0,0,0.4)"
+            px={4}
+            py={2}
+            borderRadius="md"
+            backdropFilter="blur(6px)"
           >
             Welcome back, {userName}.
           </Text>
         )}
 
+        {/* Menu Cards */}
         <Flex
           direction={flexDirection}
           justify="center"
           align="center"
-          gap={gap}
           wrap="wrap"
-          width="100%"
+          gap={gap}
         >
-          {/* Popular Objects */}
-          <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            as={RouterLink}
-            to="/PopularObjects"
-            border="2px solid white"
-            borderRadius="lg"
-            p={4}
-            width={boxWidth}
-            height={boxHeight}
-            position="relative"
-            _hover={{ transform: 'scale(1.05)' }}
-            onMouseEnter={() => handleMouseEnter('popular')}
-            onMouseLeave={handleMouseLeave}
-            transition="transform 0.3s ease"
-            cursor="pointer"
-          >
-            {showLock === 'popular' && (
-              <Button
-                as={RouterLink}
-                to="/ADMIN-PopularObjects"
-                leftIcon={<FaLock />}
-                aria-label="Admin - Popular Objects"
-                position="absolute"
-                top="10px"
-                right="10px"
-                color="white"
-                variant="ghost"
-                _hover={{
-                  textDecoration: 'none',
-                  color: 'yellow.400',
-                  transform: 'scale(1.2)',
-                }}
-                _active={{ bg: 'transparent' }}
-                transition="color 0.3s ease, transform 0.3s ease"
-              >
-                Admin
-              </Button>
-            )}
-            <AiOutlineEye size={iconSize} />
-            <Text
-              mt={6}
-              fontSize={['md', 'lg']}
-              fontWeight="bold"
-              fontFamily="Arial"
-              textAlign="center"
+          {[
+            {
+              label: 'Popular Objects',
+              icon: <AiOutlineEye size={iconSize} />,
+              route: '/PopularObjects',
+              adminRoute: '/ADMIN-PopularObjects',
+              id: 'popular',
+            },
+            {
+              label: 'Digital Calendar',
+              icon: <AiOutlineCalendar size={iconSize} />,
+              route: '/Digital-Calendar',
+              adminRoute: '/ADMIN-DIGITAL-CALENDAR',
+              id: 'calendar',
+            },
+            {
+              label: 'Time-Box',
+              icon: <AiOutlineClockCircle size={iconSize} />,
+              route: '/Time-Box',
+              adminRoute: '/ADMIN-TimeBox',
+              id: 'timebox',
+            },
+          ].map(({ label, icon, route, adminRoute, id }) => (
+            <Flex
+              key={id}
+              direction="column"
+              align="center"
+              justify="center"
+              as={RouterLink}
+              to={route}
+              border="2px solid white"
+              borderRadius="xl"
+              backdropFilter="blur(12px)"
+              backgroundColor="rgba(255, 255, 255, 0.05)"
+              boxShadow="lg"
+              p={6}
+              width={boxWidth}
+              height={boxHeight}
+              position="relative"
+              _hover={{
+                transform: 'scale(1.05)',
+                boxShadow: '0 0 15px rgba(255,255,255,0.2)',
+              }}
+              onMouseEnter={() => handleMouseEnter(id)}
+              onMouseLeave={handleMouseLeave}
+              transition="all 0.3s ease"
+              cursor="pointer"
             >
-              Popular Objects
-            </Text>
-          </Flex>
-
-          {/* Digital Calendar */}
-          <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            as={RouterLink}
-            to="/Digital-Calendar"
-            border="2px solid white"
-            borderRadius="lg"
-            p={4}
-            width={boxWidth}
-            height={boxHeight}
-            position="relative"
-            _hover={{ transform: 'scale(1.05)' }}
-            onMouseEnter={() => handleMouseEnter('calendar')}
-            onMouseLeave={handleMouseLeave}
-            transition="transform 0.3s ease"
-            cursor="pointer"
-          >
-            {showLock === 'calendar' && (
-              <Button
-                as={RouterLink}
-                to="/ADMIN-DIGITAL-CALENDAR"
-                leftIcon={<FaLock />}
-                aria-label="Admin - Digital Calendar"
-                position="absolute"
-                top="10px"
-                right="10px"
-                color="white"
-                variant="ghost"
-                _hover={{
-                  textDecoration: 'none',
-                  color: 'yellow.400',
-                  transform: 'scale(1.2)',
-                }}
-                _active={{ bg: 'transparent' }}
-                transition="color 0.3s ease, transform 0.3s ease"
+              {showLock === id && (
+                <Button
+                  as={RouterLink}
+                  to={adminRoute}
+                  leftIcon={<FaLock />}
+                  aria-label={`Admin - ${label}`}
+                  position="absolute"
+                  top="10px"
+                  right="10px"
+                  size="xs"
+                  colorScheme="whiteAlpha"
+                  variant="ghost"
+                  _hover={{
+                    color: 'yellow.400',
+                    transform: 'scale(1.15)',
+                  }}
+                  _active={{ bg: 'transparent' }}
+                  transition="all 0.3s ease"
+                >
+                  Admin
+                </Button>
+              )}
+              {icon}
+              <Text
+                mt={4}
+                fontSize={['md', 'lg']}
+                fontWeight="bold"
+                fontFamily="Arial"
+                textAlign="center"
               >
-                Admin
-              </Button>
-            )}
-            <AiOutlineCalendar size={iconSize} />
-            <Text
-              mt={6}
-              fontSize={['md', 'lg']}
-              fontWeight="bold"
-              fontFamily="Arial"
-              textAlign="center"
-            >
-              Digital Calendar
-            </Text>
-          </Flex>
-
-          {/* Time-Box */}
-          <Flex
-            direction="column"
-            align="center"
-            justify="center"
-            as={RouterLink}
-            to="/Time-Box"
-            border="2px solid white"
-            borderRadius="lg"
-            p={4}
-            width={boxWidth}
-            height={boxHeight}
-            position="relative"
-            _hover={{ transform: 'scale(1.05)' }}
-            onMouseEnter={() => handleMouseEnter('timebox')}
-            onMouseLeave={handleMouseLeave}
-            transition="transform 0.3s ease"
-            cursor="pointer"
-          >
-            {showLock === 'timebox' && (
-              <Button
-                as={RouterLink}
-                to="/ADMIN-TimeBox"
-                leftIcon={<FaLock />}
-                aria-label="Admin - Time-Box"
-                position="absolute"
-                top="10px"
-                right="10px"
-                color="white"
-                variant="ghost"
-                _hover={{
-                  textDecoration: 'none',
-                  color: 'yellow.400',
-                  transform: 'scale(1.2)',
-                }}
-                _active={{ bg: 'transparent' }}
-                transition="color 0.3s ease, transform 0.3s ease"
-              >
-                Admin
-              </Button>
-            )}
-            <AiOutlineClockCircle size={iconSize} />
-            <Text
-              mt={6}
-              fontSize={['md', 'lg']}
-              fontWeight="bold"
-              fontFamily="Arial"
-              textAlign="center"
-            >
-              Time-Box
-            </Text>
-          </Flex>
+                {label}
+              </Text>
+            </Flex>
+          ))}
         </Flex>
       </Flex>
     </Box>

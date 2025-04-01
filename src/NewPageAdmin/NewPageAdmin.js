@@ -13,7 +13,7 @@ const NewPageAdmin = () => {
 
   const handlePinSubmit = (e) => {
     e.preventDefault();
-    if (pinInput.trim() === '123456') {
+    if (pinInput.trim() === 'Matesa696') {
       setIsAuthorized(true);
     } else {
       alert('Incorrect PIN');

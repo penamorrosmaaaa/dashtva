@@ -71,7 +71,7 @@ const NewPageAdmin = () => {
         width="100vw"
         height="100vh"
         position="fixed"
-        top="0"
+        top="200"
         left="0"
         zIndex="0" // Ensure it doesn't overlap the PIN form
         p={0}

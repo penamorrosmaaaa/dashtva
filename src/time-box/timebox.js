@@ -36,7 +36,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyCR9IO7GQ...",
   authDomain: "my-timebox-project.firebaseapp.com",
   projectId: "my-timebox-project",
-  storageBucket: "my-timebox-project.appspot.com",
+  storageBucket: "my-timebox-project.firebaseapp.com",
   messagingSenderId: "338798659890",
   appId: "1:338798659890:web:7681a1e4fdb7e86425af2b",
   measurementId: "G-E4DJTTLEWE",
@@ -545,6 +545,13 @@ function ReportsModal({
   reportRange,
   setReportRange,
   onClose,
+  // NEW REPORT PROPS:
+  reportBaselineDate,
+  setReportBaselineDate,
+  customRangeStart,
+  setCustomRangeStart,
+  customRangeEnd,
+  setCustomRangeEnd,
 }) {
   const colorPalette = [
     "#FF6384",
@@ -558,64 +565,17 @@ function ReportsModal({
     "#8B008B",
   ];
 
-  function renderUsageBar() {
-    const labels = Object.keys(usageMap).length ? Object.keys(usageMap) : ["No Data"];
-    const dataVals = labels.map((l) => usageMap[l] || 0);
-    const bgColors = labels.map((_, i) => colorPalette[i % colorPalette.length]);
-    const data = {
-      labels,
-      datasets: [
-        {
-          label: "Category Usage (hrs)",
-          data: dataVals,
-          backgroundColor: bgColors,
-        },
-      ],
-    };
-    return (
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 4000,
-          height: 400,
-          border: "1px solid #ccc",
-          marginBottom: 40,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Bar
-          data={data}
-          width={1000}
-          height={500}
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                labels: {
-                  font: { size: 18 },
-                },
-              },
-            },
-            scales: {
-              x: {
-                ticks: {
-                  font: { size: 16 },
-                },
-              },
-              y: {
-                ticks: {
-                  font: { size: 16 },
-                },
-              },
-            },
-          }}
-        />
-      </div>
-    );
-  }
+  // Define a common container style matching the original usage bar graph.
+  const chartContainerStyle = {
+    width: "100%",
+    maxWidth: 4000,
+    height: 400,
+    border: "1px solid #ccc",
+    marginBottom: 40,
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+  };
 
   function renderPieChart() {
     if (totalHours === 0) {
@@ -680,19 +640,130 @@ function ReportsModal({
       ],
     };
     return (
-      <div
-        style={{
-          width: "90%",
-          maxWidth: 600,
-          height: 400,
-          border: "1px solid #ccc",
-          marginBottom: 40,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <div style={chartContainerStyle}>
         <Bar data={data} options={{ responsive: false, maintainAspectRatio: false }} />
+      </div>
+    );
+  }
+
+  // NEW: Aggregate usageMap by main category only.
+  function aggregateByMainCategory() {
+    const agg = {};
+    Object.keys(usageMap).forEach((key) => {
+      const parts = key.split(" / ").map(s => s.trim());
+      const main = parts[0];
+      agg[main] = (agg[main] || 0) + usageMap[key];
+    });
+    return agg;
+  }
+
+  // NEW: Aggregate usageMap by main category and first subcategory.
+  // Only include if a subcategory exists.
+  function aggregateByMainAndFirstSub() {
+    const agg = {};
+    Object.keys(usageMap).forEach((key) => {
+      const parts = key.split(" / ").map(s => s.trim());
+      if (parts.length < 2) return; // skip if no subcategory
+      const label = parts.slice(0, 2).join(" / ");
+      agg[label] = (agg[label] || 0) + usageMap[key];
+    });
+    return agg;
+  }
+
+  // NEW: Aggregate usageMap by main category, first subcategory and group remaining subcategories as "Others".
+  // Only include if there is a second subcategory.
+  function aggregateByMainFirstSubAndOthers() {
+    const agg = {};
+    Object.keys(usageMap).forEach((key) => {
+      const parts = key.split(" / ").map(s => s.trim());
+      if (parts.length < 3) return; // skip if no 2nd subcategory
+      const label = parts[0] + " / " + parts[1] + " / Others";
+      agg[label] = (agg[label] || 0) + usageMap[key];
+    });
+    return agg;
+  }
+
+  // NEW: Render chart for main category only.
+  function renderMainCategoryChart() {
+    const aggData = aggregateByMainCategory();
+    const labels = Object.keys(aggData).length ? Object.keys(aggData) : ["No Data"];
+    const dataVals = labels.map((l) => aggData[l] || 0);
+    const data = {
+      labels,
+      datasets: [
+        {
+          label: "Usage by Main Category (hrs)",
+          data: dataVals,
+          backgroundColor: labels.map((_, i) => colorPalette[i % colorPalette.length]),
+        },
+      ],
+    };
+    return (
+      <div style={chartContainerStyle}>
+        <Bar
+  data={data}
+  width={1000}       // set your desired width
+  height={400}      // set your desired height
+  options={{ responsive: false, maintainAspectRatio: false }}
+/>
+      </div>
+    );
+  }
+
+  // NEW: Render chart for main category and first subcategory.
+  function renderMainAndSubChart() {
+    const aggData = aggregateByMainAndFirstSub();
+    // If no key has a subcategory, do not render the chart.
+    if (!Object.keys(aggData).length) return null;
+    const labels = Object.keys(aggData);
+    const dataVals = labels.map((l) => aggData[l]);
+    const data = {
+      labels,
+      datasets: [
+        {
+          label: "Usage by Main and First Subcategory (hrs)",
+          data: dataVals,
+          backgroundColor: labels.map((_, i) => colorPalette[i % colorPalette.length]),
+        },
+      ],
+    };
+    return (
+      <div style={chartContainerStyle}>
+        <Bar
+  data={data}
+  width={1000}       // set your desired width
+  height={400}      // set your desired height
+  options={{ responsive: false, maintainAspectRatio: false }}
+/>
+      </div>
+    );
+  }
+
+  // NEW: Render chart for main category, first subcategory and group remaining subcategories.
+  function renderMainSubOthersChart() {
+    const aggData = aggregateByMainFirstSubAndOthers();
+    // Only render if there is data for a second subcategory.
+    if (!Object.keys(aggData).length) return null;
+    const labels = Object.keys(aggData);
+    const dataVals = labels.map((l) => aggData[l]);
+    const data = {
+      labels,
+      datasets: [
+        {
+          label: "Usage by Main / First Sub / Others (hrs)",
+          data: dataVals,
+          backgroundColor: labels.map((_, i) => colorPalette[i % colorPalette.length]),
+        },
+      ],
+    };
+    return (
+      <div style={chartContainerStyle}>
+        <Bar
+  data={data}
+  width={1000}       // set your desired width
+  height={400}      // set your desired height
+  options={{ responsive: false, maintainAspectRatio: false }}
+/>
       </div>
     );
   }
@@ -743,8 +814,41 @@ function ReportsModal({
         <button onClick={() => setReportRange("alltime")} style={{ marginLeft: 5 }}>
           {reportRange === "alltime" ? "All Time ✓" : "All Time"}
         </button>
+        {/* NEW: Custom Range Button */}
+        <button onClick={() => setReportRange("custom")} style={{ marginLeft: 5 }}>
+          {reportRange === "custom" ? "Custom Range ✓" : "Custom Range"}
+        </button>
       </div>
-      {renderUsageBar()}
+      {/* NEW: Baseline date selector or custom range inputs */}
+      {reportRange !== "custom" ? (
+        <div style={{ marginTop: 10 }}>
+          <label>Baseline Date: </label>
+          <input
+            type="date"
+            value={formatDate(reportBaselineDate)}
+            onChange={(e) => setReportBaselineDate(new Date(e.target.value))}
+          />
+        </div>
+      ) : (
+        <div style={{ marginTop: 10 }}>
+          <label>Start Date: </label>
+          <input
+            type="date"
+            value={customRangeStart}
+            onChange={(e) => setCustomRangeStart(e.target.value)}
+          />
+          <label style={{ marginLeft: 10 }}>End Date: </label>
+          <input
+            type="date"
+            value={customRangeEnd}
+            onChange={(e) => setCustomRangeEnd(e.target.value)}
+          />
+        </div>
+      )}
+      {/* NEW: Remove the old usage bar graph and render the new charts */}
+      {renderMainCategoryChart()}
+      {renderMainAndSubChart()}
+      {renderMainSubOthersChart()}
       {renderPieChart()}
       {renderHomeOfficeBar()}
     </div>
@@ -786,6 +890,11 @@ export default function App() {
   const [viewMode, setViewMode] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [reportRange, setReportRange] = useState("daily");
+
+  // NEW: New state variables for report baseline and custom range
+  const [reportBaselineDate, setReportBaselineDate] = useState(new Date());
+  const [customRangeStart, setCustomRangeStart] = useState(formatDate(new Date()));
+  const [customRangeEnd, setCustomRangeEnd] = useState(formatDate(new Date()));
 
   const isLoggedIn = !!loggedInUser && loggedInUser.password === password;
   const isAdmin = isLoggedIn && loggedInUser.role === "admin";
@@ -1198,16 +1307,6 @@ export default function App() {
     });
   }
 
-  // REPORT FUNCTIONS
-  function parseDateStr(ds) {
-    const [y, m, d] = ds.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }
-  function getAllDates() {
-    return activeData?.timeBox ? Object.keys(activeData.timeBox) : [];
-  }
-
-  // -- FIXED: usageInSingleDay now counts ALL tasks for each slot. --
   function usageInSingleDay(dt) {
     if (dt.getDay() === 0 || dt.getDay() === 6) {
       return { usageMap: {}, freeHours: 0, totalHours: 0 };
@@ -1222,21 +1321,19 @@ export default function App() {
     let totalHours = 0;
     const usageMap = {};
     const slots = getQuarterHourSlots(startHour, endHour);
-
+  
     slots.forEach(({ hour, minute }) => {
-      totalHours += 0.5; // each slot is half an hour
+      totalHours += 0.5;
       const label = formatTime(hour, minute);
       const tasks = schedule[label]
-        ? Array.isArray(schedule[label]) 
-          ? schedule[label] 
+        ? Array.isArray(schedule[label])
+          ? schedule[label]
           : [schedule[label]]
         : [];
-
-      // If no tasks, count this as free time
+  
       if (tasks.length === 0) {
         freeHours += 0.5;
       } else {
-        // Count usage for EVERY task that has a non-blank text
         let anyText = false;
         tasks.forEach((t) => {
           if (t.text && t.text.trim() !== "") {
@@ -1244,7 +1341,6 @@ export default function App() {
             usageMap[t.text] = (usageMap[t.text] || 0) + 0.5;
           }
         });
-        // If all tasks are blank, it's still free
         if (!anyText) {
           freeHours += 0.5;
         }
@@ -1252,21 +1348,22 @@ export default function App() {
     });
     return { usageMap, freeHours, totalHours };
   }
+  
+  // REPORT FUNCTIONS
 
-  // -- FIXED: usageInRange does the same for each day. --
-  function usageInRange({ days = null, months = null, years = null } = {}) {
+  // Modified: usageInRange now accepts a baselineDate parameter
+  function usageInRange({ days = null, months = null, years = null, baselineDate = new Date() } = {}) {
     const dateKeys = getAllDates();
     if (!dateKeys.length) return { usageMap: {}, freeHours: 0, totalHours: 0 };
     let boundary = null;
-    const now = new Date();
     if (days) {
-      boundary = new Date(now);
+      boundary = new Date(baselineDate);
       boundary.setDate(boundary.getDate() - days);
     } else if (months) {
-      boundary = new Date(now);
+      boundary = new Date(baselineDate);
       boundary.setMonth(boundary.getMonth() - months);
     } else if (years) {
-      boundary = new Date(now);
+      boundary = new Date(baselineDate);
       boundary.setFullYear(boundary.getFullYear() - years);
     }
 
@@ -1310,14 +1407,66 @@ export default function App() {
     return { usageMap, freeHours, totalHours };
   }
 
+  // NEW: Function for custom range report
+  function usageInCustomRange(startStr, endStr) {
+    const start = parseDateStr(startStr);
+    const end = parseDateStr(endStr);
+    let freeHours = 0;
+    let totalHours = 0;
+    const usageMap = {};
+    const dateKeys = getAllDates();
+    dateKeys.forEach(ds => {
+      const dt = parseDateStr(ds);
+      if (dt < start || dt > end) return;
+      if (dt.getDay() === 0 || dt.getDay() === 6) return;
+      const day = activeData.timeBox[ds];
+      if (!day || !dayHasContent(day) || day.vacation) return;
+      const slots = getQuarterHourSlots(day.startHour, day.endHour);
+      slots.forEach(({ hour, minute }) => {
+        totalHours += 0.5;
+        const label = formatTime(hour, minute);
+        const tasks = day.schedule[label]
+          ? Array.isArray(day.schedule[label]) 
+            ? day.schedule[label]
+            : [day.schedule[label]]
+          : [];
+        if (tasks.length === 0) {
+          freeHours += 0.5;
+        } else {
+          let anyText = false;
+          tasks.forEach((t) => {
+            if (t.text && t.text.trim() !== "") {
+              anyText = true;
+              usageMap[t.text] = (usageMap[t.text] || 0) + 0.5;
+            }
+          });
+          if (!anyText) {
+            freeHours += 0.5;
+          }
+        }
+      });
+    });
+    return { usageMap, freeHours, totalHours };
+  }
+
+  function parseDateStr(ds) {
+    const [y, m, d] = ds.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  function getAllDates() {
+    return activeData?.timeBox ? Object.keys(activeData.timeBox) : [];
+  }
+
+  // Modified: computeReportData now uses the reportBaselineDate or custom range values
   function computeReportData() {
     if (!canViewAgenda || !isAdmin) return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    if (reportRange === "daily") return usageInSingleDay(currentDate);
-    if (reportRange === "weekly") return usageInRange({ days: 7 });
-    if (reportRange === "monthly") return usageInRange({ months: 1 });
-    if (reportRange === "yearly") return usageInRange({ years: 1 });
-    if (reportRange === "alltime") return usageInRange({});
-    return usageInSingleDay(currentDate);
+    if (reportRange === "daily") return usageInSingleDay(reportBaselineDate);
+    if (reportRange === "weekly") return usageInRange({ days: 7, baselineDate: reportBaselineDate });
+    if (reportRange === "monthly") return usageInRange({ months: 1, baselineDate: reportBaselineDate });
+    if (reportRange === "yearly") return usageInRange({ years: 1, baselineDate: reportBaselineDate });
+    if (reportRange === "alltime") return usageInRange({ baselineDate: new Date("1970-01-01") });
+    if (reportRange === "custom") return usageInCustomRange(customRangeStart, customRangeEnd);
+    return usageInSingleDay(reportBaselineDate);
   }
   const usageResult = computeReportData();
   const { usageMap, freeHours, totalHours } = usageResult;
@@ -1445,6 +1594,13 @@ export default function App() {
           reportRange={reportRange}
           setReportRange={setReportRange}
           onClose={() => setShowReports(false)}
+          // NEW: Pass report date props to ReportsModal
+          reportBaselineDate={reportBaselineDate}
+          setReportBaselineDate={setReportBaselineDate}
+          customRangeStart={customRangeStart}
+          setCustomRangeStart={setCustomRangeStart}
+          customRangeEnd={customRangeEnd}
+          setCustomRangeEnd={setCustomRangeEnd}
         />
       )}
       {/* LEFT COLUMN */}

@@ -1,9 +1,9 @@
 /***************************************
  * App.js (React + Firebase Firestore)
- * A single-file version that properly
- * merges the 'timeBox' without erasing
- * historical data on each login.
- * + Real-time Chat in Chat.js
+ * A single-file version that now uses an admin-built
+ * category tree (stored in Firestore) instead of extracting
+ * categories from a Google Sheet. All other Google Sheet 
+ * functions (e.g. syncing users) remain intact.
  ***************************************/
 import React, { useState, useEffect } from "react";
 import { Bar, Pie } from "react-chartjs-2";
@@ -19,17 +19,21 @@ import {
   Legend,
   ArcElement,
 } from "chart.js";
+import CategoryBuilderTable from "./CategoryBuilderTable";
 import "./App.css";
 import { initializeApp } from "firebase/app";
 import {
   getFirestore,
   doc,
   getDoc,
-  setDoc
+  setDoc,
 } from "firebase/firestore";
 
-// <-- ADD THIS LINE:
-import Chat from "./Chat";  // your newly created Chat component
+// Newly created Chat component
+import Chat from "./Chat";
+
+// NEW: Import the reports modal from Reports.js
+import ReportsModal from "./Reports";
 
 // 2) Your Firebase config
 const firebaseConfig = {
@@ -48,16 +52,15 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // Register Chart.js components
-ChartJS.register(BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend, ArcElement);
-
-/** 
- * Example "public" Google Sheet URL for user info and categories.
- */
-const GOOGLE_SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS4qcyZ0P11t2tZ6SDAr10nIBP9twgHq2weqhR0kTu47BWox5-nW3_gYF2zplWNDAFa807qASM0D3S5/pubhtml";
-
-// Known sheet names
-const SHEET_NAMES = ["Charly", "Gudino", "Gabriel", "Cindy"];
+ChartJS.register(
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+);
 
 /** Helpers for date/time formatting */
 function getNextDay(date) {
@@ -74,14 +77,14 @@ function getPrevDay(date) {
   } while (d.getDay() === 0 || d.getDay() === 6);
   return d;
 }
-function formatDate(date) {
+export function formatDate(date) {
   if (!(date instanceof Date) || isNaN(date)) return "";
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
-function formatTime(hour, minute) {
+export function formatTime(hour, minute) {
   let suffix = "AM";
   let displayHour = hour;
   if (hour === 0) displayHour = 12;
@@ -93,7 +96,7 @@ function formatTime(hour, minute) {
   const minStr = minute === 0 ? "00" : String(minute).padStart(2, "0");
   return `${displayHour}:${minStr} ${suffix}`;
 }
-function getQuarterHourSlots(startHour, endHour) {
+export function getQuarterHourSlots(startHour, endHour) {
   const slots = [];
   if (startHour >= endHour) return slots;
   for (let h = startHour; h < endHour; h++) {
@@ -105,66 +108,10 @@ function getQuarterHourSlots(startHour, endHour) {
   return slots;
 }
 
-/** Build a hierarchy of categories from ID/name/parentId. */
-function buildHierarchy(rows) {
-  const nodeMap = {};
-  rows.forEach((r) => {
-    nodeMap[r.id] = { name: r.name, children: [] };
-  });
-  rows.forEach((r) => {
-    if (r.parentId && nodeMap[r.parentId]) {
-      nodeMap[r.parentId].children.push(nodeMap[r.id]);
-    }
-  });
-  const roots = [];
-  rows.forEach((r) => {
-    if (!r.parentId) {
-      roots.push(nodeMap[r.id]);
-    }
-  });
-  return roots;
-}
-
-/** Fetch categories from each sheet */
-async function fetchCategoriesBySheet() {
-  const sheetCatsMap = {};
-  try {
-    const res = await fetch(GOOGLE_SHEET_URL);
-    const html = await res.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const tables = doc.querySelectorAll("table");
-
-    tables.forEach((table, index) => {
-      const sheetName = SHEET_NAMES[index] || `Sheet${index + 1}`;
-      const rows = table.querySelectorAll("tr");
-      const rawRows = [];
-      for (let r = 1; r < rows.length; r++) {
-        const cells = rows[r].querySelectorAll("td");
-        if (cells.length >= 3) {
-          const idStr = cells[2].textContent.trim();
-          const nameStr = cells[3]?.textContent.trim() || "";
-          const parentStr = cells[4]?.textContent.trim() || "";
-          if (idStr && nameStr) {
-            const id = parseInt(idStr, 10);
-            const parentId = parseInt(parentStr, 10);
-            rawRows.push({
-              id,
-              name: nameStr,
-              parentId: isNaN(parentId) ? 0 : parentId,
-            });
-          }
-        }
-      }
-      sheetCatsMap[sheetName] = buildHierarchy(rawRows);
-    });
-  } catch (err) {
-    console.error("Error fetching categories:", err);
-  }
-  return sheetCatsMap;
-}
-
-/** Sync user info from your Google Sheet. */
+/** Google Sheet constants and sync function remain unchanged */
+const GOOGLE_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS4qcyZ0P11t2tZ6SDAr10nIBP9twgHq2weqhR0kTu47BWox5-nW3_gYF2zplWNDAFa807qASM0D3S5/pubhtml";
+const SHEET_NAMES = ["Charly", "Gudino", "Gabriel", "Cindy"];
 async function syncUsersFromSheet() {
   try {
     const res = await fetch(GOOGLE_SHEET_URL);
@@ -179,12 +126,10 @@ async function syncUsersFromSheet() {
       const rows = table.querySelectorAll("tr");
       for (let r = 1; r < rows.length; r++) {
         const cells = rows[r].querySelectorAll("td");
-        if (cells.length < 2) continue;
-
+        if (cells.length < 2) return;
         const empNumber = cells[0].textContent.trim();
         const fullName = cells[1].textContent.trim();
-        if (!fullName) continue;
-
+        if (!fullName) return;
         const username = fullName.toLowerCase();
         const adminNumbers = ["1050028", "1163755", "60092284", "1129781"];
         let role = "employee";
@@ -199,7 +144,6 @@ async function syncUsersFromSheet() {
           };
           allowedAreas = adminAllowedAreasMap[empNumber] || [];
         }
-
         const userObj = {
           role,
           password: empNumber,
@@ -260,7 +204,7 @@ async function loadUserFromFirestore(userObj) {
   return userObj;
 }
 
-/**
+/** 
  * Save the user's data to Firestore without erasing old timeBox days.
  */
 async function saveUserToFirestore(userObj) {
@@ -295,7 +239,53 @@ async function saveUserToFirestore(userObj) {
   }
 }
 
-/** HierarchicalSelect component for picking categories in nested form. */
+/** 
+ * Load a category tree from Firestore.
+ *
+ * UPDATED: When an employee logs in, we now try to find an admin
+ * whose allowedAreas (in lowercase) include the employee's area.
+ * If found, the category tree is loaded from that admin's key.
+ */
+async function loadCategoryTreeForUser(user, syncedUsers) {
+  let adminKey;
+  if (user.role === "admin") {
+    adminKey = user.fullName.toLowerCase();
+  } else {
+    const userArea = user.area ? user.area.toLowerCase() : "";
+    // Look for an admin in syncedUsers whose allowedAreas include userArea.
+    const admin = Object.values(syncedUsers).find(
+      (u) =>
+        u.role === "admin" &&
+        u.allowedAreas &&
+        u.allowedAreas.map((a) => a.toLowerCase()).includes(userArea)
+    );
+    if (admin) {
+      adminKey = admin.fullName.toLowerCase();
+    } else {
+      adminKey = user.area ? user.area.toLowerCase() : "";
+    }
+  }
+  const catDocRef = doc(db, "categoryTrees", adminKey);
+  const docSnap = await getDoc(catDocRef);
+  if (docSnap.exists()) {
+    return docSnap.data().tree;
+  }
+  return []; // default empty tree
+}
+async function saveCategoryTreeForUser(user, tree) {
+  let adminKey;
+  if (user.role === "admin") {
+    adminKey = user.fullName.toLowerCase();
+  } else {
+    adminKey = user.area.toLowerCase();
+  }
+  const catDocRef = doc(db, "categoryTrees", adminKey);
+  await setDoc(catDocRef, { tree }, { merge: true });
+}
+
+/** 
+ * HierarchicalSelect component for picking categories in nested form.
+ */
 function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
   const [selectedPath, setSelectedPath] = useState([]);
   const [otherValue, setOtherValue] = useState("");
@@ -313,16 +303,16 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
     let matchedAll = true;
     const tempPath = [];
     for (let part of chain) {
-      const found = nodes.find((n) => n.name === part || n.name.startsWith("Other:"));
+      const found = nodes.find(
+        (n) => n.name === part || n.name.startsWith("Other:")
+      );
       if (!found && !part.startsWith("Other:") && part !== "Other") {
         matchedAll = false;
         break;
       }
       tempPath.push(part);
       const nodeObj = nodes.find((x) => x.name === part);
-      if (!nodeObj) {
-        continue;
-      }
+      if (!nodeObj) continue;
       nodes = nodeObj.children || [];
     }
     if (!matchedAll) {
@@ -384,7 +374,8 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
         ))}
       </select>
     );
-    if (sel === "Select" || sel === "Other" || sel.startsWith("Other:")) break;
+    if (sel === "Select" || sel === "Other" || sel.startsWith("Other:"))
+      break;
     const found = nodes.find((n) => n.name === sel);
     if (!found || !found.children || found.children.length === 0) break;
     nodes = found.children;
@@ -402,7 +393,10 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
             if (!viewMode) {
               const typed = e.target.value;
               setOtherValue("Other: " + typed);
-              const newChain = [...selectedPath.slice(0, -1), "Other: " + typed].join(" / ");
+              const newChain = [
+                ...selectedPath.slice(0, -1),
+                "Other: " + typed,
+              ].join(" / ");
               onChange(newChain);
             }
           }}
@@ -414,8 +408,84 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
 }
 
 /** 
- * Single schedule slot row with category + repeat options.
- * MODIFIED: Added drag functionality that copies the entire slot.
+ * CategoryBuilder component for editing the category tree.
+ */
+function CategoryBuilder({ initialTree, onSave, onCancel }) {
+  const [tree, setTree] = useState(initialTree || []);
+
+  function renderCategoryList(categories, updateFn) {
+    return categories.map((cat, idx) => (
+      <div key={cat.id || idx} style={{ marginLeft: "20px", marginTop: "5px" }}>
+        <input
+          type="text"
+          value={cat.name}
+          onChange={(e) => {
+            const newCat = { ...cat, name: e.target.value };
+            const newCategories = [...categories];
+            newCategories[idx] = newCat;
+            updateFn(newCategories);
+          }}
+          placeholder="Category name"
+        />
+        <button onClick={() => {
+          const newCategories = categories.filter((_, i) => i !== idx);
+          updateFn(newCategories);
+        }}>Delete</button>
+        <div>
+          {cat.children && renderCategoryList(cat.children, (newChildList) => {
+            const newCat = { ...cat, children: newChildList };
+            const newCategories = [...categories];
+            newCategories[idx] = newCat;
+            updateFn(newCategories);
+          })}
+        </div>
+        <button onClick={() => {
+          const newCat = { id: Date.now(), name: "", children: [] };
+          const newChildren = cat.children ? [...cat.children, newCat] : [newCat];
+          const updatedCat = { ...cat, children: newChildren };
+          const newCategories = [...categories];
+          newCategories[idx] = updatedCat;
+          updateFn(newCategories);
+        }}>Add Subcategory</button>
+      </div>
+    ));
+  }
+
+  return (
+    <div style={{ border: "1px solid #ccc", padding: "10px", marginTop: "10px" }}>
+      <h3>Category Builder</h3>
+      <div>{renderCategoryList(tree, setTree)}</div>
+      <button onClick={() => {
+        const newMainCat = { id: Date.now(), name: "", children: [] };
+        setTree([...tree, newMainCat]);
+      }}>Add Main Category</button>
+      <div style={{ marginTop: "10px" }}>
+        <button onClick={() => onSave(tree)}>Save Categories</button>
+        <button onClick={onCancel} style={{ marginLeft: "5px" }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* Helper: Check if a day's data has any user-entered content. */
+function dayHasContent(day) {
+  const hasPriorities =
+    day.priorities && day.priorities.some((p) => p.text && p.text.trim() !== "");
+  const hasBrainDump =
+    day.brainDump && day.brainDump.some((b) => b.text && b.text.trim() !== "");
+  const hasSchedule =
+    day.schedule &&
+    Object.values(day.schedule).some((entry) => {
+      if (Array.isArray(entry)) {
+        return entry.some((e) => e.text && e.text.trim() !== "");
+      }
+      return entry.text && entry.text.trim() !== "";
+    });
+  return hasPriorities || hasBrainDump || hasSchedule;
+}
+
+/** 
+ * ScheduleSlot component – single schedule slot row.
  */
 function ScheduleSlot({
   label,
@@ -423,10 +493,10 @@ function ScheduleSlot({
   updateEntry,
   viewMode,
   categoryTree,
-  slotIndex,    // index of this slot (from quarterSlots)
-  taskIndex,    // index of the task in the cell
-  onDragRange,  // callback to update a range of slots
-  allTasks,     // the entire tasks array for the current time slot
+  slotIndex,
+  taskIndex,
+  onDragRange,
+  allTasks,
 }) {
   const [showRepeatOptions, setShowRepeatOptions] = useState(false);
   const repeatVal = scheduleEntry.repeat || "none";
@@ -441,14 +511,15 @@ function ScheduleSlot({
   };
 
   return (
-    <div className="schedule-slot" 
-         onDragOver={(e) => e.preventDefault()}
-         onDrop={(e) => {
-           e.preventDefault();
-           if (window.dragData && window.dragData.startIndex !== undefined) {
-             onDragRange(window.dragData.startIndex, slotIndex, window.dragData.allTasks);
-           }
-         }}
+    <div
+      className="schedule-slot"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (window.dragData && window.dragData.startIndex !== undefined) {
+          onDragRange(window.dragData.startIndex, slotIndex, window.dragData.allTasks);
+        }
+      }}
     >
       <div style={{ flexGrow: 1 }}>
         {categoryTree && categoryTree.length > 0 ? (
@@ -466,7 +537,6 @@ function ScheduleSlot({
             onChange={(e) => handleTextChange(e.target.value)}
           />
         )}
-        {/* Drag Button appears only on the first task of the slot */}
         {!viewMode && taskIndex === 0 && (
           <button
             className="drag-btn"
@@ -485,7 +555,7 @@ function ScheduleSlot({
                 onDragRange(window.dragData.startIndex, slotIndex, window.dragData.allTasks);
               }
             }}
-            onDragEnd={(e) => {
+            onDragEnd={() => {
               window.dragData = {};
             }}
             style={{ marginLeft: "5px", cursor: "move" }}
@@ -534,350 +604,29 @@ function ScheduleSlot({
 }
 
 /**
- * Full-Screen Modal for usage reports.
+ * Update a range of schedule slots via drag.
  */
-function ReportsModal({
-  usageMap,
-  freeHours,
-  totalHours,
-  homeOfficeDays,
-  nonHomeOfficeDays,
-  reportRange,
-  setReportRange,
-  onClose,
-  // NEW REPORT PROPS:
-  reportBaselineDate,
-  setReportBaselineDate,
-  customRangeStart,
-  setCustomRangeStart,
-  customRangeEnd,
-  setCustomRangeEnd,
-}) {
-  const colorPalette = [
-    "#FF6384",
-    "#36A2EB",
-    "#FFCE56",
-    "#4BC0C0",
-    "#9966FF",
-    "#FF9F40",
-    "#F67019",
-    "#FA8072",
-    "#8B008B",
-  ];
-
-  // Define a common container style matching the original usage bar graph.
-  const chartContainerStyle = {
-    width: "100%",
-    maxWidth: 4000,
-    height: 400,
-    border: "1px solid #ccc",
-    marginBottom: 40,
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-  };
-
-  function renderPieChart() {
-    if (totalHours === 0) {
-      const data = {
-        labels: ["No Data"],
-        datasets: [{ data: [1], backgroundColor: ["#ccc"] }],
-      };
-      return (
-        <div
-          style={{
-            width: "90%",
-            maxWidth: 600,
-            height: 400,
-            border: "1px solid #ccc",
-            marginBottom: 40,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Pie data={data} options={{ responsive: false, maintainAspectRatio: false }} />
-        </div>
-      );
+function updateScheduleRange(startIndex, endIndex, allTasks, canViewAgenda, viewMode, updateActiveData, quarterSlots, currentDateStr) {
+  if (!canViewAgenda || viewMode) return;
+  const start = Math.min(startIndex, endIndex);
+  const end = Math.max(startIndex, endIndex);
+  updateActiveData((draft) => {
+    for (let i = start; i <= end; i++) {
+      const slot = quarterSlots[i];
+      if (!slot) continue;
+      const slotLabel = formatTime(slot.hour, slot.minute);
+      draft.timeBox[currentDateStr].schedule[slotLabel] = [...allTasks];
     }
-    const busyHours = totalHours - freeHours;
-    const data = {
-      labels: ["Free (hrs)", "Busy (hrs)"],
-      datasets: [
-        {
-          data: [freeHours, busyHours],
-          backgroundColor: [colorPalette[1], colorPalette[0]],
-        },
-      ],
-    };
-    return (
-      <div
-        style={{
-          width: "90%",
-          maxWidth: 600,
-          height: 400,
-          border: "1px solid #ccc",
-          marginBottom: 40,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Pie data={data} options={{ responsive: false, maintainAspectRatio: false }} />
-      </div>
-    );
-  }
-
-  function renderHomeOfficeBar() {
-    const data = {
-      labels: ["Home Office Days", "Non Home Office"],
-      datasets: [
-        {
-          label: "Days",
-          data: [homeOfficeDays, nonHomeOfficeDays],
-          backgroundColor: [colorPalette[2], colorPalette[3]],
-        },
-      ],
-    };
-    return (
-      <div style={chartContainerStyle}>
-        <Bar data={data} options={{ responsive: false, maintainAspectRatio: false }} />
-      </div>
-    );
-  }
-
-  // NEW: Aggregate usageMap by main category only.
-  function aggregateByMainCategory() {
-    const agg = {};
-    Object.keys(usageMap).forEach((key) => {
-      const parts = key.split(" / ").map(s => s.trim());
-      const main = parts[0];
-      agg[main] = (agg[main] || 0) + usageMap[key];
-    });
-    return agg;
-  }
-
-  // NEW: Aggregate usageMap by main category and first subcategory.
-  // Only include if a subcategory exists.
-  function aggregateByMainAndFirstSub() {
-    const agg = {};
-    Object.keys(usageMap).forEach((key) => {
-      const parts = key.split(" / ").map(s => s.trim());
-      if (parts.length < 2) return; // skip if no subcategory
-      const label = parts.slice(0, 2).join(" / ");
-      agg[label] = (agg[label] || 0) + usageMap[key];
-    });
-    return agg;
-  }
-
-  // NEW: Aggregate usageMap by main category, first subcategory and group remaining subcategories as "Others".
-  // Only include if there is a second subcategory.
-  function aggregateByMainFirstSubAndOthers() {
-    const agg = {};
-    Object.keys(usageMap).forEach((key) => {
-      const parts = key.split(" / ").map(s => s.trim());
-      if (parts.length < 3) return; // skip if no 2nd subcategory
-      const label = parts[0] + " / " + parts[1] + " / Others";
-      agg[label] = (agg[label] || 0) + usageMap[key];
-    });
-    return agg;
-  }
-
-  // NEW: Render chart for main category only.
-  function renderMainCategoryChart() {
-    const aggData = aggregateByMainCategory();
-    const labels = Object.keys(aggData).length ? Object.keys(aggData) : ["No Data"];
-    const dataVals = labels.map((l) => aggData[l] || 0);
-    const data = {
-      labels,
-      datasets: [
-        {
-          label: "Usage by Main Category (hrs)",
-          data: dataVals,
-          backgroundColor: labels.map((_, i) => colorPalette[i % colorPalette.length]),
-        },
-      ],
-    };
-    return (
-      <div style={chartContainerStyle}>
-        <Bar
-  data={data}
-  width={1000}       // set your desired width
-  height={400}      // set your desired height
-  options={{ responsive: false, maintainAspectRatio: false }}
-/>
-      </div>
-    );
-  }
-
-  // NEW: Render chart for main category and first subcategory.
-  function renderMainAndSubChart() {
-    const aggData = aggregateByMainAndFirstSub();
-    // If no key has a subcategory, do not render the chart.
-    if (!Object.keys(aggData).length) return null;
-    const labels = Object.keys(aggData);
-    const dataVals = labels.map((l) => aggData[l]);
-    const data = {
-      labels,
-      datasets: [
-        {
-          label: "Usage by Main and First Subcategory (hrs)",
-          data: dataVals,
-          backgroundColor: labels.map((_, i) => colorPalette[i % colorPalette.length]),
-        },
-      ],
-    };
-    return (
-      <div style={chartContainerStyle}>
-        <Bar
-  data={data}
-  width={1000}       // set your desired width
-  height={400}      // set your desired height
-  options={{ responsive: false, maintainAspectRatio: false }}
-/>
-      </div>
-    );
-  }
-
-  // NEW: Render chart for main category, first subcategory and group remaining subcategories.
-  function renderMainSubOthersChart() {
-    const aggData = aggregateByMainFirstSubAndOthers();
-    // Only render if there is data for a second subcategory.
-    if (!Object.keys(aggData).length) return null;
-    const labels = Object.keys(aggData);
-    const dataVals = labels.map((l) => aggData[l]);
-    const data = {
-      labels,
-      datasets: [
-        {
-          label: "Usage by Main / First Sub / Others (hrs)",
-          data: dataVals,
-          backgroundColor: labels.map((_, i) => colorPalette[i % colorPalette.length]),
-        },
-      ],
-    };
-    return (
-      <div style={chartContainerStyle}>
-        <Bar
-  data={data}
-  width={1000}       // set your desired width
-  height={400}      // set your desired height
-  options={{ responsive: false, maintainAspectRatio: false }}
-/>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        zIndex: 9999,
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
-        backgroundColor: "#fff",
-        overflow: "auto",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        paddingBottom: 50,
-      }}
-    >
-      <button
-        style={{
-          alignSelf: "flex-end",
-          margin: "10px",
-          padding: "8px 16px",
-          fontSize: 14,
-          cursor: "pointer",
-        }}
-        onClick={onClose}
-      >
-        Close
-      </button>
-      <h2 style={{ marginTop: 0 }}>Full-Screen Reports</h2>
-      <div style={{ margin: "10px 0" }}>
-        <button onClick={() => setReportRange("daily")}>
-          {reportRange === "daily" ? "Daily ✓" : "Daily"}
-        </button>
-        <button onClick={() => setReportRange("weekly")} style={{ marginLeft: 5 }}>
-          {reportRange === "weekly" ? "Weekly ✓" : "Weekly"}
-        </button>
-        <button onClick={() => setReportRange("monthly")} style={{ marginLeft: 5 }}>
-          {reportRange === "monthly" ? "Monthly ✓" : "Monthly"}
-        </button>
-        <button onClick={() => setReportRange("yearly")} style={{ marginLeft: 5 }}>
-          {reportRange === "yearly" ? "Yearly ✓" : "Yearly"}
-        </button>
-        <button onClick={() => setReportRange("alltime")} style={{ marginLeft: 5 }}>
-          {reportRange === "alltime" ? "All Time ✓" : "All Time"}
-        </button>
-        {/* NEW: Custom Range Button */}
-        <button onClick={() => setReportRange("custom")} style={{ marginLeft: 5 }}>
-          {reportRange === "custom" ? "Custom Range ✓" : "Custom Range"}
-        </button>
-      </div>
-      {/* NEW: Baseline date selector or custom range inputs */}
-      {reportRange !== "custom" ? (
-        <div style={{ marginTop: 10 }}>
-          <label>Baseline Date: </label>
-          <input
-            type="date"
-            value={formatDate(reportBaselineDate)}
-            onChange={(e) => setReportBaselineDate(new Date(e.target.value))}
-          />
-        </div>
-      ) : (
-        <div style={{ marginTop: 10 }}>
-          <label>Start Date: </label>
-          <input
-            type="date"
-            value={customRangeStart}
-            onChange={(e) => setCustomRangeStart(e.target.value)}
-          />
-          <label style={{ marginLeft: 10 }}>End Date: </label>
-          <input
-            type="date"
-            value={customRangeEnd}
-            onChange={(e) => setCustomRangeEnd(e.target.value)}
-          />
-        </div>
-      )}
-      {/* NEW: Remove the old usage bar graph and render the new charts */}
-      {renderMainCategoryChart()}
-      {renderMainAndSubChart()}
-      {renderMainSubOthersChart()}
-      {renderPieChart()}
-      {renderHomeOfficeBar()}
-    </div>
-  );
+  });
 }
 
-/** Helper function to check if a day's data has any user-entered content */
-function dayHasContent(day) {
-  const hasPriorities =
-    day.priorities && day.priorities.some((p) => p.text && p.text.trim() !== "");
-  const hasBrainDump =
-    day.brainDump && day.brainDump.some((b) => b.text && b.text.trim() !== "");
-  const hasSchedule =
-    day.schedule &&
-    Object.values(day.schedule).some((entry) => {
-      if (Array.isArray(entry)) {
-        return entry.some((e) => e.text && e.text.trim() !== "");
-      }
-      return entry.text && entry.text.trim() !== "";
-    });
-  return hasPriorities || hasBrainDump || hasSchedule;
-}
-
-/** Main App Component */
+/** 
+ * Main App Component
+ */
 export default function App() {
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [displayUser, setDisplayUser] = useState(null);
   const [syncedUsers, setSyncedUsers] = useState({});
-  const [categoriesBySheet, setCategoriesBySheet] = useState({});
   const [categoryTree, setCategoryTree] = useState([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -891,10 +640,13 @@ export default function App() {
   const [showReports, setShowReports] = useState(false);
   const [reportRange, setReportRange] = useState("daily");
 
-  // NEW: New state variables for report baseline and custom range
+  // NEW: State variables for report baseline and custom range
   const [reportBaselineDate, setReportBaselineDate] = useState(new Date());
   const [customRangeStart, setCustomRangeStart] = useState(formatDate(new Date()));
   const [customRangeEnd, setCustomRangeEnd] = useState(formatDate(new Date()));
+
+  // NEW: State for showing the category builder (for admins)
+  const [showCategoryBuilder, setShowCategoryBuilder] = useState(false);
 
   const isLoggedIn = !!loggedInUser && loggedInUser.password === password;
   const isAdmin = isLoggedIn && loggedInUser.role === "admin";
@@ -957,24 +709,11 @@ export default function App() {
     async function init() {
       const users = await syncUsersFromSheet();
       setSyncedUsers(users);
-      const catsMap = await fetchCategoriesBySheet();
-      setCategoriesBySheet(catsMap);
     }
     init();
   }, []);
 
-  function pickCategoryTreeForUser(u) {
-    if (!u) return [];
-    if (u.role === "employee") {
-      return categoriesBySheet[u.sheet] || [];
-    }
-    if (u.role === "admin" && u.allowedAreas) {
-      const arrays = u.allowedAreas.map((areaName) => categoriesBySheet[areaName] || []);
-      return arrays.flat();
-    }
-    return [];
-  }
-
+  // Load user record and category tree.
   async function loadUserRecord(record, isEmployeeView) {
     try {
       const updatedRecord = await loadUserFromFirestore(record);
@@ -988,11 +727,13 @@ export default function App() {
       }
       setViewMode(isEmployeeView);
       setMessage("");
-      const cats = pickCategoryTreeForUser(updatedRecord);
-      setCategoryTree(cats);
+      // Pass syncedUsers so that the admin lookup works correctly.
+      const tree = await loadCategoryTreeForUser(updatedRecord, syncedUsers);
+      setCategoryTree(tree);
       if (updatedRecord.password !== password && !isEmployeeView) {
         setMessage("Incorrect password (or blank if brand-new user).");
       }
+      return updatedRecord;
     } catch (err) {
       console.error("Error loading user from Firestore:", err);
       if (!isEmployeeView) {
@@ -1004,9 +745,8 @@ export default function App() {
         setViewingTarget(true);
       }
       setViewMode(isEmployeeView);
-      const cats = pickCategoryTreeForUser(record);
-      setCategoryTree(cats);
       setMessage("Could not fetch from Firestore, using local fallback.");
+      return record;
     }
   }
 
@@ -1038,7 +778,7 @@ export default function App() {
     };
   }
 
-  function handleLogin() {
+  async function handleLogin() {
     if (!username) {
       setMessage("Please enter a username.");
       return;
@@ -1048,12 +788,12 @@ export default function App() {
       setMessage("User not recognized. Check spelling of the full name from your sheet.");
       return;
     }
-    loadUserRecord(record, false);
+    await loadUserRecord(record, false);
     localStorage.setItem("username", username);
     localStorage.setItem("password", password);
   }
 
-  function handleLoadEmployee() {
+  async function handleLoadEmployee() {
     if (!targetUser) return;
     let employeeRecord = getUserRecord(targetUser);
     if (!employeeRecord) {
@@ -1068,7 +808,7 @@ export default function App() {
         defaultPreset: { start: 7, end: 23 },
       };
     }
-    loadUserRecord(employeeRecord, true);
+    await loadUserRecord(employeeRecord, true);
     setMessage(`Loaded agenda for ${targetUser}`);
   }
 
@@ -1077,8 +817,7 @@ export default function App() {
     setViewingTarget(false);
     setViewMode(false);
     setMessage("Back to your agenda.");
-    const cats = pickCategoryTreeForUser(loggedInUser);
-    setCategoryTree(cats);
+    loadCategoryTreeForUser(loggedInUser, syncedUsers).then((tree) => setCategoryTree(tree));
   }
 
   // PRIORITIES FUNCTIONS
@@ -1098,8 +837,11 @@ export default function App() {
           endHour: draft.defaultEndHour || 23,
         };
       }
-      // NEW: add default "priority" field set to "medium"
-      draft.timeBox[currentDateStr].priorities.push({ text: "", completed: false, priority: "medium" });
+      draft.timeBox[currentDateStr].priorities.push({
+        text: "",
+        completed: false,
+        priority: "medium",
+      });
     });
   }
   function togglePriorityCompleted(idx) {
@@ -1137,7 +879,6 @@ export default function App() {
       }
     });
   }
-  // NEW: Function to update the priority level and sort the priorities
   function updatePriorityLevel(idx, level) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
@@ -1154,9 +895,8 @@ export default function App() {
         };
       }
       draft.timeBox[currentDateStr].priorities[idx].priority = level;
-      // Sort priorities so that high > medium > low
+      const levels = { high: 3, medium: 2, low: 1 };
       draft.timeBox[currentDateStr].priorities.sort((a, b) => {
-        const levels = { high: 3, medium: 2, low: 1 };
         return levels[b.priority || "medium"] - levels[a.priority || "medium"];
       });
     });
@@ -1178,7 +918,10 @@ export default function App() {
           endHour: draft.defaultEndHour || 23,
         };
       }
-      draft.timeBox[currentDateStr].brainDump.push({ text: "", completed: false });
+      draft.timeBox[currentDateStr].brainDump.push({
+        text: "",
+        completed: false,
+      });
     });
   }
   function toggleBrainDumpCompleted(i) {
@@ -1271,9 +1014,11 @@ export default function App() {
   function removeScheduleTask(label, taskIndex) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (draft.timeBox[currentDateStr] &&
-          draft.timeBox[currentDateStr].schedule &&
-          draft.timeBox[currentDateStr].schedule[label]) {
+      if (
+        draft.timeBox[currentDateStr] &&
+        draft.timeBox[currentDateStr].schedule &&
+        draft.timeBox[currentDateStr].schedule[label]
+      ) {
         if (Array.isArray(draft.timeBox[currentDateStr].schedule[label])) {
           draft.timeBox[currentDateStr].schedule[label].splice(taskIndex, 1);
         } else {
@@ -1303,198 +1048,6 @@ export default function App() {
       draft.defaultPreset.end = parseInt(h, 10);
       if (draft.timeBox[currentDateStr]) {
         draft.timeBox[currentDateStr].endHour = parseInt(h, 10);
-      }
-    });
-  }
-
-  function usageInSingleDay(dt) {
-    if (dt.getDay() === 0 || dt.getDay() === 6) {
-      return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    }
-    const ds = formatDate(dt);
-    const day = activeData?.timeBox[ds];
-    if (!day || !dayHasContent(day) || day.vacation) {
-      return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    }
-    const { startHour = 7, endHour = 23, schedule = {} } = day;
-    let freeHours = 0;
-    let totalHours = 0;
-    const usageMap = {};
-    const slots = getQuarterHourSlots(startHour, endHour);
-  
-    slots.forEach(({ hour, minute }) => {
-      totalHours += 0.5;
-      const label = formatTime(hour, minute);
-      const tasks = schedule[label]
-        ? Array.isArray(schedule[label])
-          ? schedule[label]
-          : [schedule[label]]
-        : [];
-  
-      if (tasks.length === 0) {
-        freeHours += 0.5;
-      } else {
-        let anyText = false;
-        tasks.forEach((t) => {
-          if (t.text && t.text.trim() !== "") {
-            anyText = true;
-            usageMap[t.text] = (usageMap[t.text] || 0) + 0.5;
-          }
-        });
-        if (!anyText) {
-          freeHours += 0.5;
-        }
-      }
-    });
-    return { usageMap, freeHours, totalHours };
-  }
-  
-  // REPORT FUNCTIONS
-
-  // Modified: usageInRange now accepts a baselineDate parameter
-  function usageInRange({ days = null, months = null, years = null, baselineDate = new Date() } = {}) {
-    const dateKeys = getAllDates();
-    if (!dateKeys.length) return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    let boundary = null;
-    if (days) {
-      boundary = new Date(baselineDate);
-      boundary.setDate(boundary.getDate() - days);
-    } else if (months) {
-      boundary = new Date(baselineDate);
-      boundary.setMonth(boundary.getMonth() - months);
-    } else if (years) {
-      boundary = new Date(baselineDate);
-      boundary.setFullYear(boundary.getFullYear() - years);
-    }
-
-    let freeHours = 0;
-    let totalHours = 0;
-    const usageMap = {};
-
-    dateKeys.forEach((ds) => {
-      const dt = parseDateStr(ds);
-      if (boundary && dt < boundary) return;
-      if (dt.getDay() === 0 || dt.getDay() === 6) return;
-      const day = activeData.timeBox[ds];
-      if (!day || !dayHasContent(day) || day.vacation) return;
-
-      const slots = getQuarterHourSlots(day.startHour, day.endHour);
-      slots.forEach(({ hour, minute }) => {
-        totalHours += 0.5;
-        const label = formatTime(hour, minute);
-        const tasks = day.schedule[label]
-          ? Array.isArray(day.schedule[label]) 
-            ? day.schedule[label]
-            : [day.schedule[label]]
-          : [];
-
-        if (tasks.length === 0) {
-          freeHours += 0.5;
-        } else {
-          let anyText = false;
-          tasks.forEach((t) => {
-            if (t.text && t.text.trim() !== "") {
-              anyText = true;
-              usageMap[t.text] = (usageMap[t.text] || 0) + 0.5;
-            }
-          });
-          if (!anyText) {
-            freeHours += 0.5;
-          }
-        }
-      });
-    });
-    return { usageMap, freeHours, totalHours };
-  }
-
-  // NEW: Function for custom range report
-  function usageInCustomRange(startStr, endStr) {
-    const start = parseDateStr(startStr);
-    const end = parseDateStr(endStr);
-    let freeHours = 0;
-    let totalHours = 0;
-    const usageMap = {};
-    const dateKeys = getAllDates();
-    dateKeys.forEach(ds => {
-      const dt = parseDateStr(ds);
-      if (dt < start || dt > end) return;
-      if (dt.getDay() === 0 || dt.getDay() === 6) return;
-      const day = activeData.timeBox[ds];
-      if (!day || !dayHasContent(day) || day.vacation) return;
-      const slots = getQuarterHourSlots(day.startHour, day.endHour);
-      slots.forEach(({ hour, minute }) => {
-        totalHours += 0.5;
-        const label = formatTime(hour, minute);
-        const tasks = day.schedule[label]
-          ? Array.isArray(day.schedule[label]) 
-            ? day.schedule[label]
-            : [day.schedule[label]]
-          : [];
-        if (tasks.length === 0) {
-          freeHours += 0.5;
-        } else {
-          let anyText = false;
-          tasks.forEach((t) => {
-            if (t.text && t.text.trim() !== "") {
-              anyText = true;
-              usageMap[t.text] = (usageMap[t.text] || 0) + 0.5;
-            }
-          });
-          if (!anyText) {
-            freeHours += 0.5;
-          }
-        }
-      });
-    });
-    return { usageMap, freeHours, totalHours };
-  }
-
-  function parseDateStr(ds) {
-    const [y, m, d] = ds.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }
-  function getAllDates() {
-    return activeData?.timeBox ? Object.keys(activeData.timeBox) : [];
-  }
-
-  // Modified: computeReportData now uses the reportBaselineDate or custom range values
-  function computeReportData() {
-    if (!canViewAgenda || !isAdmin) return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    if (reportRange === "daily") return usageInSingleDay(reportBaselineDate);
-    if (reportRange === "weekly") return usageInRange({ days: 7, baselineDate: reportBaselineDate });
-    if (reportRange === "monthly") return usageInRange({ months: 1, baselineDate: reportBaselineDate });
-    if (reportRange === "yearly") return usageInRange({ years: 1, baselineDate: reportBaselineDate });
-    if (reportRange === "alltime") return usageInRange({ baselineDate: new Date("1970-01-01") });
-    if (reportRange === "custom") return usageInCustomRange(customRangeStart, customRangeEnd);
-    return usageInSingleDay(reportBaselineDate);
-  }
-  const usageResult = computeReportData();
-  const { usageMap, freeHours, totalHours } = usageResult;
-
-  let homeOfficeDays = 0;
-  let nonHomeOfficeDays = 0;
-  if (canViewAgenda && activeData?.timeBox) {
-    const dateKeys = Object.keys(activeData.timeBox);
-    dateKeys.forEach((ds) => {
-      const day = activeData.timeBox[ds];
-      if (day?.homeOffice) homeOfficeDays++;
-      else nonHomeOfficeDays++;
-    });
-  }
-
-  const quarterSlots = canViewAgenda ? getQuarterHourSlots(startHour, endHour) : [];
-
-  // NEW: Function to update a range of schedule slots via drag
-  function updateScheduleRange(startIndex, endIndex, allTasks) {
-    if (!canViewAgenda || viewMode) return;
-    const start = Math.min(startIndex, endIndex);
-    const end = Math.max(startIndex, endIndex);
-    updateActiveData((draft) => {
-      for (let i = start; i <= end; i++) {
-        const slot = quarterSlots[i];
-        if (!slot) continue;
-        const slotLabel = formatTime(slot.hour, slot.minute);
-        draft.timeBox[currentDateStr].schedule[slotLabel] = [...allTasks];
       }
     });
   }
@@ -1584,23 +1137,22 @@ export default function App() {
       {isLoggedIn && showConfetti && (
         <Confetti width={window.innerWidth} height={window.innerHeight} />
       )}
+      {/* Render Reports modal for admins */}
       {showReports && isAdmin && (
         <ReportsModal
-          usageMap={usageMap}
-          freeHours={freeHours}
-          totalHours={totalHours}
-          homeOfficeDays={homeOfficeDays}
-          nonHomeOfficeDays={nonHomeOfficeDays}
+          activeData={activeData}
+          currentDate={currentDate}
+          startHour={startHour}
+          endHour={endHour}
           reportRange={reportRange}
           setReportRange={setReportRange}
-          onClose={() => setShowReports(false)}
-          // NEW: Pass report date props to ReportsModal
           reportBaselineDate={reportBaselineDate}
           setReportBaselineDate={setReportBaselineDate}
           customRangeStart={customRangeStart}
           setCustomRangeStart={setCustomRangeStart}
           customRangeEnd={customRangeEnd}
           setCustomRangeEnd={setCustomRangeEnd}
+          onClose={() => setShowReports(false)}
         />
       )}
       {/* LEFT COLUMN */}
@@ -1767,10 +1319,26 @@ export default function App() {
                 </button>
               )}
             </div>
+            {/* Category Builder toggle for admins */}
+            <div style={{ marginTop: 10 }}>
+              <button onClick={() => setShowCategoryBuilder(!showCategoryBuilder)}>
+                {showCategoryBuilder ? "Close Category Builder" : "Edit Categories"}
+              </button>
+            </div>
+            {showCategoryBuilder && (
+              <CategoryBuilderTable
+                initialTree={categoryTree}
+                onSave={async (newTree) => {
+                  setCategoryTree(newTree);
+                  await saveCategoryTreeForUser(loggedInUser, newTree);
+                  setShowCategoryBuilder(false);
+                }}
+                onCancel={() => setShowCategoryBuilder(false)}
+              />
+            )}
           </div>
         )}
-
-        {/* <-- ADD YOUR CHAT COMPONENT HERE, VISIBLE ONLY IF LOGGED IN --> */}
+        {/* Chat Component */}
         {isLoggedIn && (
           <div style={{ marginTop: "30px" }}>
             <Chat currentUser={loggedInUser} />
@@ -1803,8 +1371,12 @@ export default function App() {
                   }
                 }}
               />
-              <button onClick={() => setCurrentDate(getPrevDay(currentDate))}>&lt;</button>
-              <button onClick={() => setCurrentDate(getNextDay(currentDate))}>&gt;</button>
+              <button onClick={() => setCurrentDate(getPrevDay(currentDate))}>
+                &lt;
+              </button>
+              <button onClick={() => setCurrentDate(getNextDay(currentDate))}>
+                &gt;
+              </button>
               <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                 <input
                   type="checkbox"
@@ -1909,11 +1481,14 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {quarterSlots.map(({ hour, minute }, idx) => {
+                  {getQuarterHourSlots(startHour, endHour).map(({ hour, minute }, idx) => {
                     const label = formatTime(hour, minute);
                     const dayTotalMinutes = (endHour - startHour) * 60;
-                    const slotMinutes = ((hour - startHour) * 60 + minute);
-                    const progressPercentage = Math.min(Math.max((slotMinutes / dayTotalMinutes) * 100, 0), 100);
+                    const slotMinutes = (hour - startHour) * 60 + minute;
+                    const progressPercentage = Math.min(
+                      Math.max((slotMinutes / dayTotalMinutes) * 100, 0),
+                      100
+                    );
                     
                     let tasks = dayObj.schedule?.[label];
                     if (tasks) {
@@ -1948,7 +1523,10 @@ export default function App() {
                         </td>
                         <td>
                           {tasks.map((task, taskIndex) => (
-                            <div key={taskIndex} style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
+                            <div
+                              key={taskIndex}
+                              style={{ display: "flex", alignItems: "center", marginBottom: 4 }}
+                            >
                               <ScheduleSlot
                                 label={label}
                                 scheduleEntry={task}
@@ -1957,7 +1535,18 @@ export default function App() {
                                 categoryTree={categoryTree}
                                 slotIndex={idx}
                                 taskIndex={taskIndex}
-                                onDragRange={updateScheduleRange}
+                                onDragRange={(start, end, allTasks) =>
+                                  updateScheduleRange(
+                                    start,
+                                    end,
+                                    allTasks,
+                                    canViewAgenda,
+                                    viewMode,
+                                    updateActiveData,
+                                    getQuarterHourSlots(startHour, endHour),
+                                    currentDateStr
+                                  )
+                                }
                                 allTasks={tasks}
                               />
                               {!viewMode && (

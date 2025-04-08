@@ -47,9 +47,11 @@ const AppContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Hide the Header on /login or /landing
+  // Hide the Header on /login, /landing, or /ADMIN-DIGITAL-CALENDAR
   const hideHeader =
-    location.pathname === '/login' || location.pathname === '/landing';
+    location.pathname === '/login' ||
+    location.pathname === '/landing' ||
+    location.pathname === '/ADMIN-DIGITAL-CALENDAR';
 
   // Check localStorage for auth status on first render
   useEffect(() => {
@@ -79,7 +81,6 @@ const AppContent = () => {
     localStorage.setItem('isAuthenticated', 'true');
     setIsAuthenticated(true);
 
-    // Use whatever path was last visited or default to /landing
     const lastPath = localStorage.getItem('lastPath') || '/landing';
     navigate(lastPath, { replace: true });
   };
@@ -91,7 +92,6 @@ const AppContent = () => {
     navigate('/login', { replace: true });
   };
 
-  // Show nothing until we've determined auth status
   if (isAuthenticated === null) return null;
 
   return (
@@ -110,7 +110,6 @@ const AppContent = () => {
 const AuthenticatedRoutes = ({ handleLogout }) => {
   return (
     <Routes>
-      {/* Redirect root path '/' to /landing */}
       <Route path="/" element={<Navigate to="/landing" replace />} />
 
       {/* Admin routes */}
@@ -159,7 +158,6 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
 const UnauthenticatedRoutes = ({ handleLogin }) => (
   <Routes>
     <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-    {/* If not logged in, any other route sends user to /login */}
     <Route path="*" element={<Navigate to="/login" replace />} />
   </Routes>
 );

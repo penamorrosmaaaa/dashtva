@@ -2,9 +2,9 @@ import React from 'react';
 import { Box, Image, useBreakpointValue } from '@chakra-ui/react';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
 import logoImage from './assets/Diseño sin título (1).png';
-import dcImage from './assets/DC.png'; // Digital Calendar
-import poImage from './assets/PO.png'; // Popular Objects
-import tbImage from './assets/TB.png'; // Time Box
+import dcImage from './assets/DC.png';
+import poImage from './assets/PO.png';
+import tbImage from './assets/TB.png';
 
 const Header = () => {
   const logoSize = useBreakpointValue({ base: '100px', md: '150px' });
@@ -12,6 +12,25 @@ const Header = () => {
   const isDigitalCalendar = location.pathname === '/Digital-Calendar';
   const isPopularObjects = location.pathname === '/PopularObjects';
   const isTimeBox = location.pathname === '/Time-Box';
+
+  // Create star elements (just like LandingPage)
+  const starElements = Array.from({ length: 120 }).map((_, i) => {
+    const left = Math.random() * 100;
+    const top = Math.random() * 100;
+    const delay = Math.random() * 2;
+    return (
+      <Box
+        key={`header-star-${i}`}
+        className="star"
+        style={{
+          position: 'absolute',
+          left: `${left}%`,
+          top: `${top}%`,
+          animationDelay: `${delay}s, ${delay}s`,
+        }}
+      />
+    );
+  });
 
   return (
     <Box
@@ -26,8 +45,47 @@ const Header = () => {
       display="flex"
       alignItems="center"
       justifyContent="center"
+      overflow="hidden"
     >
-      <Box display="flex" alignItems="center" gap={6}>
+      {/* Inject star animations */}
+      <style>
+        {`
+          .star {
+            width: 2px;
+            height: 2px;
+            border-radius: 50%;
+            background: white;
+            box-shadow: 0 0 4px 1px rgba(255,255,255,0.8);
+            animation: starTwinkle 3s ease-in-out infinite alternate,
+                       starDrift 60s linear infinite;
+          }
+          @keyframes starTwinkle {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 0.2; }
+          }
+          @keyframes starDrift {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(0, 300px); }
+          }
+        `}
+      </style>
+
+      {/* Stars */}
+      <Box
+        position="absolute"
+        top="0"
+        left="0"
+        width="100%"
+        height="100%"
+        zIndex={0}
+        overflow="hidden"
+        pointerEvents="none"
+      >
+        {starElements}
+      </Box>
+
+      {/* Content */}
+      <Box display="flex" alignItems="center" gap={6} zIndex={1}>
         <RouterLink to="/landing">
           <Image
             src={logoImage}
@@ -38,27 +96,13 @@ const Header = () => {
         </RouterLink>
 
         {isDigitalCalendar && (
-          <Image
-            src={dcImage}
-            alt="Digital Calendar Title"
-            height="50px"
-          />
+          <Image src={dcImage} alt="Digital Calendar Title" height="50px" />
         )}
-
         {isPopularObjects && (
-          <Image
-            src={poImage}
-            alt="Popular Objects Title"
-            height="50px"
-          />
+          <Image src={poImage} alt="Popular Objects Title" height="50px" />
         )}
-
         {isTimeBox && (
-          <Image
-            src={tbImage}
-            alt="Time Box Title"
-            height="50px"
-          />
+          <Image src={tbImage} alt="Time Box Title" height="50px" />
         )}
       </Box>
     </Box>

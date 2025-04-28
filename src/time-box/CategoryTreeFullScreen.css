@@ -1,0 +1,140 @@
+/* Full-screen overlay styling */
+.fullscreen-overlay {
+    position: fixed;
+    z-index: 9999;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: #f9f9f9;
+    overflow-y: auto;
+    padding: 20px;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+  }
+  
+  /* Header */
+  .fullscreen-overlay h2 {
+    margin-top: 0;
+    text-align: center;
+    color: #333;
+    font-size: 2rem;
+  }
+  
+  /* Container for the tree nodes */
+  .tree-container {
+    margin: 20px auto;
+    max-width: 800px;
+  }
+  
+  /* Category node styling */
+  .category-node {
+    margin-left: 20px;
+    margin-top: 10px;
+    border-left: 2px solid #ddd;
+    padding-left: 10px;
+  }
+  
+  /* Header for each node */
+  .category-node-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  /* Toggle button (for expand/collapse) */
+  .toggle-button {
+    width: 30px;
+    height: 30px;
+    font-size: 1.2rem;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  
+  .toggle-button:hover {
+    background-color: #0056b3;
+  }
+  
+  /* Placeholder to align text when no toggle is shown */
+  .toggle-button-placeholder {
+    width: 30px;
+    height: 30px;
+  }
+  
+  /* Input field for node name */
+  .category-node-header input {
+    flex: 1;
+    padding: 6px 8px;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  /* Buttons inside a node */
+  .category-node-header button {
+    padding: 6px 10px;
+    font-size: 0.9rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background-color: #007bff;
+    color: #fff;
+  }
+  
+  .category-node-header button:hover {
+    background-color: #0056b3;
+  }
+  
+  /* Full-screen control buttons */
+  .fullscreen-buttons {
+    margin-top: 30px;
+    text-align: center;
+  }
+  
+  .fullscreen-buttons button {
+    margin: 0 10px;
+    padding: 10px 20px;
+    font-size: 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .save-button {
+    background-color: #28a745;
+    color: #fff;
+  }
+  
+  .save-button:hover {
+    background-color: #218838;
+  }
+  
+  .cancel-button {
+    background-color: #dc3545;
+    color: #fff;
+  }
+  
+  .cancel-button:hover {
+    background-color: #c82333;
+  }
+  
+  /* Add main category button */
+  .add-main-category-button {
+    display: block;
+    margin: 20px auto;
+    padding: 10px 20px;
+    font-size: 1rem;
+    background-color: #17a2b8;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .add-main-category-button:hover {
+    background-color: #138496;
+  }
+  

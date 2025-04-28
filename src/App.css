@@ -1,14 +1,30 @@
+/***************************************
+ * App.css 
+ ***************************************/
+
+/* Minimal reset for html/body */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  /* Removed or commented out any background color here */
+  /* background-color: #ffffff; */
+}
+
+/* Container that spans the viewport */
 .container {
   display: flex;
   min-height: 100vh;
   font-family: "Arial", sans-serif;
-  background-color: #f0f2f5; /* Subtle overall page background */
+  /* REMOVED: background-color: #ffffff; or any override */
 }
 
 /* Left column layout */
 .left-column {
   width: 30%;
-  background-color: #fff;
+  /* Make background transparent so container’s color (or parent's) shows */
+  background-color: transparent;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
   padding: 20px;
   box-sizing: border-box;
@@ -19,7 +35,8 @@
   flex: 1;
   padding: 20px;
   box-sizing: border-box;
-  background-color: #fff;
+  /* Also transparent: */
+  background-color: transparent;
   box-shadow: inset 2px 0 8px rgba(0, 0, 0, 0.02);
 }
 
@@ -92,16 +109,16 @@
   align-items: center;
   margin-bottom: 6px;
 }
-.priority-text,
-.brain-dump-text {
+.priority-row input[type="text"],
+.brain-dump-row input[type="text"] {
   flex: 1;
   padding: 6px;
   border: 1px solid #ccc;
   border-radius: 4px;
   transition: text-decoration 0.3s, color 0.3s, background-color 0.2s;
 }
-.priority-text.completed,
-.brain-dump-text.completed {
+.priority-row input[type="text"].completed,
+.brain-dump-row input[type="text"].completed {
   text-decoration: line-through;
   color: #999;
   background-color: #f5f5f5;
@@ -197,7 +214,7 @@
 .schedule-table {
   width: 100%;
   border-collapse: collapse;
-  background-color: #fafafa;
+  background-color: #fafafa; /* Light but not pure white */
   border-radius: 4px;
   overflow: hidden;
 }
@@ -250,7 +267,7 @@
   transform: translateY(-1px);
 }
 
-/* Modal overlay (if used) */
+/* Modal overlay */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -261,7 +278,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 9999; /* ensure it sits on top */
+  z-index: 9999;
 }
 .modal-content {
   background: #fff;
@@ -274,4 +291,101 @@
 .modal-content h3 {
   margin-top: 0;
   color: #333;
+}
+
+textarea.priority-textarea,
+textarea.brain-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 24px;
+  max-height: 200px;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 4px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.react-calendar__tile.homeoffice {
+  border: 2px solid blue !important;
+}
+.vacation-cell {
+  background: #eee;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  margin: 2px auto;
+}
+
+.day-cell {
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  color: white;
+  text-align: center;
+  margin: 2px auto;
+  font-size: 0.8em;
+}
+
+.month-cell {
+  border-radius: 4px;
+  padding: 2px 4px;
+  color: white;
+  text-align: center;
+  font-size: 12px;
+}
+
+.month-cell .percentage {
+  font-size: 10px;
+}
+
+/* Add this to your App.css */
+.priority-row textarea,
+.brain-dump-row textarea {
+  width: 100%;
+  min-height: 20px;
+  resize: none;
+  overflow: hidden;
+  border: 1px solid #ccc;
+  padding: 4px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.priority-row textarea.completed,
+.brain-dump-row textarea.completed {
+  text-decoration: line-through;
+  color: #999;
+}
+
+/* In App.css */
+.priority-row, .brain-dump-row {
+  position: relative;
+}
+
+.completed-item {
+  position: relative;
+}
+
+.completed-item::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background-color: #ff0000;
+  transform: scaleX(1);
+  transform-origin: left center;
+  animation: crossOut 0.4s ease-out forwards;
+}
+
+@keyframes crossOut {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }

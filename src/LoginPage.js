@@ -1,32 +1,56 @@
-import React, { useState } from 'react';
-import { Box, Button, Input, FormControl, FormLabel, VStack, Image } from '@chakra-ui/react';
-import nasaImage from './assets/nasa-Q1p7bh3SHj8-unsplash.jpg';
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Button,
+  Input,
+  FormControl,
+  FormLabel,
+  VStack,
+  Image,
+} from '@chakra-ui/react';
+import nasaImage from './assets/sandro-katalina-k1bO_VTiZSs-unsplash.jpg';
 import logoImage from './assets/Diseño sin título (1).png';
+import Papa from 'papaparse';
 
 const LoginPage = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [credentials, setCredentials] = useState([]);
+
+  useEffect(() => {
+    Papa.parse(
+      'https://docs.google.com/spreadsheets/d/e/2PACX-1vQj8n4z0RMdgG8HPRjpXN38WVg-BsISD28dDS9D9nbScWsp0sPAyzFTo-I9usPafbDJ9kXANakp2rQ6/pub?output=csv',
+      {
+        download: true,
+        header: false,
+        complete: (result) => {
+          const rows = result.data;
+          const creds = rows.map(([user, pass]) => ({
+            username: user,
+            password: pass,
+          }));
+          setCredentials(creds);
+        },
+      }
+    );
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    // Check credentials against the provided username and password
-    if ((username === 'Gudiño' && password === '12345') || (username === 'Liz' && password === '1793')) {
-      onLogin(); // Trigger login
+    const matchedUser = credentials.find(
+      (cred) => cred.username === username && cred.password === password
+    );
+    if (matchedUser) {
+      localStorage.setItem('userName', matchedUser.username); // ✅ Store username
+      onLogin();
     } else {
       setError('Invalid credentials. Please try again.');
     }
   };
 
   return (
-    <Box
-      width="100vw"
-      height="100vh"
-      position="relative"
-      overflow="hidden"
-    >
-      {/* Background Gradient */}
+    <Box width="100vw" height="100vh" position="relative" overflow="hidden">
       <Box
         width="100vw"
         height="100vh"
@@ -37,8 +61,6 @@ const LoginPage = ({ onLogin }) => {
         opacity="0.9"
         zIndex="0"
       />
-
-      {/* Background Image */}
       <Image
         src={nasaImage}
         alt="NASA background"
@@ -51,8 +73,6 @@ const LoginPage = ({ onLogin }) => {
         opacity="0.6"
         zIndex="1"
       />
-
-      {/* Login Form */}
       <Box
         display="flex"
         alignItems="center"
@@ -63,8 +83,7 @@ const LoginPage = ({ onLogin }) => {
         color="white"
         flexDirection="column"
       >
-        {/* Logo in the Center */}
-        <Image src={logoImage} alt="Digital Benchmarks Logo" width="200px" mb={8} />
+        <Image src={logoImage} alt="Logo" width="200px" mb={8} />
         <VStack spacing={4} align="stretch" width="300px">
           <form onSubmit={handleSubmit}>
             <FormControl id="username" isRequired>

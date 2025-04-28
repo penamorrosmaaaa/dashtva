@@ -1,13 +1,11 @@
 /***************************************
  * App.js (React + Firebase Firestore)
- * A single-file version that properly
- * merges the 'timeBox' without erasing
- * historical data on each login.
  ***************************************/
 import React, { useState, useEffect } from "react";
 import { Bar, Pie } from "react-chartjs-2";
 import Confetti from "react-confetti";
-import { FaEllipsisH } from "react-icons/fa";
+import { FaEllipsisH, FaGripVertical, FaTrash } from "react-icons/fa";
+
 import {
   Chart as ChartJS,
   BarElement,
@@ -18,21 +16,29 @@ import {
   Legend,
   ArcElement,
 } from "chart.js";
+import CategoryBuilderTable from "./CategoryBuilderTable";
 import "./App.css";
-
-// 1) Import Firebase & Firestore
 import { initializeApp } from "firebase/app";
 import {
   getFirestore,
   doc,
   getDoc,
-  setDoc
-  // or updateDoc if you want partial merges
+  setDoc,
 } from "firebase/firestore";
+
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+
+// Newly created Chat component
+import Chat from "./Chat";
+
+// NEW: Import the reports modal from Reports.js
+import ReportsModal from "./Reports";
+
 
 // 2) Your Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyCR9IO7GQatt5oU33OLxW-vDyEtiZ4Og4I",
+  apiKey: "AIzaSyCR9IO7GQ...",
   authDomain: "my-timebox-project.firebaseapp.com",
   projectId: "my-timebox-project",
   storageBucket: "my-timebox-project.appspot.com",
@@ -47,37 +53,39 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // Register Chart.js components
-ChartJS.register(BarElement, CategoryScale, LinearScale, Title, Tooltip, Legend, ArcElement);
-
-/** 
- * Example "public" Google Sheet URL for user info and categories.
- * If you no longer need to fetch from a sheet, remove these references.
- */
-const GOOGLE_SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS4qcyZ0P11t2tZ6SDAr10nIBP9twgHq2weqhR0kTu47BWox5-nW3_gYF2zplWNDAFa807qASM0D3S5/pubhtml";
-
-// Known sheet names
-const SHEET_NAMES = ["Charly", "Cindy", "Gudiño", "Gabriel"];
+ChartJS.register(
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+);
 
 /** Helpers for date/time formatting */
 function getNextDay(date) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + 1);
+  let d = new Date(date);
+  do {
+    d.setDate(d.getDate() + 1);
+  } while (d.getDay() === 0 || d.getDay() === 6);
   return d;
 }
 function getPrevDay(date) {
-  const d = new Date(date);
-  d.setDate(d.getDate() - 1);
+  let d = new Date(date);
+  do {
+    d.setDate(d.getDate() - 1);
+  } while (d.getDay() === 0 || d.getDay() === 6);
   return d;
 }
-function formatDate(date) {
+export function formatDate(date) {
   if (!(date instanceof Date) || isNaN(date)) return "";
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
-function formatTime(hour, minute) {
+export function formatTime(hour, minute) {
   let suffix = "AM";
   let displayHour = hour;
   if (hour === 0) displayHour = 12;
@@ -89,11 +97,11 @@ function formatTime(hour, minute) {
   const minStr = minute === 0 ? "00" : String(minute).padStart(2, "0");
   return `${displayHour}:${minStr} ${suffix}`;
 }
-function getQuarterHourSlots(startHour, endHour) {
+export function getQuarterHourSlots(startHour, endHour) {
   const slots = [];
   if (startHour >= endHour) return slots;
   for (let h = startHour; h < endHour; h++) {
-    for (let m = 0; m < 60; m += 15) {
+    for (let m = 0; m < 60; m += 30) {
       slots.push({ hour: h, minute: m });
     }
   }
@@ -101,66 +109,41 @@ function getQuarterHourSlots(startHour, endHour) {
   return slots;
 }
 
-/** Build a hierarchy of categories from ID/name/parentId (for your 'HierarchicalSelect'). */
-function buildHierarchy(rows) {
-  const nodeMap = {};
-  rows.forEach((r) => {
-    nodeMap[r.id] = { name: r.name, children: [] };
-  });
-  rows.forEach((r) => {
-    if (r.parentId && nodeMap[r.parentId]) {
-      nodeMap[r.parentId].children.push(nodeMap[r.id]);
-    }
-  });
-  const roots = [];
-  rows.forEach((r) => {
-    if (!r.parentId) {
-      roots.push(nodeMap[r.id]);
-    }
-  });
-  return roots;
-}
-
-/** Fetch categories from each sheet => { "Charly": [...], "Cindy": [...], ... } */
-async function fetchCategoriesBySheet() {
-  const sheetCatsMap = {};
-  try {
-    const res = await fetch(GOOGLE_SHEET_URL);
-    const html = await res.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-    const tables = doc.querySelectorAll("table");
-
-    tables.forEach((table, index) => {
-      const sheetName = SHEET_NAMES[index] || `Sheet${index + 1}`;
-      const rows = table.querySelectorAll("tr");
-      const rawRows = [];
-      for (let r = 1; r < rows.length; r++) {
-        const cells = rows[r].querySelectorAll("td");
-        if (cells.length >= 3) {
-          const idStr = cells[2].textContent.trim();
-          const nameStr = cells[3]?.textContent.trim() || "";
-          const parentStr = cells[4]?.textContent.trim() || "";
-          if (idStr && nameStr) {
-            const id = parseInt(idStr, 10);
-            const parentId = parseInt(parentStr, 10);
-            rawRows.push({
-              id,
-              name: nameStr,
-              parentId: isNaN(parentId) ? 0 : parentId,
-            });
-          }
-        }
-      }
-      sheetCatsMap[sheetName] = buildHierarchy(rawRows);
-    });
-  } catch (err) {
-    console.error("Error fetching categories:", err);
+/**
+ * Helper: Ensure that the day's object in the timeBox has the full structure.
+ * This makes sure that properties like priorities, brainDump, schedule, etc.,
+ * are defined and in the proper format.
+ */
+function ensureDayStructure(draft, dateStr) {
+  if (!draft.timeBox) draft.timeBox = {};
+  if (!draft.timeBox[dateStr]) {
+    draft.timeBox[dateStr] = {
+      priorities: [],
+      brainDump: [],
+      schedule: {},
+      homeOffice: false,
+      vacation: false,
+      confettiShown: false,
+      startHour: draft.defaultStartHour || 7,
+      endHour: draft.defaultEndHour || 23,
+    };
+  } else {
+    const day = draft.timeBox[dateStr];
+    if (!Array.isArray(day.priorities)) day.priorities = [];
+    if (!Array.isArray(day.brainDump)) day.brainDump = [];
+    if (!day.schedule || typeof day.schedule !== 'object') day.schedule = {};
+    if (typeof day.startHour !== "number") day.startHour = draft.defaultStartHour || 7;
+    if (typeof day.endHour !== "number") day.endHour = draft.defaultEndHour || 23;
+    if (typeof day.confettiShown !== "boolean") day.confettiShown = false;
+    if (typeof day.homeOffice !== "boolean") day.homeOffice = false;
+    if (typeof day.vacation !== "boolean") day.vacation = false;
   }
-  return sheetCatsMap;
 }
 
-/** Sync user info from your Google Sheet. */
+/** Google Sheet constants and sync function remain unchanged */
+const GOOGLE_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vS4qcyZ0P11t2tZ6SDAr10nIBP9twgHq2weqhR0kTu47BWox5-nW3_gYF2zplWNDAFa807qASM0D3S5/pubhtml";
+const SHEET_NAMES = ["Charly", "Gudino", "Gabriel", "Cindy"];
 async function syncUsersFromSheet() {
   try {
     const res = await fetch(GOOGLE_SHEET_URL);
@@ -175,49 +158,39 @@ async function syncUsersFromSheet() {
       const rows = table.querySelectorAll("tr");
       for (let r = 1; r < rows.length; r++) {
         const cells = rows[r].querySelectorAll("td");
-        if (cells.length < 2) continue;
-
-        const empNumber = cells[0].textContent.trim(); // e.g. "1050028"
-        const fullName = cells[1].textContent.trim();  // e.g. "John Smith"
-        if (!fullName) continue;
-
+        if (cells.length < 2) return;
+        const empNumber = cells[0].textContent.trim();
+        const fullName = cells[1].textContent.trim();
+        if (!fullName) return;
         const username = fullName.toLowerCase();
-        // Identify admins
         const adminNumbers = ["1050028", "1163755", "60092284", "1129781"];
         let role = "employee";
         let allowedAreas = [];
         if (adminNumbers.includes(empNumber)) {
           role = "admin";
           const adminAllowedAreasMap = {
-            "1050028": ["Cindy"],
+            "1050028": ["Gudino"],
             "1163755": ["Gabriel"],
-            "60092284": ["Cindy"], // updated for jgudiño
+            "60092284": ["Cindy"],
             "1129781": ["Charly"],
           };
           allowedAreas = adminAllowedAreasMap[empNumber] || [];
         }
-
-        // Only define top-level fields here—NOT an empty `timeBox`
-        // We'll let Firestore merges handle the rest.
         const userObj = {
           role,
-          password: empNumber, // password is the empNumber
+          password: empNumber,
           fullName,
           sheet: sheetName,
           ...(role === "admin"
             ? { allowedAreas }
             : { area: sheetName.toLowerCase() }),
-
-          // Provide *defaults* for new users:
           defaultStartHour: 7,
           defaultEndHour: 23,
           defaultPreset: { start: 7, end: 23 },
         };
 
-        // Only save if we haven't seen this user in this run
         if (!syncedUsers[username]) {
           syncedUsers[username] = userObj;
-          // If there's no existing doc, this will create it with `merge: true`.
           saveUserToFirestore(userObj);
         }
       }
@@ -230,8 +203,7 @@ async function syncUsersFromSheet() {
 }
 
 /** 
- * Load the user's doc from Firestore. 
- * This ensures we get the *existing* timeBox data, if any.
+ * Load the user's doc from Firestore.
  */
 async function loadUserFromFirestore(userObj) {
   const key = userObj.fullName.toLowerCase();
@@ -243,11 +215,7 @@ async function loadUserFromFirestore(userObj) {
     if (docSnap.exists()) {
       const data = docSnap.data();
       console.log("Firestore doc found for:", key, data);
-
-      // Merge everything from Firestore into userObj
       Object.assign(userObj, data);
-
-      // Ensure minimal defaults if missing
       if (!userObj.timeBox) userObj.timeBox = {};
       if (typeof userObj.defaultStartHour !== "number") {
         userObj.defaultStartHour = 7;
@@ -260,7 +228,6 @@ async function loadUserFromFirestore(userObj) {
       }
     } else {
       console.warn("No Firestore doc found for:", key);
-      // It's a truly new user if doc doesn't exist
       if (!userObj.timeBox) userObj.timeBox = {};
     }
   } catch (err) {
@@ -269,9 +236,8 @@ async function loadUserFromFirestore(userObj) {
   return userObj;
 }
 
-/**
- * Save the user's data to Firestore in a way that 
- * does NOT overwrite the entire doc or erase old timeBox days.
+/** 
+ * Save the user's data to Firestore without erasing old timeBox days.
  */
 async function saveUserToFirestore(userObj) {
   if (!userObj?.fullName) {
@@ -282,26 +248,22 @@ async function saveUserToFirestore(userObj) {
   const docRef = doc(db, "users", key);
 
   try {
-    // 1) Load existing doc so we can preserve older days in timeBox
     let existingDoc = {};
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       existingDoc = snap.data();
     }
 
-    // 2) Merge existing timeBox with userObj.timeBox
     const oldTimeBox = existingDoc.timeBox || {};
     const newTimeBox = userObj.timeBox || {};
     const mergedTimeBox = { ...oldTimeBox, ...newTimeBox };
 
-    // 3) Now build an object with top-level merges
     const finalData = {
       ...existingDoc,
       ...userObj,
       timeBox: mergedTimeBox,
     };
 
-    // 4) Write finalData with { merge: true }
     await setDoc(docRef, finalData, { merge: true });
     console.log(`User "${key}" saved to Firestore successfully (merge=true).`);
   } catch (error) {
@@ -309,7 +271,53 @@ async function saveUserToFirestore(userObj) {
   }
 }
 
-/** HierarchicalSelect component for picking categories in nested form. */
+/** 
+ * Load a category tree from Firestore.
+ *
+ * UPDATED: When an employee logs in, we now try to find an admin
+ * whose allowedAreas (in lowercase) include the employee's area.
+ * If found, the category tree is loaded from that admin's key.
+ */
+async function loadCategoryTreeForUser(user, syncedUsers) {
+  let adminKey;
+  if (user.role === "admin") {
+    adminKey = user.fullName.toLowerCase();
+  } else {
+    const userArea = user.area ? user.area.toLowerCase() : "";
+    // Look for an admin in syncedUsers whose allowedAreas include userArea.
+    const admin = Object.values(syncedUsers).find(
+      (u) =>
+        u.role === "admin" &&
+        u.allowedAreas &&
+        u.allowedAreas.map((a) => a.toLowerCase()).includes(userArea)
+    );
+    if (admin) {
+      adminKey = admin.fullName.toLowerCase();
+    } else {
+      adminKey = user.area ? user.area.toLowerCase() : "";
+    }
+  }
+  const catDocRef = doc(db, "categoryTrees", adminKey);
+  const docSnap = await getDoc(catDocRef);
+  if (docSnap.exists()) {
+    return docSnap.data().tree;
+  }
+  return []; // default empty tree
+}
+async function saveCategoryTreeForUser(user, tree) {
+  let adminKey;
+  if (user.role === "admin") {
+    adminKey = user.fullName.toLowerCase();
+  } else {
+    adminKey = user.area.toLowerCase();
+  }
+  const catDocRef = doc(db, "categoryTrees", adminKey);
+  await setDoc(catDocRef, { tree }, { merge: true });
+}
+
+/** 
+ * HierarchicalSelect component for picking categories in nested form.
+ */
 function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
   const [selectedPath, setSelectedPath] = useState([]);
   const [otherValue, setOtherValue] = useState("");
@@ -327,21 +335,25 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
     let matchedAll = true;
     const tempPath = [];
     for (let part of chain) {
-      const found = nodes.find((n) => n.name === part);
-      if (!found) {
+      const found = nodes.find(
+        (n) => n.name === part || n.name.startsWith("Other:")
+      );
+      if (!found && !part.startsWith("Other:") && part !== "Other") {
         matchedAll = false;
         break;
       }
       tempPath.push(part);
-      nodes = found.children || [];
+      const nodeObj = nodes.find((x) => x.name === part);
+      if (!nodeObj) continue;
+      nodes = nodeObj.children || [];
     }
     if (!matchedAll) {
       setIsOther(true);
       setOtherValue(value);
       setSelectedPath([]);
     } else {
-      setIsOther(false);
-      setOtherValue("");
+      setIsOther(tempPath.some((x) => x === "Other" || x.startsWith("Other:")));
+      setOtherValue(tempPath.find((x) => x.startsWith("Other:")) || "");
       setSelectedPath(tempPath);
     }
   }, [value, categoryTree]);
@@ -362,14 +374,16 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       return;
     }
     if (sel === "Other") {
+      const newPath = [...selectedPath.slice(0, level), "Other"];
       setIsOther(true);
-      setSelectedPath([...selectedPath.slice(0, level), "Other"]);
-      onChange(otherValue);
+      setSelectedPath(newPath);
+      onChange(newPath.join(" / "));
       return;
     }
     const newPath = [...selectedPath.slice(0, level), sel];
-    setSelectedPath(newPath);
     setIsOther(false);
+    setOtherValue("");
+    setSelectedPath(newPath);
     onChange(newPath.join(" / "));
   }
 
@@ -392,7 +406,8 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
         ))}
       </select>
     );
-    if (sel === "Select" || sel === "Other") break;
+    if (sel === "Select" || sel === "Other" || sel.startsWith("Other:"))
+      break;
     const found = nodes.find((n) => n.name === sel);
     if (!found || !found.children || found.children.length === 0) break;
     nodes = found.children;
@@ -404,12 +419,17 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
       {isOther && (
         <input
           type="text"
-          value={otherValue}
+          value={otherValue.replace(/^Other:\s*/, "")}
           disabled={viewMode}
           onChange={(e) => {
             if (!viewMode) {
-              setOtherValue(e.target.value);
-              onChange(e.target.value);
+              const typed = e.target.value;
+              setOtherValue("Other: " + typed);
+              const newChain = [
+                ...selectedPath.slice(0, -1),
+                "Other: " + typed,
+              ].join(" / ");
+              onChange(newChain);
             }
           }}
           style={{ marginLeft: 5 }}
@@ -419,8 +439,98 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
   );
 }
 
-/** Single schedule slot row with category + repeat options. */
-function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTree }) {
+/** 
+ * CategoryBuilder component for editing the category tree.
+ */
+function CategoryBuilder({ initialTree, onSave, onCancel }) {
+  const [tree, setTree] = useState(initialTree || []);
+
+  function renderCategoryList(categories, updateFn) {
+    return categories.map((cat, idx) => (
+      <div key={cat.id || idx} style={{ marginLeft: "20px", marginTop: "5px" }}>
+        <input
+          type="text"
+          value={cat.name}
+          onChange={(e) => {
+            const newCat = { ...cat, name: e.target.value };
+            const newCategories = [...categories];
+            newCategories[idx] = newCat;
+            updateFn(newCategories);
+          }}
+          placeholder="Category name"
+        />
+        <button onClick={() => {
+          const newCategories = categories.filter((_, i) => i !== idx);
+          updateFn(newCategories);
+        }}>Delete</button>
+        <div>
+          {cat.children && renderCategoryList(cat.children, (newChildList) => {
+            const newCat = { ...cat, children: newChildList };
+            const newCategories = [...categories];
+            newCategories[idx] = newCat;
+            updateFn(newCategories);
+          })}
+        </div>
+        <button onClick={() => {
+          const newCat = { id: Date.now(), name: "", children: [] };
+          const newChildren = cat.children ? [...cat.children, newCat] : [newCat];
+          const updatedCat = { ...cat, children: newChildren };
+          const newCategories = [...categories];
+          newCategories[idx] = updatedCat;
+          updateFn(newCategories);
+        }}>Add Subcategory</button>
+      </div>
+    ));
+  }
+
+  return (
+    <div style={{ border: "1px solid #ccc", padding: "10px", marginTop: "10px" }}>
+      <h3>Category Builder</h3>
+      <div>{renderCategoryList(tree, setTree)}</div>
+      <button onClick={() => {
+        const newMainCat = { id: Date.now(), name: "", children: [] };
+        setTree([...tree, newMainCat]);
+      }}>Add Main Category</button>
+      <div style={{ marginTop: "10px" }}>
+        <button onClick={() => onSave(tree)}>Save Categories</button>
+        <button onClick={onCancel} style={{ marginLeft: "5px" }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* Helper: Check if a day's data has any user-entered content. */
+function dayHasContent(day) {
+  const hasPriorities =
+    day.priorities && day.priorities.some((p) => p.text && p.text.trim() !== "");
+  const hasBrainDump =
+    day.brainDump && day.brainDump.some((b) => b.text && b.text.trim() !== "");
+  const hasSchedule =
+    day.schedule &&
+    Object.values(day.schedule).some((entry) => {
+      if (Array.isArray(entry)) {
+        return entry.some((e) => e.text && e.text.trim() !== "");
+      }
+      return entry.text && entry.text.trim() !== "";
+    });
+  return hasPriorities || hasBrainDump || hasSchedule;
+}
+
+/** 
+ * ScheduleSlot component – single schedule slot row.
+ */
+function ScheduleSlot({
+  label,
+  scheduleEntry,
+  updateEntry,
+  viewMode,
+  categoryTree,
+  slotIndex,
+  taskIndex,
+  onDragRange,
+  allTasks,
+  onRemove,
+}) {
   const [showRepeatOptions, setShowRepeatOptions] = useState(false);
   const repeatVal = scheduleEntry.repeat || "none";
 
@@ -434,8 +544,21 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center" }}>
-      <div style={{ flexGrow: 1 }}>
+    <div
+      className="schedule-slot"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (window.dragData && window.dragData.startIndex !== undefined) {
+          onDragRange(
+            window.dragData.startIndex,
+            slotIndex,
+            window.dragData.allTasks
+          );
+        }
+      }}
+    >
+      <div style={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
         {categoryTree && categoryTree.length > 0 ? (
           <HierarchicalSelect
             categoryTree={categoryTree}
@@ -451,11 +574,22 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
             onChange={(e) => handleTextChange(e.target.value)}
           />
         )}
+        {!viewMode && (
+          <FaTrash
+            size={16}
+            style={{ cursor: "pointer", marginLeft: 8 }}
+            onClick={onRemove}
+          />
+        )}
       </div>
+
       <div style={{ marginLeft: 5, position: "relative" }}>
         <FaEllipsisH
           size={20}
-          style={{ cursor: viewMode ? "not-allowed" : "pointer", opacity: viewMode ? 0.5 : 1 }}
+          style={{
+            cursor: viewMode ? "not-allowed" : "pointer",
+            opacity: viewMode ? 0.5 : 1
+          }}
           onClick={() => {
             if (!viewMode) setShowRepeatOptions(!showRepeatOptions);
           }}
@@ -491,252 +625,72 @@ function ScheduleSlot({ label, scheduleEntry, updateEntry, viewMode, categoryTre
   );
 }
 
+
 /**
- * Full-Screen Modal for usage reports:
- *  - Bar chart for category usage
- *  - Pie chart for free vs busy
- *  - Bar chart for home office vs non-home
+ * Update a range of schedule slots via drag.
  */
-function ReportsModal({
-  usageMap,
-  freeHours,
-  totalHours,
-  homeOfficeDays,
-  nonHomeOfficeDays,
-  reportRange,
-  setReportRange,
-  onClose,
-}) {
-  const colorPalette = [
-    "#FF6384",
-    "#36A2EB",
-    "#FFCE56",
-    "#4BC0C0",
-    "#9966FF",
-    "#FF9F40",
-    "#F67019",
-    "#FA8072",
-    "#8B008B",
-  ];
-
-  function renderUsageBar() {
-    const labels = Object.keys(usageMap).length ? Object.keys(usageMap) : ["No Data"];
-    const dataVals = labels.map((l) => usageMap[l] || 0);
-    const bgColors = labels.map((_, i) => colorPalette[i % colorPalette.length]);
-    const data = {
-      labels,
-      datasets: [
-        {
-          label: "Category Usage (hrs)",
-          data: dataVals,
-          backgroundColor: bgColors,
-        },
-      ],
-    };
-    return (
-      <div
-        style={{
-          width: "90%",
-          maxWidth: 1000,
-          height: 400,
-          border: "1px solid #ccc",
-          marginBottom: 40,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Bar data={data} options={{ responsive: false, maintainAspectRatio: false }} />
-      </div>
-    );
-  }
-
-  function renderPieChart() {
-    if (totalHours === 0) {
-      const data = {
-        labels: ["No Data"],
-        datasets: [{ data: [1], backgroundColor: ["#ccc"] }],
-      };
-      return (
-        <div
-          style={{
-            width: "90%",
-            maxWidth: 600,
-            height: 400,
-            border: "1px solid #ccc",
-            marginBottom: 40,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Pie data={data} options={{ responsive: false, maintainAspectRatio: false }} />
-        </div>
-      );
+function updateScheduleRange(startIndex, endIndex, allTasks, canViewAgenda, viewMode, updateActiveData, quarterSlots, currentDateStr) {
+  if (!canViewAgenda || viewMode) return;
+  const start = Math.min(startIndex, endIndex);
+  const end = Math.max(startIndex, endIndex);
+  updateActiveData((draft) => {
+    ensureDayStructure(draft, currentDateStr);
+    for (let i = start; i <= end; i++) {
+      const slot = quarterSlots[i];
+      if (!slot) continue;
+      const slotLabel = formatTime(slot.hour, slot.minute);
+      draft.timeBox[currentDateStr].schedule[slotLabel] = [...allTasks];
     }
-    const busyHours = totalHours - freeHours;
-    const data = {
-      labels: ["Free (hrs)", "Busy (hrs)"],
-      datasets: [
-        {
-          data: [freeHours, busyHours],
-          backgroundColor: [colorPalette[1], colorPalette[0]],
-        },
-      ],
-    };
-    return (
-      <div
-        style={{
-          width: "90%",
-          maxWidth: 600,
-          height: 400,
-          border: "1px solid #ccc",
-          marginBottom: 40,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Pie data={data} options={{ responsive: false, maintainAspectRatio: false }} />
-      </div>
-    );
-  }
-
-  function renderHomeOfficeBar() {
-    const data = {
-      labels: ["Home Office Days", "Non Home Office"],
-      datasets: [
-        {
-          label: "Days",
-          data: [homeOfficeDays, nonHomeOfficeDays],
-          backgroundColor: [colorPalette[2], colorPalette[3]],
-        },
-      ],
-    };
-    return (
-      <div
-        style={{
-          width: "90%",
-          maxWidth: 600,
-          height: 400,
-          border: "1px solid #ccc",
-          marginBottom: 40,
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Bar data={data} options={{ responsive: false, maintainAspectRatio: false }} />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        zIndex: 9999,
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
-        backgroundColor: "#fff",
-        overflow: "auto",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        paddingBottom: 50,
-      }}
-    >
-      <button
-        style={{
-          alignSelf: "flex-end",
-          margin: "10px",
-          padding: "8px 16px",
-          fontSize: 14,
-          cursor: "pointer",
-        }}
-        onClick={onClose}
-      >
-        Close
-      </button>
-      <h2 style={{ marginTop: 0 }}>Full-Screen Reports</h2>
-      <div style={{ margin: "10px 0" }}>
-        <button onClick={() => setReportRange("daily")}>
-          {reportRange === "daily" ? "Daily ✓" : "Daily"}
-        </button>
-        <button onClick={() => setReportRange("weekly")} style={{ marginLeft: 5 }}>
-          {reportRange === "weekly" ? "Weekly ✓" : "Weekly"}
-        </button>
-        <button onClick={() => setReportRange("monthly")} style={{ marginLeft: 5 }}>
-          {reportRange === "monthly" ? "Monthly ✓" : "Monthly"}
-        </button>
-        <button onClick={() => setReportRange("yearly")} style={{ marginLeft: 5 }}>
-          {reportRange === "yearly" ? "Yearly ✓" : "Yearly"}
-        </button>
-        <button onClick={() => setReportRange("alltime")} style={{ marginLeft: 5 }}>
-          {reportRange === "alltime" ? "All Time ✓" : "All Time"}
-        </button>
-      </div>
-      {renderUsageBar()}
-      {renderPieChart()}
-      {renderHomeOfficeBar()}
-    </div>
-  );
+  });
 }
 
-/** Helper function to check if a day's data has any user-entered content */
-function dayHasContent(day) {
-  const hasPriorities =
-    day.priorities && day.priorities.some((p) => p.text && p.text.trim() !== "");
-  const hasBrainDump =
-    day.brainDump && day.brainDump.some((b) => b.text && b.text.trim() !== "");
-  const hasSchedule =
-    day.schedule &&
-    Object.values(day.schedule).some((entry) => entry.text && entry.text.trim() !== "");
-  return hasPriorities || hasBrainDump || hasSchedule;
-}
-
-/** Main App Component */
+/** 
+ * Main App Component
+ */
 export default function App() {
-  // Logged-in user (the admin or employee who typed username+password)
   const [loggedInUser, setLoggedInUser] = useState(null);
-  // For admins: the user whose agenda is being viewed
   const [displayUser, setDisplayUser] = useState(null);
-
-  // Local caches
   const [syncedUsers, setSyncedUsers] = useState({});
-  const [categoriesBySheet, setCategoriesBySheet] = useState({});
   const [categoryTree, setCategoryTree] = useState([]);
-
-  // For login
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
-
-  // Agenda states
   const [currentDate, setCurrentDate] = useState(new Date());
   const currentDateStr = formatDate(currentDate);
-
-  // UI states
   const [showConfetti, setShowConfetti] = useState(false);
-
-  // Admin
   const [targetUser, setTargetUser] = useState("");
   const [viewingTarget, setViewingTarget] = useState(false);
   const [viewMode, setViewMode] = useState(false);
-
-  // Full-screen reports
   const [showReports, setShowReports] = useState(false);
   const [reportRange, setReportRange] = useState("daily");
+  const [calendarView, setCalendarView] = useState("daily");
 
-  // Determine roles
+
+  // NEW: State variables for report baseline and custom range
+  const [reportBaselineDate, setReportBaselineDate] = useState(new Date());
+  const [customRangeStart, setCustomRangeStart] = useState(formatDate(new Date()));
+  const [customRangeEnd, setCustomRangeEnd] = useState(formatDate(new Date()));
+
+  // NEW: State for showing the category builder (for admins)
+  const [showCategoryBuilder, setShowCategoryBuilder] = useState(false);
+
   const isLoggedIn = !!loggedInUser && loggedInUser.password === password;
   const isAdmin = isLoggedIn && loggedInUser.role === "admin";
   const activeData = viewingTarget && displayUser ? displayUser : loggedInUser;
   const canViewAgenda = !!activeData && isLoggedIn;
 
-  // Instead of auto-creating day data on view, simply use an empty object if no data exists.
+  useEffect(() => {
+    const storedUser = localStorage.getItem("username");
+    const storedPass = localStorage.getItem("password");
+    if (storedUser && storedPass) {
+      setUsername(storedUser);
+      setPassword(storedPass);
+      if (!loggedInUser) {
+        setTimeout(() => handleLogin(), 50);
+      }
+    }
+  }, []);
+
   const dayObj = canViewAgenda ? (activeData.timeBox[currentDateStr] || {}) : {};
   const {
     startHour = 7,
@@ -744,15 +698,13 @@ export default function App() {
     priorities = [],
     brainDump = [],
     homeOffice = false,
+    vacation = false,
   } = dayObj;
 
-  // Calculate incomplete tasks
   const totalIncomplete =
     priorities.filter((p) => !p.completed).length +
     brainDump.filter((b) => !b.completed).length;
 
-  // Helper to safely update the active user object.
-  // If day data is created but remains empty, it is removed.
   function updateActiveData(fn) {
     if (!activeData) return;
     let copy;
@@ -779,32 +731,15 @@ export default function App() {
     }
   }
 
-  // On mount, fetch from Google Sheets & store in Firestore (for new users).
   useEffect(() => {
     async function init() {
-      const users = await syncUsersFromSheet(); // merges new users
+      const users = await syncUsersFromSheet();
       setSyncedUsers(users);
-
-      const catsMap = await fetchCategoriesBySheet();
-      setCategoriesBySheet(catsMap);
     }
     init();
   }, []);
 
-  /** Combine categories for admins or pick single sheet for employees. */
-  function pickCategoryTreeForUser(u) {
-    if (!u) return [];
-    if (u.role === "employee") {
-      return categoriesBySheet[u.sheet] || [];
-    }
-    if (u.role === "admin" && u.allowedAreas) {
-      const arrays = u.allowedAreas.map((areaName) => categoriesBySheet[areaName] || []);
-      return arrays.flat();
-    }
-    return [];
-  }
-
-  // Load doc from Firestore => merges in old data => set state
+  // Load user record and category tree.
   async function loadUserRecord(record, isEmployeeView) {
     try {
       const updatedRecord = await loadUserFromFirestore(record);
@@ -817,14 +752,14 @@ export default function App() {
         setViewingTarget(true);
       }
       setViewMode(isEmployeeView);
-
       setMessage("");
-      const cats = pickCategoryTreeForUser(updatedRecord);
-      setCategoryTree(cats);
-
+      // Pass syncedUsers so that the admin lookup works correctly.
+      const tree = await loadCategoryTreeForUser(updatedRecord, syncedUsers);
+      setCategoryTree(tree);
       if (updatedRecord.password !== password && !isEmployeeView) {
         setMessage("Incorrect password (or blank if brand-new user).");
       }
+      return updatedRecord;
     } catch (err) {
       console.error("Error loading user from Firestore:", err);
       if (!isEmployeeView) {
@@ -836,14 +771,11 @@ export default function App() {
         setViewingTarget(true);
       }
       setViewMode(isEmployeeView);
-
-      const cats = pickCategoryTreeForUser(record);
-      setCategoryTree(cats);
       setMessage("Could not fetch from Firestore, using local fallback.");
+      return record;
     }
   }
 
-  // Auto-save on changes to displayUser and loggedInUser
   useEffect(() => {
     if (!displayUser) return;
     if (viewMode) return;
@@ -856,12 +788,10 @@ export default function App() {
     saveUserToFirestore(loggedInUser);
   }, [loggedInUser, viewMode, viewingTarget]);
 
-  /** Return a local copy of the user from sync, or null if not found. */
   function getUserRecord(uname) {
     const norm = uname.trim().toLowerCase();
     const user = syncedUsers[norm];
     if (!user) return null;
-
     return {
       ...user,
       timeBox: user.timeBox || {},
@@ -874,8 +804,7 @@ export default function App() {
     };
   }
 
-  // Basic login
-  function handleLogin() {
+  async function handleLogin() {
     if (!username) {
       setMessage("Please enter a username.");
       return;
@@ -885,11 +814,12 @@ export default function App() {
       setMessage("User not recognized. Check spelling of the full name from your sheet.");
       return;
     }
-    loadUserRecord(record, false);
+    await loadUserRecord(record, false);
+    localStorage.setItem("username", username);
+    localStorage.setItem("password", password);
   }
 
-  // Admin: load an employee's agenda read-only
-  function handleLoadEmployee() {
+  async function handleLoadEmployee() {
     if (!targetUser) return;
     let employeeRecord = getUserRecord(targetUser);
     if (!employeeRecord) {
@@ -904,156 +834,158 @@ export default function App() {
         defaultPreset: { start: 7, end: 23 },
       };
     }
-    loadUserRecord(employeeRecord, true);
+    await loadUserRecord(employeeRecord, true);
     setMessage(`Loaded agenda for ${targetUser}`);
   }
 
-  // Admin: back to your own agenda
   function handleBackToMyAgenda() {
     setDisplayUser(loggedInUser);
     setViewingTarget(false);
     setViewMode(false);
     setMessage("Back to your agenda.");
-    const cats = pickCategoryTreeForUser(loggedInUser);
-    setCategoryTree(cats);
+    loadCategoryTreeForUser(loggedInUser, syncedUsers).then((tree) => setCategoryTree(tree));
   }
 
-  // Priorities
+  // PRIORITIES FUNCTIONS
   function addPriority() {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (!draft.timeBox) draft.timeBox = {};
-      if (!draft.timeBox[currentDateStr]) {
-        draft.timeBox[currentDateStr] = {
-          priorities: [],
-          brainDump: [],
-          schedule: {},
-          homeOffice: false,
-          confettiShown: false,
-          startHour: draft.defaultStartHour || 7,
-          endHour: draft.defaultEndHour || 23,
-        };
-      }
-      draft.timeBox[currentDateStr].priorities.push({ text: "", completed: false });
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].priorities.push({
+        text: "",
+        completed: false,
+        priority: "medium",
+      });
     });
   }
   function togglePriorityCompleted(idx) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].priorities) {
-        draft.timeBox[currentDateStr].priorities[idx].completed =
-          !draft.timeBox[currentDateStr].priorities[idx].completed;
-      }
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].priorities[idx].completed =
+        !draft.timeBox[currentDateStr].priorities[idx].completed;
     });
   }
   function updatePriorityText(idx, txt) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (!draft.timeBox[currentDateStr]) {
-        draft.timeBox[currentDateStr] = {
-          priorities: [],
-          brainDump: [],
-          schedule: {},
-          homeOffice: false,
-          confettiShown: false,
-          startHour: draft.defaultStartHour || 7,
-          endHour: draft.defaultEndHour || 23,
-        };
-      }
+      ensureDayStructure(draft, currentDateStr);
       draft.timeBox[currentDateStr].priorities[idx].text = txt;
     });
   }
   function removePriority(idx) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].priorities) {
-        draft.timeBox[currentDateStr].priorities.splice(idx, 1);
-      }
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].priorities.splice(idx, 1);
+    });
+  }
+  function updatePriorityLevel(idx, level) {
+    if (!canViewAgenda || viewMode) return;
+    updateActiveData((draft) => {
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].priorities[idx].priority = level;
+      const levels = { high: 3, medium: 2, low: 1 };
+      draft.timeBox[currentDateStr].priorities.sort((a, b) => {
+        return levels[b.priority || "medium"] - levels[a.priority || "medium"];
+      });
     });
   }
 
-  // Brain Dump
+  // BRAIN DUMP FUNCTIONS
   function addBrainDumpItem() {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (!draft.timeBox[currentDateStr]) {
-        draft.timeBox[currentDateStr] = {
-          priorities: [],
-          brainDump: [],
-          schedule: {},
-          homeOffice: false,
-          confettiShown: false,
-          startHour: draft.defaultStartHour || 7,
-          endHour: draft.defaultEndHour || 23,
-        };
-      }
-      draft.timeBox[currentDateStr].brainDump.push({ text: "", completed: false });
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].brainDump.push({
+        text: "",
+        completed: false,
+      });
     });
   }
   function toggleBrainDumpCompleted(i) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].brainDump) {
-        draft.timeBox[currentDateStr].brainDump[i].completed =
-          !draft.timeBox[currentDateStr].brainDump[i].completed;
-      }
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].brainDump[i].completed =
+        !draft.timeBox[currentDateStr].brainDump[i].completed;
     });
   }
   function updateBrainDumpText(i, txt) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (!draft.timeBox[currentDateStr]) {
-        draft.timeBox[currentDateStr] = {
-          priorities: [],
-          brainDump: [],
-          schedule: {},
-          homeOffice: false,
-          confettiShown: false,
-          startHour: draft.defaultStartHour || 7,
-          endHour: draft.defaultEndHour || 23,
-        };
-      }
+      ensureDayStructure(draft, currentDateStr);
       draft.timeBox[currentDateStr].brainDump[i].text = txt;
     });
   }
   function removeBrainDumpItem(i) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (draft.timeBox[currentDateStr] && draft.timeBox[currentDateStr].brainDump) {
-        draft.timeBox[currentDateStr].brainDump.splice(i, 1);
-      }
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].brainDump.splice(i, 1);
     });
   }
 
-  // Schedule
-  function updateScheduleSlot(label, newEntry) {
+  // SCHEDULE FUNCTIONS
+  function updateScheduleSlot(label, newEntry, index = 0) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
-      if (!draft.timeBox[currentDateStr]) {
-        draft.timeBox[currentDateStr] = {
-          priorities: [],
-          brainDump: [],
-          schedule: {},
-          homeOffice: false,
-          confettiShown: false,
-          startHour: draft.defaultStartHour || 7,
-          endHour: draft.defaultEndHour || 23,
-        };
+      ensureDayStructure(draft, currentDateStr);
+      if (!draft.timeBox[currentDateStr].schedule[label]) {
+        draft.timeBox[currentDateStr].schedule[label] = [newEntry];
+      } else {
+        if (!Array.isArray(draft.timeBox[currentDateStr].schedule[label])) {
+          draft.timeBox[currentDateStr].schedule[label] = [
+            draft.timeBox[currentDateStr].schedule[label],
+          ];
+        }
+        draft.timeBox[currentDateStr].schedule[label][index] = newEntry;
       }
-      draft.timeBox[currentDateStr].schedule[label] = newEntry;
+    });
+  }
+  function addScheduleTask(label) {
+    if (!canViewAgenda || viewMode) return;
+    updateActiveData((draft) => {
+      ensureDayStructure(draft, currentDateStr);
+      if (!draft.timeBox[currentDateStr].schedule[label]) {
+        draft.timeBox[currentDateStr].schedule[label] = [{ text: "", repeat: "none" }];
+      } else {
+        if (!Array.isArray(draft.timeBox[currentDateStr].schedule[label])) {
+          draft.timeBox[currentDateStr].schedule[label] = [
+            draft.timeBox[currentDateStr].schedule[label],
+          ];
+        }
+        draft.timeBox[currentDateStr].schedule[label].push({ text: "", repeat: "none" });
+      }
+    });
+  }
+  function removeScheduleTask(label, taskIndex) {
+    if (!canViewAgenda || viewMode) return;
+    updateActiveData((draft) => {
+      ensureDayStructure(draft, currentDateStr);
+      if (
+        draft.timeBox[currentDateStr] &&
+        draft.timeBox[currentDateStr].schedule &&
+        draft.timeBox[currentDateStr].schedule[label]
+      ) {
+        if (Array.isArray(draft.timeBox[currentDateStr].schedule[label])) {
+          draft.timeBox[currentDateStr].schedule[label].splice(taskIndex, 1);
+        } else {
+          delete draft.timeBox[currentDateStr].schedule[label];
+        }
+      }
     });
   }
 
-  // Start/End Hour (Account Settings)
+  // START/END HOUR FUNCTIONS
   function setStartHourVal(h) {
     if (!canViewAgenda || viewMode) return;
     updateActiveData((draft) => {
       draft.defaultStartHour = parseInt(h, 10);
       if (!draft.defaultPreset) draft.defaultPreset = {};
       draft.defaultPreset.start = parseInt(h, 10);
-      if (draft.timeBox[currentDateStr]) {
-        draft.timeBox[currentDateStr].startHour = parseInt(h, 10);
-      }
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].startHour = parseInt(h, 10);
     });
   }
   function setEndHourVal(h) {
@@ -1062,169 +994,68 @@ export default function App() {
       draft.defaultEndHour = parseInt(h, 10);
       if (!draft.defaultPreset) draft.defaultPreset = {};
       draft.defaultPreset.end = parseInt(h, 10);
-      if (draft.timeBox[currentDateStr]) {
-        draft.timeBox[currentDateStr].endHour = parseInt(h, 10);
-      }
+      ensureDayStructure(draft, currentDateStr);
+      draft.timeBox[currentDateStr].endHour = parseInt(h, 10);
     });
   }
 
-  // Report functions
-  function parseDateStr(ds) {
-    const [y, m, d] = ds.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }
-  function getAllDates() {
-    return activeData?.timeBox ? Object.keys(activeData.timeBox) : [];
-  }
-  function usageInSingleDay(dt) {
-    const ds = formatDate(dt);
-    const day = activeData?.timeBox[ds];
-    if (!day || !dayHasContent(day)) return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    const { startHour = 7, endHour = 23, schedule = {} } = day;
-    let freeHours = 0;
-    let totalHours = 0;
-    const usageMap = {};
-    const slots = getQuarterHourSlots(startHour, endHour);
-    slots.forEach(({ hour, minute }) => {
-      totalHours += 0.25;
-      const label = formatTime(hour, minute);
-      const entry = schedule[label] || {};
-      if (!entry.text) {
-        freeHours += 0.25;
-      } else {
-        usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.25;
-      }
-    });
-    return { usageMap, freeHours, totalHours };
-  }
-  function usageInRange({ days = null, months = null, years = null } = {}) {
-    const dateKeys = getAllDates();
-    if (!dateKeys.length) return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    let boundary = null;
-    const now = new Date();
-    if (days) {
-      boundary = new Date(now);
-      boundary.setDate(boundary.getDate() - days);
-    } else if (months) {
-      boundary = new Date(now);
-      boundary.setMonth(boundary.getMonth() - months);
-    } else if (years) {
-      boundary = new Date(now);
-      boundary.setFullYear(boundary.getFullYear() - years);
-    }
-    let freeHours = 0;
-    let totalHours = 0;
-    const usageMap = {};
-    dateKeys.forEach((ds) => {
-      const dt = parseDateStr(ds);
-      if (boundary && dt < boundary) return;
-      const day = activeData.timeBox[ds];
-      if (!day || !dayHasContent(day)) return;
-      const slots = getQuarterHourSlots(day.startHour, day.endHour);
-      slots.forEach(({ hour, minute }) => {
-        totalHours += 0.25;
-        const label = formatTime(hour, minute);
-        const entry = day.schedule[label] || {};
-        if (!entry.text) {
-          freeHours += 0.25;
-        } else {
-          usageMap[entry.text] = (usageMap[entry.text] || 0) + 0.25;
-        }
-      });
-    });
-    return { usageMap, freeHours, totalHours };
-  }
-  function computeReportData() {
-    if (!canViewAgenda || !isAdmin) return { usageMap: {}, freeHours: 0, totalHours: 0 };
-    if (reportRange === "daily") return usageInSingleDay(currentDate);
-    if (reportRange === "weekly") return usageInRange({ days: 7 });
-    if (reportRange === "monthly") return usageInRange({ months: 1 });
-    if (reportRange === "yearly") return usageInRange({ years: 1 });
-    if (reportRange === "alltime") return usageInRange({});
-    return usageInSingleDay(currentDate);
-  }
-  const usageResult = computeReportData();
-  const { usageMap, freeHours, totalHours } = usageResult;
-
-  // Home office chart calculations
-  let homeOfficeDays = 0;
-  let nonHomeOfficeDays = 0;
-  if (canViewAgenda && activeData?.timeBox) {
-    const dateKeys = Object.keys(activeData.timeBox);
-    dateKeys.forEach((ds) => {
-      const day = activeData.timeBox[ds];
-      if (day.homeOffice) homeOfficeDays++;
-      else nonHomeOfficeDays++;
-    });
-  }
-
-  // Build schedule rows
-  const quarterSlots = canViewAgenda ? getQuarterHourSlots(startHour, endHour) : [];
-
-  // Show confetti if all tasks completed
   useEffect(() => {
     if (!canViewAgenda) return;
     if (totalIncomplete === 0 && (priorities.length > 0 || brainDump.length > 0)) {
       if (!dayObj.confettiShown) {
         setShowConfetti(true);
         updateActiveData((draft) => {
-          if (!draft.timeBox[currentDateStr]) {
-            draft.timeBox[currentDateStr] = {
-              priorities: [],
-              brainDump: [],
-              schedule: {},
-              homeOffice: false,
-              confettiShown: false,
-              startHour: draft.defaultStartHour || 7,
-              endHour: draft.defaultEndHour || 23,
-            };
-          }
+          ensureDayStructure(draft, currentDateStr);
           draft.timeBox[currentDateStr].confettiShown = true;
         });
-        setTimeout(() => setShowConfetti(false), 4000);
+        setTimeout(() => setShowConfetti(false), 7000);
       }
     } else {
       setShowConfetti(false);
     }
   }, [canViewAgenda, totalIncomplete, priorities, brainDump, dayObj.confettiShown, currentDateStr]);
 
-  // Auto-load repeated slots from previous day/week
   useEffect(() => {
     if (!canViewAgenda) return;
     if (viewMode) return;
-
     updateActiveData((draft) => {
       const ds = currentDateStr;
-      let today = draft.timeBox[ds] || {
-        startHour: draft.defaultStartHour || 7,
-        endHour: draft.defaultEndHour || 23,
-        schedule: {},
-      };
+      ensureDayStructure(draft, ds);
+      let today = draft.timeBox[ds];
+      if (today.vacation) return;
       const slots = getQuarterHourSlots(today.startHour, today.endHour);
-
-      // day-1
       const yest = new Date(currentDate);
       yest.setDate(yest.getDate() - 1);
       const yStr = formatDate(yest);
-
-      // day-7
       const wAgo = new Date(currentDate);
       wAgo.setDate(wAgo.getDate() - 7);
       const wStr = formatDate(wAgo);
-
       slots.forEach(({ hour, minute }) => {
         const label = formatTime(hour, minute);
-        const currentSlot = today.schedule[label] || {};
-        if (!currentSlot.text) {
+        let currentSlot = today.schedule[label];
+        if (!currentSlot) {
+          currentSlot = [{}];
+          today.schedule[label] = currentSlot;
+        } else if (!Array.isArray(currentSlot)) {
+          currentSlot = [currentSlot];
+          today.schedule[label] = currentSlot;
+        }
+        if (!currentSlot[0] || !currentSlot[0].text) {
           const ySlot = draft.timeBox[yStr]?.schedule?.[label];
-          if (ySlot && ySlot.repeat === "daily" && ySlot.text) {
-            today.schedule[label] = { ...ySlot };
-            return;
+          if (ySlot) {
+            const arrYSlot = Array.isArray(ySlot) ? ySlot : [ySlot];
+            if (arrYSlot[0] && arrYSlot[0].repeat === "daily" && arrYSlot[0].text) {
+              today.schedule[label] = [...arrYSlot];
+              return;
+            }
           }
           const wSlot = draft.timeBox[wStr]?.schedule?.[label];
-          if (wSlot && wSlot.repeat === "weekly" && wSlot.text) {
-            today.schedule[label] = { ...wSlot };
-            return;
+          if (wSlot) {
+            const arrWSlot = Array.isArray(wSlot) ? wSlot : [wSlot];
+            if (arrWSlot[0] && arrWSlot[0].repeat === "weekly" && arrWSlot[0].text) {
+              today.schedule[label] = [...arrWSlot];
+              return;
+            }
           }
         }
       });
@@ -1232,52 +1063,67 @@ export default function App() {
     });
   }, [canViewAgenda, currentDateStr, currentDate, viewMode]);
 
+  const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+
   return (
-    <div className="container">
+    <div className="container" style={{ color: "black" }}>
       {isLoggedIn && showConfetti && (
         <Confetti width={window.innerWidth} height={window.innerHeight} />
       )}
 
+      {/* Render Reports modal for admins */}
       {showReports && isAdmin && (
         <ReportsModal
-          usageMap={usageMap}
-          freeHours={freeHours}
-          totalHours={totalHours}
-          homeOfficeDays={homeOfficeDays}
-          nonHomeOfficeDays={nonHomeOfficeDays}
+          activeData={activeData}
+          categoryTree={categoryTree}
+          currentDate={currentDate}
+          startHour={startHour}
+          endHour={endHour}
           reportRange={reportRange}
           setReportRange={setReportRange}
+          reportBaselineDate={reportBaselineDate}
+          setReportBaselineDate={setReportBaselineDate}
+          customRangeStart={customRangeStart}
+          setCustomRangeStart={setCustomRangeStart}
+          customRangeEnd={customRangeEnd}
+          setCustomRangeEnd={setCustomRangeEnd}
           onClose={() => setShowReports(false)}
         />
       )}
 
       {/* LEFT COLUMN */}
       <div className="left-column">
-        <div className="logo">The Time Box</div>
+        {isLoggedIn && (
+          <div className="animated-title">
+            Time Box for {loggedInUser?.fullName}
+          </div>
+        )}
 
-        <div className="login-section">
-          <label>Username:</label>
-          <input
-            type="text"
-            value={username}
-            disabled={isLoggedIn}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Exact fullName from sheet"
-          />
-          <label>Password:</label>
-          <input
-            type="password"
-            value={password}
-            disabled={isLoggedIn}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Employee Number"
-          />
-          {!isLoggedIn && (
-            <button onClick={handleLogin} style={{ marginTop: 5 }}>
-              Login
-            </button>
-          )}
-        </div>
+        {!isLoggedIn && (
+          <div className="login-section">
+            <label>Username:</label>
+            <input
+              type="text"
+              value={username}
+              disabled={isLoggedIn}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Exact fullName from sheet"
+            />
+            <label>Password:</label>
+            <input
+              type="password"
+              value={password}
+              disabled={isLoggedIn}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Employee Number"
+            />
+            {!isLoggedIn && (
+              <button onClick={handleLogin} style={{ marginTop: 5 }}>
+                Login
+              </button>
+            )}
+          </div>
+        )}
 
         {message && <div style={{ color: "blue", marginTop: 6 }}>{message}</div>}
 
@@ -1294,209 +1140,252 @@ export default function App() {
 
         {canViewAgenda && (
           <div className="section">
-            <h3>Top Priorities</h3>
-            {priorities.map((p, idx) => (
-              <div className="priority-row" key={idx}>
-                <input
-                  type="checkbox"
-                  disabled={viewMode}
-                  checked={p.completed}
-                  onChange={() => togglePriorityCompleted(idx)}
-                />
-                <input
-                  type="text"
-                  className={p.completed ? "completed" : ""}
-                  disabled={viewMode}
-                  value={p.text}
-                  onChange={(e) => updatePriorityText(idx, e.target.value)}
-                />
-                {!viewMode && (
-                  <button className="remove-btn" onClick={() => removePriority(idx)}>
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
-            {!viewMode && (
-              <button className="add-btn" onClick={addPriority}>
-                + Add Priority
-              </button>
-            )}
-          </div>
+          <h3>TOP PRIORITIES</h3>
+          {[...priorities]
+  .sort((a, b) => {
+    const levels = { high: 3, medium: 2, low: 1 };
+    return levels[b.priority || "medium"] - levels[a.priority || "medium"];
+  })
+  .map((p, originalIdx) => (
+    <div
+      className={`priority-row ${p.completed ? "completed-item" : ""}`}
+      key={originalIdx}
+      style={{
+        borderLeft: `4px solid ${
+          p.priority === "high" ? "red" : p.priority === "medium" ? "orange" : "green"
+        }`,
+        paddingLeft: "5px",
+        marginBottom: "5px",
+      }}
+    >
+      <input
+        type="checkbox"
+        disabled={viewMode}
+        checked={p.completed}
+        onChange={() => togglePriorityCompleted(originalIdx)}
+      />
+      <textarea
+        className={p.completed ? "completed" : ""}
+        disabled={viewMode}
+        value={p.text}
+        onChange={(e) => {
+          updatePriorityText(originalIdx, e.target.value);
+          e.target.style.height = 'auto';
+          e.target.style.height = (e.target.scrollHeight) + 'px';
+        }}
+        onFocus={(e) => {
+          e.target.style.height = 'auto';
+          e.target.style.height = (e.target.scrollHeight) + 'px';
+        }}
+      />
+      <select
+        value={p.priority || "medium"}
+        disabled={viewMode}
+        onChange={(e) => updatePriorityLevel(originalIdx, e.target.value)}
+        style={{ marginLeft: "5px" }}
+      >
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+      {!viewMode && (
+        <button className="remove-btn" onClick={() => removePriority(originalIdx)}>
+          ✕
+        </button>
+      )}
+    </div>
+  ))}
+          {!viewMode && (
+            <button className="add-btn" onClick={addPriority}>
+              + Add Priority
+            </button>
+          )}
+        </div>
         )}
 
         {canViewAgenda && (
           <div className="section">
-            <h3>Brain Dump</h3>
-            {brainDump.map((b, i) => (
-              <div className="brain-dump-row" key={i}>
-                <input
-                  type="checkbox"
-                  disabled={viewMode}
-                  checked={b.completed}
-                  onChange={() => toggleBrainDumpCompleted(i)}
-                />
-                <input
-                  type="text"
-                  className={b.completed ? "completed" : ""}
-                  disabled={viewMode}
-                  value={b.text}
-                  onChange={(e) => updateBrainDumpText(i, e.target.value)}
-                />
-                {!viewMode && (
-                  <button className="remove-btn" onClick={() => removeBrainDumpItem(i)}>
-                    ✕
-                  </button>
-                )}
+          <h3>BRAIN DUMP</h3>
+          {/* In the brain dump section */}
+          {brainDump.map((b, i) => (
+  <div className={`brain-dump-row ${b.completed ? "completed-item" : ""}`} key={i}>
+    <input
+      type="checkbox"
+      disabled={viewMode}
+      checked={b.completed}
+      onChange={() => toggleBrainDumpCompleted(i)}
+    />
+    <textarea
+      className={b.completed ? "completed" : ""}
+      disabled={viewMode}
+      value={b.text}
+      onChange={(e) => {
+        updateBrainDumpText(i, e.target.value);
+        e.target.style.height = 'auto';
+        e.target.style.height = (e.target.scrollHeight) + 'px';
+      }}
+      onFocus={(e) => {
+        e.target.style.height = 'auto';
+        e.target.style.height = (e.target.scrollHeight) + 'px';
+      }}
+    />
+    {!viewMode && (
+      <button className="remove-btn" onClick={() => removeBrainDumpItem(i)}>
+        ✕
+      </button>
+    )}
+  </div>
+))}
+          {!viewMode && (
+            <button className="add-btn" onClick={addBrainDumpItem}>
+              + Add Idea
+            </button>
+          )}
+        </div>
+        )}
+
+        {isLoggedIn && isAdmin && (
+          <div style={{ marginTop: 30 }}>
+            <button className="reports-btn" onClick={() => setShowReports(!showReports)}>
+              Reports
+            </button>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "10px" }}>
+                <select
+                  className="reports-btn"
+                  value={targetUser}
+                  onChange={(e) => setTargetUser(e.target.value)}
+                >
+                  <option value="">-- Select Employee --</option>
+                  {Object.keys(syncedUsers)
+                    .filter((uname) => {
+                      const emp = syncedUsers[uname];
+                      if (!emp || emp.role !== "employee") return false;
+                      return (
+                        isAdmin &&
+                        loggedInUser.allowedAreas &&
+                        loggedInUser.allowedAreas.includes(emp.sheet)
+                      );
+                    })
+                    .map((uname) => (
+                      <option key={uname} value={uname}>
+                        {syncedUsers[uname].fullName} ({syncedUsers[uname].sheet})
+                      </option>
+                    ))}
+                </select>
+                <button className="reports-btn" onClick={handleLoadEmployee}>
+                  Load Employee Agenda
+                </button>
               </div>
-            ))}
-            {!viewMode && (
-              <button className="add-btn" onClick={addBrainDumpItem}>
-                + Add Idea
+
+              {viewingTarget && (
+                <button className="reports-btn" onClick={handleBackToMyAgenda}>
+                  Back to My Agenda
+                </button>
+              )}
+            </div>
+            {/* Category Builder toggle for admins */}
+            <div style={{ marginTop: 10 }}>
+              <button 
+                className="reports-btn" 
+                onClick={() => setShowCategoryBuilder(!showCategoryBuilder)}
+              >
+                {showCategoryBuilder ? "Close Category Builder" : "Edit Categories"}
               </button>
+            </div>
+            {showCategoryBuilder && (
+              <CategoryBuilderTable
+                initialTree={categoryTree}
+                onSave={async (newTree) => {
+                  setCategoryTree(newTree);
+                  await saveCategoryTreeForUser(loggedInUser, newTree);
+                  setShowCategoryBuilder(false);
+                }}
+                onCancel={() => setShowCategoryBuilder(false)}
+              />
             )}
           </div>
         )}
 
+        {/* Chat Component */}
         {isLoggedIn && (
-          <div style={{ marginTop: 30 }}>
-            {isAdmin && (
-              <>
-                <button
-                  className="reports-btn"
-                  onClick={() => {
-                    setShowReports(!showReports);
-                  }}
-                >
-                  Reports
-                </button>
-                <div style={{ marginTop: 10 }}>
-                  <label>Select Employee:</label>
-                  <select
-                    value={targetUser}
-                    onChange={(e) => setTargetUser(e.target.value)}
-                    style={{ marginLeft: 8 }}
-                  >
-                    <option value="">-- Select Employee --</option>
-                    {Object.keys(syncedUsers)
-                      .filter((uname) => {
-                        const emp = syncedUsers[uname];
-                        if (!emp || emp.role !== "employee") return false;
-                        return isAdmin && loggedInUser.allowedAreas && loggedInUser.allowedAreas.includes(emp.sheet);
-                      })
-                      .map((uname) => (
-                        <option key={uname} value={uname}>
-                          {syncedUsers[uname].fullName} ({syncedUsers[uname].sheet})
-                        </option>
-                      ))}
-                  </select>
-                  <button onClick={handleLoadEmployee} style={{ marginLeft: 8 }}>
-                    Load Employee Agenda
-                  </button>
-                  {viewingTarget && (
-                    <button onClick={handleBackToMyAgenda} style={{ marginLeft: 8 }}>
-                      Back to My Agenda
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-
-            {canViewAgenda && (
-              <div className="section" style={{ borderTop: "1px solid #ccc", marginTop: 20 }}>
-                <h3>Account Settings</h3>
-                <div style={{ marginBottom: 10 }}>
-                  <label>Default Start Hour:</label>
-                  <select
-                    disabled={viewMode}
-                    value={activeData?.defaultStartHour}
-                    onChange={(e) => {
-                      if (viewMode) return;
-                      setStartHourVal(e.target.value);
-                    }}
-                    style={{ marginLeft: 5 }}
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>
-                        {i}:00
-                      </option>
-                    ))}
-                  </select>
-
-                  <label style={{ marginLeft: 10 }}>Default End Hour:</label>
-                  <select
-                    disabled={viewMode}
-                    value={activeData?.defaultEndHour}
-                    onChange={(e) => {
-                      if (viewMode) return;
-                      setEndHourVal(e.target.value);
-                    }}
-                    style={{ marginLeft: 5 }}
-                  >
-                    {Array.from({ length: 25 }, (_, i) => (
-                      <option key={i} value={i}>
-                        {i}:00
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
+          <div style={{ marginTop: "30px" }}>
+            <Chat currentUser={loggedInUser} />
           </div>
         )}
       </div>
 
-      {/* RIGHT COLUMN: Schedule Table */}
-      <div className="right-column">
+                        {/* ——— RIGHT COLUMN: Schedule Table ——— */}
+      <div
+        className="right-column"
+        style={{
+          border: homeOffice ? "2px solid blue" : "none",
+          padding: homeOffice ? "8px" : undefined
+        }}
+      >
         {canViewAgenda && (
           <>
-            <div className="date-row">
+            {/* Header row */}
+            <div
+              className="date-row"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "8px",
+                marginBottom: 16,
+                fontSize: "0.9rem"
+              }}
+            >
               <label>Date:</label>
-              <input type="date" value={formatDate(currentDate)} onChange={(e) => {
-                const d = new Date(e.target.value);
-                if (!isNaN(d.getTime())) {
-                  setCurrentDate(d);
-                }
-              }} />
-              <button onClick={() => setCurrentDate(getPrevDay(currentDate))}>&lt;</button>
-              <button onClick={() => setCurrentDate(getNextDay(currentDate))}>&gt;</button>
-            </div>
-
-            <div style={{ marginBottom: 10 }}>
               <input
-                type="checkbox"
-                disabled={viewMode}
-                checked={homeOffice}
-                onChange={(e) => {
-                  if (!viewMode) {
-                    updateActiveData((draft) => {
-                      if (!draft.timeBox[currentDateStr]) {
-                        draft.timeBox[currentDateStr] = {
-                          priorities: [],
-                          brainDump: [],
-                          schedule: {},
-                          homeOffice: false,
-                          confettiShown: false,
-                          startHour: draft.defaultStartHour || 7,
-                          endHour: draft.defaultEndHour || 23,
-                        };
-                      }
-                      draft.timeBox[currentDateStr].homeOffice = e.target.checked;
-                    });
-                  }
+                type="date"
+                value={formatDate(currentDate)}
+                onChange={e => {
+                  const d = new Date(e.target.value);
+                  if (!isNaN(d)) setCurrentDate(d);
                 }}
               />
-              <label style={{ marginLeft: 5 }}>Mark Home Office</label>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ marginRight: 10 }}>
-                Start Hour:
-                <select
-                  onChange={(e) => setStartHourVal(e.target.value)}
-                  value={startHour}
+              <button onClick={() => setCurrentDate(getPrevDay(currentDate))}>
+                &lt;
+              </button>
+              <button onClick={() => setCurrentDate(getNextDay(currentDate))}>
+                &gt;
+              </button>
+              <label style={{ marginLeft: 16 }}>
+                <input
+                  type="checkbox"
                   disabled={viewMode}
-                  style={{ marginLeft: 5 }}
+                  checked={homeOffice}
+                  onChange={e =>
+                    updateActiveData(draft => {
+                      ensureDayStructure(draft, currentDateStr);
+                      draft.timeBox[currentDateStr].homeOffice = e.target.checked;
+                    })
+                  }
+                />{" "}
+                Home Office
+              </label>
+              <label style={{ marginLeft: 16 }}>
+                <input
+                  type="checkbox"
+                  disabled={viewMode}
+                  checked={vacation}
+                  onChange={e =>
+                    updateActiveData(draft => {
+                      ensureDayStructure(draft, currentDateStr);
+                      draft.timeBox[currentDateStr].vacation = e.target.checked;
+                    })
+                  }
+                />{" "}
+                Vacation
+              </label>
+              <label style={{ marginLeft: 16 }}>
+                Start:
+                <select
+                  value={startHour}
+                  onChange={e => setStartHourVal(e.target.value)}
+                  disabled={viewMode}
                 >
                   {Array.from({ length: 24 }, (_, i) => (
                     <option key={i} value={i}>
@@ -1506,12 +1395,11 @@ export default function App() {
                 </select>
               </label>
               <label>
-                End Hour:
+                End:
                 <select
-                  onChange={(e) => setEndHourVal(e.target.value)}
                   value={endHour}
+                  onChange={e => setEndHourVal(e.target.value)}
                   disabled={viewMode}
-                  style={{ marginLeft: 5 }}
                 >
                   {Array.from({ length: 25 }, (_, i) => (
                     <option key={i} value={i}>
@@ -1520,36 +1408,211 @@ export default function App() {
                   ))}
                 </select>
               </label>
+              <label style={{ marginLeft: 16 }}>
+                View:
+                <select
+                  value={calendarView}
+                  onChange={e => setCalendarView(e.target.value)}
+                >
+                  <option value="daily">Daily</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </label>
             </div>
 
-            <table className="schedule-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Task / Activity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quarterSlots.map(({ hour, minute }, idx) => {
-                  const label = formatTime(hour, minute);
-                  const entry = dayObj.schedule?.[label] || { text: "", repeat: "none" };
+            {/* Weekend / Vacation / Daily / Monthly / Yearly */}
+            {isWeekend ? (
+              <div style={{ color: "red", marginTop: 10 }}>
+                This is a weekend. No schedule available.
+              </div>
+            ) : vacation ? (
+              <div style={{ color: "blue", marginTop: 10 }}>
+                This day is marked as Vacation. Schedule is blocked.
+              </div>
+            ) : calendarView === "daily" ? (
+              <table className="schedule-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Task / Activity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {getQuarterHourSlots(startHour, endHour).map(
+                    ({ hour, minute }, idx) => {
+                      const label = formatTime(hour, minute);
+                      const raw =
+                        dayObj.schedule?.[label] || [{ text: "", repeat: "none" }];
+                      const tasks = Array.isArray(raw) ? raw : [raw];
+                      return (
+                        <tr key={idx}>
+                          <td className="hour-cell">{label}</td>
+                          <td>
+                            {tasks.map((task, tIdx) => (
+                              <ScheduleSlot
+                              key={tIdx}
+                              label={label}
+                              scheduleEntry={task}
+                              updateEntry={nv => updateScheduleSlot(label, nv, tIdx)}
+                              viewMode={viewMode}
+                              categoryTree={categoryTree}
+                              slotIndex={idx}
+                              taskIndex={tIdx}
+                              onDragRange={(s,e,all) =>
+                                updateScheduleRange(
+                                  s,
+                                  e,
+                                  all,
+                                  canViewAgenda,
+                                  viewMode,
+                                  updateActiveData,
+                                  getQuarterHourSlots(startHour, endHour),
+                                  currentDateStr
+                                )
+                              }
+                              allTasks={tasks}
+                              onRemove={() => removeScheduleTask(label, tIdx)}
+                            />
+                            
+                            ))}
+                            {!viewMode && (
+                              <button
+                                className="add-task-btn"
+                                onClick={() => addScheduleTask(label)}
+                              >
+                                + Add Task
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )}
+                </tbody>
+              </table>
+            ) : calendarView === "monthly" ? (
+              <Calendar
+                view="month"
+                value={currentDate}
+                onClickDay={(d) => {
+                  setCalendarView("daily");
+                  setCurrentDate(d);
+                }}
+                tileDisabled={({ date, view }) => {
+                  if (view !== "month") return false;
+                  const key = formatDate(date);
+                  const day = activeData.timeBox[key] || {};
+                  return date.getDay() === 0 || date.getDay() === 6 || Boolean(day.vacation);
+                }}
+                tileContent={({ date, view }) => {
+                  if (view !== "month") return null;
+                  
+                  // Skip weekends entirely
+                  if (date.getDay() === 0 || date.getDay() === 6) {
+                    return null;
+                  }
+            
+                  const key = formatDate(date);
+                  const day = activeData.timeBox[key] || {};
+                  
+                  if (day.vacation) {
+                    return <div className="vacation-cell" />;
+                  }
+            
+                  const slots = getQuarterHourSlots(day.startHour || startHour, day.endHour || endHour);
+                  let filled = 0;
+                  
+                  slots.forEach(({ hour, minute }) => {
+                    const label = formatTime(hour, minute);
+                    const tasks = day.schedule?.[label] || [];
+                    const taskArray = Array.isArray(tasks) ? tasks : [tasks];
+                    if (taskArray.some(t => t?.text?.trim())) filled++;
+                  });
+            
+                  const percentage = Math.round((filled / slots.length) * 100);
+                  const color = `hsl(${percentage}, 80%, 50%)`;
+                  
                   return (
-                    <tr key={idx}>
-                      <td className="hour-cell">{label}</td>
-                      <td>
-                        <ScheduleSlot
-                          label={label}
-                          scheduleEntry={entry}
-                          updateEntry={(newVal) => updateScheduleSlot(label, newVal)}
-                          viewMode={viewMode}
-                          categoryTree={categoryTree}
-                        />
-                      </td>
-                    </tr>
+                    <div 
+                      className="day-cell" 
+                      style={{ 
+                        backgroundColor: color,
+                        border: day.homeOffice ? "2px solid blue" : "none"
+                      }}
+                    >
+                      {percentage}%
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
+                }}
+                formatShortWeekday={(locale, date) => {
+                  return date.getDay() === 0 || date.getDay() === 6 ? '' : ['M', 'T', 'W', 'T', 'F'][date.getDay() - 1];
+                }}
+              />
+            ) : (
+              // In the yearly Calendar component
+              <Calendar
+                view="year"
+                value={currentDate}
+                onClickMonth={(date) => {
+                  setCalendarView("monthly");
+                  setCurrentDate(date);
+                }}
+                onDoubleClickYear={({ date }) => {
+                  setCalendarView("monthly");
+                  setCurrentDate(date);
+                }}
+                tileContent={({ date, view }) => {
+                  if (view !== "year") return null;
+                  const month = date.getMonth();
+                  let totalSlots = 0;
+                  let filledSlots = 0;
+                  
+                  Object.entries(activeData.timeBox || {}).forEach(([k, day]) => {
+                    const dt = new Date(k);
+                    if (dt.getMonth() === month && dt.getDay() !== 0 && dt.getDay() !== 6 && !day.vacation) {
+                      const timeSlots = getQuarterHourSlots(day.startHour || startHour, day.endHour || endHour);
+                      
+                      timeSlots.forEach(({ hour, minute }) => {
+                        const label = formatTime(hour, minute);
+                        const tasks = day.schedule?.[label] ? 
+                          (Array.isArray(day.schedule[label]) ? day.schedule[label] : [day.schedule[label]]) : [];
+                        
+                        totalSlots++;
+                        if (tasks.some(t => t.text && t.text.trim() !== "")) {
+                          filledSlots++;
+                        }
+                      });
+                    }
+                  });
+                  
+                  const percentage = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
+                  const color = percentage >= 80 ? "green" : 
+                               percentage >= 50 ? "orange" : "red";
+                  const label = date.toLocaleString("default", {
+                    month: "short"
+                  });
+                  
+                  return (
+                    <div style={{ textAlign: "center" }}>
+                      <div
+                        style={{
+                          background: color,
+                          borderRadius: 4,
+                          padding: "2px 4px",
+                          color: "#fff",
+                          fontSize: 12,
+                          display: "inline-block"
+                        }}
+                      >
+                        {label}
+                      </div>
+                      <div style={{ fontSize: 10 }}>{percentage}%</div>
+                    </div>
+                  );
+                }}
+              />
+            )}
           </>
         )}
       </div>

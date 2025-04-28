@@ -1,0 +1,604 @@
+/***************************************
+ * Reports.css
+ * Enhanced Styles for the ReportsModal & Charts
+ * 
+ * Updates include:
+ * - Calendar-style busy heatmap (Mon–Fri columns, weeks stacked)
+ * - Bar charts display hours (no percentages) in data labels
+ * - Toggle button for data labels on/off
+ * - Busy heatmap cells display short dates (e.g. "7/7/24")
+ * - Support for time range buttons: Daily, Weekly, Monthly, Yearly, All Time, Custom Range
+ ***************************************/
+
+/* Full-screen modal container */
+.reports-modal-container {
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: linear-gradient(135deg, #f2f2f2, #eaeaea);
+  overflow-y: auto;
+  padding-bottom: 50px;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  perspective: 800px;
+  animation: pageEntrance3d 1.5s ease-out forwards;
+}
+
+/* Close button in top-right corner */
+.reports-close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  background-color: #007BFF;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  transition: background-color 0.3s;
+}
+
+.reports-close-button:hover {
+  background-color: #0056b3;
+}
+
+/* Page heading */
+.reports-header {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 26px;
+  color: #333;
+  letter-spacing: 1px;
+}
+
+/* Summary Section: Metrics, trends & suggestions */
+.summary-section {
+  max-width: 1000px;
+  margin: 20px auto;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.summary-section h2 {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.trend-info {
+  font-size: 16px;
+  margin-top: 10px;
+  color: #555;
+}
+
+.trend-arrow {
+  font-weight: bold;
+  margin-left: 5px;
+}
+
+.trend-arrow.up {
+  color: #28a745;
+}
+
+.trend-arrow.down {
+  color: #dc3545;
+}
+
+.trend-arrow.flat {
+  color: #ffc107;
+}
+
+.efficiency-score {
+  font-size: 18px;
+  margin-top: 10px;
+  padding: 8px;
+  background-color: #e9f5e9;
+  border: 1px solid #28a745;
+  display: inline-block;
+  border-radius: 4px;
+  color: #155724;
+}
+
+.predictive-suggestions {
+  font-size: 14px;
+  margin-top: 10px;
+  background-color: #fff3cd;
+  border: 1px solid #ffeeba;
+  padding: 10px;
+  border-radius: 4px;
+  color: #856404;
+}
+
+/* Timeline Animation Section */
+.timeline-section {
+  max-width: 1000px;
+  margin: 20px auto;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.timeline-section h3 {
+  margin-bottom: 10px;
+  font-size: 18px;
+  color: #333;
+}
+
+.timeline-section input[type="range"] {
+  width: 80%;
+  margin: 10px 0;
+}
+
+.timeline-section .timeline-button {
+  background-color: #007BFF;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 10px;
+  transition: background-color 0.3s;
+}
+
+.timeline-section .timeline-button:hover {
+  background-color: #0056b3;
+}
+
+/* Export Section */
+.export-section {
+  text-align: center;
+  margin: 20px auto;
+}
+
+.export-button {
+  background-color: #28a745;
+  color: #fff;
+  padding: 10px 18px;
+  font-size: 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.export-button:hover {
+  background-color: #218838;
+}
+
+/* Reports button group (for time range selections) */
+.reports-button-group {
+  text-align: center;
+  margin: 10px 0;
+}
+
+.reports-button-group button {
+  margin: 0 5px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #007BFF;
+  color: #fff;
+  transition: background-color 0.3s;
+}
+
+.reports-button-group button:hover {
+  background-color: #0056b3;
+}
+
+/* Input container for date controls */
+.reports-input-container {
+  text-align: center;
+  margin-top: 10px;
+  color: #333;
+}
+
+.reports-input-container label {
+  font-size: 14px;
+  margin-right: 5px;
+}
+
+/* Chart container with modern card style */
+.chart-container {
+  width: 100%;
+  max-width: 1000px;
+  margin: 20px auto;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #fafafa;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Drill-down Chart Title */
+.drill-down-chart h3 {
+  text-align: center;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+/* Toggle button group for switching chart types */
+.chart-toggle-button-group {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.chart-toggle-button-group button {
+  background-color: #007BFF;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  margin: 0 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.chart-toggle-button-group button:hover {
+  background-color: #0056b3;
+}
+
+/* Category button style (for drill-down navigation) */
+.category-button {
+  background-color: #007BFF;
+  color: #fff;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  margin: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.category-button:hover {
+  background-color: #0056b3;
+}
+
+/* -------------------------------
+   Calendar-Style Busy Heatmap (Mon–Fri, weeks stacked)
+--------------------------------- */
+.busy-heatmap-calendar {
+  max-width: 1000px;
+  margin: 20px auto;
+  padding: 10px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+.busy-heatmap-calendar h3 {
+  text-align: center;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.heatmap-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+}
+
+.heatmap-table th,
+.heatmap-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.heatmap-table th {
+  background-color: #f5f5f5;
+  color: #333;
+  font-weight: bold;
+}
+
+/* For cells with no data */
+.heatmap-cell.empty {
+  background-color: #f8f8f8;
+}
+
+/* Busy heatmap cells (used in both grid and calendar) */
+.heatmap-cell {
+  position: relative;
+}
+
+.heatmap-cell:hover {
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+/* Label inside a heatmap cell (short date & busy %) */
+.heatmap-label {
+  display: block;
+  font-size: 10px;
+  color: #333;
+}
+
+/* -------------------------------
+   Data Labels Toggle Button
+--------------------------------- */
+.toggle-data-labels-button {
+  background-color: #6c757d;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.toggle-data-labels-button:hover {
+  background-color: #5a6268;
+}
+
+/* -------------------------------
+   Time Slot Busy Overview Styles
+--------------------------------- */
+.timeslot-busy-table {
+  max-width: 1000px;
+  margin: 20px auto;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.timeslot-busy-table h3 {
+  text-align: center;
+  margin-bottom: 12px;
+  font-size: 18px;
+  color: #333;
+}
+
+.timeslot-busy-table table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+}
+
+.timeslot-busy-table caption {
+  caption-side: top;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.timeslot-busy-table th,
+.timeslot-busy-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  font-size: 14px;
+}
+
+.timeslot-busy-table th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+  color: #333;
+}
+
+.timeslot-busy-table tr.anomaly {
+  background-color: #f8d7da;
+}
+
+.timeslot-busy-table tr.anomaly td {
+  color: #721c24;
+}
+
+/* -------------------------------
+   Global 3D Entrance Animations
+--------------------------------- */
+@keyframes pageEntrance3d {
+  0% {
+    transform: translateY(30px) rotateX(15deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+.animated-title {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-top: 10px;
+  animation: fadeInUp3D 0.9s ease forwards;
+  transform: perspective(400px) rotateX(15deg);
+  opacity: 0;
+}
+
+@keyframes fadeInUp3D {
+  0% {
+    transform: perspective(400px) rotateX(15deg);
+    opacity: 0;
+  }
+  100% {
+    transform: perspective(400px) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+/* -------------------------------
+   Responsive Styles (for small devices)
+--------------------------------- */
+@media (max-width: 768px) {
+  .chart-container,
+  .reports-input-container,
+  .summary-section,
+  .timeline-section,
+  .busy-heatmap-calendar,
+  .heatmap-table,
+  .reports-button-group,
+  .timeslot-busy-table {
+    padding: 12px;
+    margin: 10px auto;
+  }
+  
+  .reports-header {
+    font-size: 20px;
+  }
+  
+  .reports-button-group button, 
+  .category-button, 
+  .chart-toggle-button-group button, 
+  .export-button, 
+  .timeline-button,
+  .toggle-data-labels-button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
+/* Data Labels Toggle Button Styles */
+.data-labels-toggle {
+  background-color: #2196F3;
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  margin: 10px 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-weight: 500;
+}
+
+.data-labels-toggle:hover {
+  background-color: #0b7dda;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+}
+
+.data-labels-toggle:active {
+  background-color: #0a68ba;
+  transform: translateY(1px);
+}
+
+/* Show state (green) */
+.data-labels-toggle.show-state {
+  background-color: #4CAF50;
+}
+
+.data-labels-toggle.show-state:hover {
+  background-color: #3e8e41;
+}
+
+/* Hide state (red) */
+.data-labels-toggle.hide-state {
+  background-color: #f44336;
+}
+
+.data-labels-toggle.hide-state:hover {
+  background-color: #d32f2f;
+}
+
+/* Optional icon - remove if you don't want icons */
+.data-labels-toggle::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  vertical-align: middle;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>');
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.data-labels-toggle.hide-state::before {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M3 5v2h18V5H3zm0 6h18V9H3v2zm0 8h18v-2H3v2z"/></svg>');
+}
+
+/* Percentage Toggle Button Styles */
+.percentage-toggle {
+  background-color: #6c757d;
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-weight: 500;
+}
+
+.percentage-toggle:hover {
+  background-color: #5a6268;
+}
+
+.percentage-toggle.percentage-state {
+  background-color: #17a2b8;
+}
+
+.percentage-toggle.percentage-state:hover {
+  background-color: #138496;
+}
+
+.percentage-toggle.raw-state {
+  background-color: #6c757d;
+}
+
+.percentage-toggle.raw-state:hover {
+  background-color: #5a6268;
+}
+
+/* Button size consistency */
+.data-labels-toggle,
+.percentage-toggle {
+  min-width: 140px;
+  padding: 8px 12px;
+}
+
+/* Remove duplicate title */
+.reports-modal-container h2.reports-header:first-child {
+  display: none;
+}
+
+/* Data label background styles */
+.chartjs-datalabels {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+}
+
+/* For dark backgrounds (like in pie charts) */
+.chartjs-datalabels[fill="black"] {
+  color: #333 !important;
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Add to your Reports.css file */
+.chart-container {
+  position: relative;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.reports-modal-container {
+  overflow-y: auto;
+  padding: 20px;
+}

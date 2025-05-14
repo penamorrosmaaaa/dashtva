@@ -1,3 +1,5 @@
+// FILE: src/Header.js
+
 import React from 'react';
 import { Box, Image, useBreakpointValue } from '@chakra-ui/react';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
@@ -5,6 +7,7 @@ import logoImage from './assets/Diseño sin título (1).png';
 import dcImage from './assets/DC.png';
 import poImage from './assets/PO.png';
 import tbImage from './assets/TB.png';
+import lighthouseImage from './assets/Lighthouse.png'; // ✅ NEW
 
 const Header = () => {
   const logoSize = useBreakpointValue({ base: '100px', md: '150px' });
@@ -12,12 +15,12 @@ const Header = () => {
   const isDigitalCalendar = location.pathname === '/Digital-Calendar';
   const isPopularObjects = location.pathname === '/PopularObjects';
   const isTimeBox = location.pathname === '/Time-Box';
+  const isLighthouse = location.pathname === '/Lighthouse'; // ✅ NEW
 
-  // Create star elements with random delays for twinkle/jitter
   const starElements = Array.from({ length: 120 }).map((_, i) => {
     const left = Math.random() * 100;
     const top = Math.random() * 100;
-    const delay = Math.random() * 5; // up to 5s delay
+    const delay = Math.random() * 5;
     return (
       <Box
         key={`header-star-${i}`}
@@ -105,6 +108,9 @@ const Header = () => {
         )}
         {isTimeBox && (
           <Image src={tbImage} alt="Time Box Title" height="50px" />
+        )}
+        {isLighthouse && (
+          <Image src={lighthouseImage} alt="Lighthouse Title" height="50px" />
         )}
       </Box>
     </Box>

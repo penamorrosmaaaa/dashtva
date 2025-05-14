@@ -602,3 +602,7 @@
   overflow-y: auto;
   padding: 20px;
 }
+.heatmap-cell.home-office-border {
+  border: 2px solid #2f80ed; /* Bright blue border */
+  box-shadow: 0 0 5px rgba(47, 128, 237, 0.5);
+}

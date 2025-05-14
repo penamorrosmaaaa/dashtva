@@ -1,3 +1,5 @@
+// FILE: src/App.js
+
 import React, { useState, useEffect } from 'react';
 import { ChakraProvider, Box } from '@chakra-ui/react';
 import {
@@ -24,6 +26,7 @@ import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
 import TimeBox from './time-box/timebox';
 import TimeBoxAdmin from './time-box/timeboxadmin';
+import Lighthouse from './Lighthouse/Lighthouse'; // ✅ NEW
 
 const App = () => {
   return (
@@ -47,19 +50,16 @@ const AppContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Hide the Header on /login, /landing, or /ADMIN-DIGITAL-CALENDAR
   const hideHeader =
     location.pathname === '/login' ||
     location.pathname === '/landing' ||
     location.pathname === '/ADMIN-DIGITAL-CALENDAR';
 
-  // Check localStorage for auth status on first render
   useEffect(() => {
     const authStatus = localStorage.getItem('isAuthenticated');
     setIsAuthenticated(authStatus === 'true');
   }, []);
 
-  // Save the last path visited, so we can redirect back after login
   useEffect(() => {
     if (
       isAuthenticated &&
@@ -70,7 +70,6 @@ const AppContent = () => {
     }
   }, [location.pathname, isAuthenticated]);
 
-  // Clear the lastPath if the user is on /landing
   useEffect(() => {
     if (location.pathname === '/landing') {
       localStorage.removeItem('lastPath');
@@ -97,7 +96,6 @@ const AppContent = () => {
   return (
     <>
       {!hideHeader && <Header />}
-
       {isAuthenticated ? (
         <AuthenticatedRoutes handleLogout={handleLogout} />
       ) : (
@@ -134,11 +132,17 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
           </Box>
         }
       />
+      <Route
+        path="/Lighthouse"
+        element={
+          <Box pt="200px">
+            <Lighthouse />
+          </Box>
+        }
+      />
 
-      {/* Landing page route */}
       <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
 
-      {/* Default to the General Dashboard */}
       <Route
         path="*"
         element={

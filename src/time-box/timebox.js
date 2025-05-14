@@ -3,7 +3,8 @@
  ***************************************/
 import React, { useState, useEffect } from "react";
 import { Bar, Pie } from "react-chartjs-2";
-import Confetti from "react-confetti";
+import AiReaction from "../components/AiReaction";
+import Confetti from 'react-confetti';
 import { FaEllipsisH, FaGripVertical, FaTrash } from "react-icons/fa";
 
 import {
@@ -318,10 +319,12 @@ async function saveCategoryTreeForUser(user, tree) {
 /** 
  * HierarchicalSelect component for picking categories in nested form.
  */
-function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
+function HierarchicalSelect({ categoryTree, onChange, value, viewMode, activeData, setRepeatSuggestion }) {
   const [selectedPath, setSelectedPath] = useState([]);
   const [otherValue, setOtherValue] = useState("");
   const [isOther, setIsOther] = useState(false);
+  const [hasFiredSuggestion, setHasFiredSuggestion] = useState(false);
+
 
   useEffect(() => {
     if (!value || value === "Select") {
@@ -394,17 +397,52 @@ function HierarchicalSelect({ categoryTree, onChange, value, viewMode }) {
     const opts = getOptions(nodes);
     dropdowns.push(
       <select
-        key={lvl}
-        value={sel}
-        disabled={viewMode}
-        onChange={(e) => handleSelectChange(lvl, e.target.value)}
-      >
-        {opts.map((o, i) => (
-          <option key={i} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
+  key={lvl}
+  value={sel}
+  disabled={viewMode}
+  onChange={(e) => handleSelectChange(lvl, e.target.value)}
+  onClick={() => {
+    if (
+      typeof value === "string" &&
+      value !== "Select" &&
+      value.trim() !== "" &&
+      typeof setRepeatSuggestion === "function" &&
+      typeof activeData === "object"
+    ) {
+      const todayStr = formatDate(new Date());
+      const entry = activeData?.timeBox?.[todayStr]?.schedule?.[value];
+      const arr = Array.isArray(entry) ? entry : [entry];
+      const taskText = arr[0]?.text?.trim();
+
+      if (taskText) {
+        let matchCount = 0;
+        for (let i = 1; i <= 4; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          const dStr = formatDate(d);
+          const prevEntry = activeData?.timeBox?.[dStr]?.schedule?.[value];
+          const prevArr = Array.isArray(prevEntry) ? prevEntry : [prevEntry];
+          if (prevArr[0]?.text?.trim() === taskText) matchCount++;
+        }
+
+        if (matchCount >= 2) {
+          setRepeatSuggestion({
+            time: value,
+            task: taskText,
+            count: matchCount,
+          });
+        }
+      }
+    }
+  }}
+>
+  {opts.map((o, i) => (
+    <option key={i} value={o}>
+      {o}
+    </option>
+  ))}
+</select>
+
     );
     if (sel === "Select" || sel === "Other" || sel.startsWith("Other:"))
       break;
@@ -516,6 +554,7 @@ function dayHasContent(day) {
   return hasPriorities || hasBrainDump || hasSchedule;
 }
 
+
 /** 
  * ScheduleSlot component – single schedule slot row.
  */
@@ -530,18 +569,58 @@ function ScheduleSlot({
   onDragRange,
   allTasks,
   onRemove,
-}) {
+  appliedRepeatCache,
+  activeData,
+  setRepeatSuggestion,
+})
+ {
   const [showRepeatOptions, setShowRepeatOptions] = useState(false);
   const repeatVal = scheduleEntry.repeat || "none";
 
-  const handleTextChange = (val) => {
-    if (viewMode) return;
-    updateEntry({ ...scheduleEntry, text: val });
-  };
   const handleRepeatChange = (val) => {
     if (viewMode) return;
     updateEntry({ ...scheduleEntry, repeat: val });
   };
+  
+
+  const handleTextChange = (val) => {
+    if (viewMode) return;
+    updateEntry({ ...scheduleEntry, text: val });
+  
+    // REPEAT SUGGESTION CHECK
+    if (val && val.trim() !== "") {
+      const recentDays = [...Array(3).keys()].map((i) => {
+        const d = new Date();
+        d.setDate(d.getDate() - i - 1);
+        return formatDate(d);
+      });
+  
+      let matchCount = 0;
+      recentDays.forEach((dStr) => {
+        const entry = activeData?.timeBox?.[dStr]?.schedule?.[label];
+        const arr = Array.isArray(entry) ? entry : [entry];
+        if (arr && arr[0]?.text === val) matchCount++;
+      });
+  
+      if (
+        activeData &&
+        typeof formatDate === "function" &&
+        typeof setRepeatSuggestion === "function"
+      ) {
+        const currentDateStr = formatDate(new Date());
+        checkForRepeatSuggestion(
+          activeData.timeBox?.[currentDateStr],
+          activeData.timeBox,
+          label,
+          currentDateStr,
+          setRepeatSuggestion,
+          appliedRepeatCache
+        );
+      }
+      
+    }
+  };
+  
 
   return (
     <div
@@ -561,11 +640,14 @@ function ScheduleSlot({
       <div style={{ flexGrow: 1, display: "flex", alignItems: "center" }}>
         {categoryTree && categoryTree.length > 0 ? (
           <HierarchicalSelect
-            categoryTree={categoryTree}
-            onChange={handleTextChange}
-            value={scheduleEntry.text || ""}
-            viewMode={viewMode}
-          />
+          categoryTree={categoryTree}
+          onChange={handleTextChange}
+          value={scheduleEntry.text || ""}
+          viewMode={viewMode}
+          activeData={activeData}
+          setRepeatSuggestion={setRepeatSuggestion}
+        />
+        
         ) : (
           <input
             type="text"
@@ -595,31 +677,22 @@ function ScheduleSlot({
           }}
         />
         {showRepeatOptions && (
-          <div
-            style={{
-              position: "absolute",
-              top: "100%",
-              right: 0,
-              backgroundColor: "#fff",
-              border: "1px solid #ccc",
-              padding: "5px",
-              zIndex: 999,
-            }}
-          >
-            {["none", "daily", "weekly", "monthly"].map((r) => (
-              <label key={r} style={{ display: "block" }}>
-                <input
-                  type="radio"
-                  name={`repeat-${label}`}
-                  disabled={viewMode}
-                  checked={repeatVal === r}
-                  onChange={() => handleRepeatChange(r)}
-                />
-                {r}
-              </label>
-            ))}
-          </div>
-        )}
+  <div className="repeat-options">
+    {["none", "daily", "weekly", "monthly"].map((r) => (
+      <label key={r}>
+        <input
+          type="radio"
+          name={`repeat-${label}`}
+          disabled={viewMode}
+          checked={repeatVal === r}
+          onChange={() => handleRepeatChange(r)}
+        />
+        {r}
+      </label>
+    ))}
+  </div>
+)}
+
       </div>
     </div>
   );
@@ -647,8 +720,39 @@ function updateScheduleRange(startIndex, endIndex, allTasks, canViewAgenda, view
 /** 
  * Main App Component
  */
+
+function checkForRepeatSuggestion(dayObj, allTimeBox, label, currentDateStr, setRepeatSuggestion, appliedRepeatCache) {
+  if (!dayObj || !allTimeBox || !label) return;
+
+  const currentTasks = dayObj.schedule?.[label];
+  const arr = Array.isArray(currentTasks) ? currentTasks : [currentTasks];
+  const currentTaskText = arr[0]?.text?.trim();
+  if (!currentTaskText) return;
+
+  const uniqueKey = `${currentTaskText}-${label}-${currentDateStr}`;
+  if (appliedRepeatCache.has(uniqueKey)) return;
+
+  let matchCount = 0;
+  Object.entries(allTimeBox).forEach(([dateKey, day]) => {
+    if (dateKey === currentDateStr) return; // Skip today
+    const slot = day?.schedule?.[label];
+    const tasks = Array.isArray(slot) ? slot : [slot];
+    const match = tasks.some((t) => t?.text?.trim() === currentTaskText);
+    if (match) matchCount++;
+  });
+
+  if (matchCount >= 2) {
+    setRepeatSuggestion({
+      task: currentTaskText,
+      time: label,
+      count: matchCount
+    });
+  }
+}
+
 export default function App() {
   const [loggedInUser, setLoggedInUser] = useState(null);
+  const [appliedRepeatCache, setAppliedRepeatCache] = useState(new Set());
   const [displayUser, setDisplayUser] = useState(null);
   const [syncedUsers, setSyncedUsers] = useState({});
   const [categoryTree, setCategoryTree] = useState([]);
@@ -664,6 +768,13 @@ export default function App() {
   const [showReports, setShowReports] = useState(false);
   const [reportRange, setReportRange] = useState("daily");
   const [calendarView, setCalendarView] = useState("daily");
+  const [repeatSuggestion, setRepeatSuggestion] = useState(null);
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => forceUpdate(n => n + 1), 60000); // every 60 seconds
+    return () => clearInterval(interval);
+  }, []);
+
 
 
   // NEW: State variables for report baseline and custom range
@@ -700,6 +811,7 @@ export default function App() {
     homeOffice = false,
     vacation = false,
   } = dayObj;
+
 
   const totalIncomplete =
     priorities.filter((p) => !p.completed).length +
@@ -775,6 +887,8 @@ export default function App() {
       return record;
     }
   }
+
+  
 
   useEffect(() => {
     if (!displayUser) return;
@@ -1015,6 +1129,8 @@ export default function App() {
     }
   }, [canViewAgenda, totalIncomplete, priorities, brainDump, dayObj.confettiShown, currentDateStr]);
 
+  
+
   useEffect(() => {
     if (!canViewAgenda) return;
     if (viewMode) return;
@@ -1065,11 +1181,59 @@ export default function App() {
 
   const isWeekend = currentDate.getDay() === 0 || currentDate.getDay() === 6;
 
+  // 👇 Repeat Pattern Detection Logic
+useEffect(() => {
+  if (!canViewAgenda || viewMode) return;
+
+  const currentDay = activeData.timeBox[currentDateStr];
+  if (!currentDay || !currentDay.schedule) return;
+
+  let detected = null;
+
+  Object.entries(currentDay.schedule).forEach(([label, entries]) => {
+    const entry = Array.isArray(entries) ? entries[0] : entries;
+    if (!entry?.text?.trim()) return;
+
+    let count = 0;
+    for (let i = 1; i <= 4; i++) {
+      const pastDate = new Date(currentDate);
+      pastDate.setDate(pastDate.getDate() - i);
+      const pastDateStr = formatDate(pastDate);
+      const pastDay = activeData.timeBox[pastDateStr];
+      if (!pastDay?.schedule) continue;
+
+      const pastSlot = pastDay.schedule[label];
+      const pastEntry = Array.isArray(pastSlot) ? pastSlot[0] : pastSlot;
+      if (pastEntry?.text?.trim() === entry.text.trim()) {
+        count++;
+      }
+    }
+
+    if (count >= 2) {
+      detected = {
+        time: label,
+        task: entry.text.trim(),
+        count,
+      };
+    }
+  });
+
+  if (detected) setRepeatSuggestion(detected);
+  else setRepeatSuggestion(null);
+}, [currentDateStr, activeData]);
+
+
   return (
     <div className="container" style={{ color: "black" }}>
       {isLoggedIn && showConfetti && (
-        <Confetti width={window.innerWidth} height={window.innerHeight} />
-      )}
+  <>
+    <Confetti width={window.innerWidth} height={window.innerHeight} />
+    <AiReaction />
+  </>
+)}
+
+
+
 
       {/* Render Reports modal for admins */}
       {showReports && isAdmin && (
@@ -1094,7 +1258,7 @@ export default function App() {
       {/* LEFT COLUMN */}
       <div className="left-column">
         {isLoggedIn && (
-          <div className="animated-title">
+          <div className="ai-title">
             Time Box for {loggedInUser?.fullName}
           </div>
         )}
@@ -1165,19 +1329,24 @@ export default function App() {
         onChange={() => togglePriorityCompleted(originalIdx)}
       />
       <textarea
-        className={p.completed ? "completed" : ""}
-        disabled={viewMode}
-        value={p.text}
-        onChange={(e) => {
-          updatePriorityText(originalIdx, e.target.value);
-          e.target.style.height = 'auto';
-          e.target.style.height = (e.target.scrollHeight) + 'px';
-        }}
-        onFocus={(e) => {
-          e.target.style.height = 'auto';
-          e.target.style.height = (e.target.scrollHeight) + 'px';
-        }}
-      />
+  style={{
+    textDecoration: p.completed ? 'line-through' : 'none',
+    color: p.completed ? 'gray' : 'black',
+    backgroundColor: p.completed ? '#f5f5f5' : 'white',
+  }}
+  disabled={viewMode}
+  value={p.text}
+  onChange={(e) => {
+    updatePriorityText(originalIdx, e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = (e.target.scrollHeight) + 'px';
+  }}
+  onFocus={(e) => {
+    e.target.style.height = 'auto';
+    e.target.style.height = (e.target.scrollHeight) + 'px';
+  }}
+/>
+
       <select
         value={p.priority || "medium"}
         disabled={viewMode}
@@ -1216,19 +1385,24 @@ export default function App() {
       onChange={() => toggleBrainDumpCompleted(i)}
     />
     <textarea
-      className={b.completed ? "completed" : ""}
-      disabled={viewMode}
-      value={b.text}
-      onChange={(e) => {
-        updateBrainDumpText(i, e.target.value);
-        e.target.style.height = 'auto';
-        e.target.style.height = (e.target.scrollHeight) + 'px';
-      }}
-      onFocus={(e) => {
-        e.target.style.height = 'auto';
-        e.target.style.height = (e.target.scrollHeight) + 'px';
-      }}
-    />
+  style={{
+    textDecoration: b.completed ? 'line-through' : 'none',
+    color: b.completed ? 'gray' : 'black',
+    backgroundColor: b.completed ? '#f5f5f5' : 'white',
+  }}
+  disabled={viewMode}
+  value={b.text}
+  onChange={(e) => {
+    updateBrainDumpText(i, e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = (e.target.scrollHeight) + 'px';
+  }}
+  onFocus={(e) => {
+    e.target.style.height = 'auto';
+    e.target.style.height = (e.target.scrollHeight) + 'px';
+  }}
+/>
+
     {!viewMode && (
       <button className="remove-btn" onClick={() => removeBrainDumpItem(i)}>
         ✕
@@ -1421,6 +1595,28 @@ export default function App() {
               </label>
             </div>
 
+            {canViewAgenda && calendarView === "daily" && (
+  <div className="vertical-progress-wrapper">
+    <div className="vertical-progress-bar-outer">
+      <div
+        className="vertical-progress-bar-inner"
+        style={{
+          height: `${Math.min(
+            100,
+            Math.max(
+              0,
+              ((new Date().getHours() + new Date().getMinutes() / 60 - startHour) /
+                (endHour - startHour)) *
+                100
+            )
+          )}%`,
+        }}
+      ></div>
+    </div>
+  </div>
+)}
+
+
             {/* Weekend / Vacation / Daily / Monthly / Yearly */}
             {isWeekend ? (
               <div style={{ color: "red", marginTop: 10 }}>
@@ -1447,33 +1643,78 @@ export default function App() {
                       const tasks = Array.isArray(raw) ? raw : [raw];
                       return (
                         <tr key={idx}>
-                          <td className="hour-cell">{label}</td>
+                          <td className="hour-cell">
+  <div className="time-with-progress">
+    <div className="filled-bar-wrapper">
+      <div
+        className="filled-bar-inner"
+        style={{
+          height: `${(idx / (getQuarterHourSlots(startHour, endHour).length - 1)) * 100}%`,
+        }}
+      ></div>
+    </div>
+    <div className="time-label">
+      <div>{label}</div>
+      {(() => {
+        const now = new Date();
+        const isCurrentSlot =
+          now.getHours() === hour &&
+          Math.floor(now.getMinutes() / 30) === (minute === 30 ? 1 : 0);
+
+        if (isCurrentSlot) {
+          const percent = Math.round((idx / (getQuarterHourSlots(startHour, endHour).length - 1)) * 100);
+          let msg = "";
+          if (percent >= 95) msg = "🎉 You did it!";
+          else if (percent >= 75) msg = "🔥 Almost there!";
+          else if (percent >= 50) msg = "🚀 Halfway there!";
+          else if (percent >= 30) msg = "💪 Keep going!";
+          else if (percent >= 10) msg = "✅ Let’s start!";
+          else msg = "⏳ Ready?";
+
+          return (
+            <div className="milestone-live">
+              {percent}% – {msg}
+            </div>
+          );
+        }
+        return null;
+      })()}
+    </div>
+  </div>
+</td>
+
+
                           <td>
                             {tasks.map((task, tIdx) => (
-                              <ScheduleSlot
-                              key={tIdx}
-                              label={label}
-                              scheduleEntry={task}
-                              updateEntry={nv => updateScheduleSlot(label, nv, tIdx)}
-                              viewMode={viewMode}
-                              categoryTree={categoryTree}
-                              slotIndex={idx}
-                              taskIndex={tIdx}
-                              onDragRange={(s,e,all) =>
-                                updateScheduleRange(
-                                  s,
-                                  e,
-                                  all,
-                                  canViewAgenda,
-                                  viewMode,
-                                  updateActiveData,
-                                  getQuarterHourSlots(startHour, endHour),
-                                  currentDateStr
-                                )
-                              }
-                              allTasks={tasks}
-                              onRemove={() => removeScheduleTask(label, tIdx)}
-                            />
+                             <ScheduleSlot
+                             key={tIdx}
+                             label={label}
+                             scheduleEntry={task}
+                             updateEntry={(nv) => updateScheduleSlot(label, nv, tIdx)}
+                             viewMode={viewMode}
+                             categoryTree={categoryTree}
+                             slotIndex={idx}
+                             taskIndex={tIdx}
+                             onDragRange={(s, e, all) =>
+                               updateScheduleRange(
+                                 s,
+                                 e,
+                                 all,
+                                 canViewAgenda,
+                                 viewMode,
+                                 updateActiveData,
+                                 getQuarterHourSlots(startHour, endHour),
+                                 currentDateStr
+                               )
+                             }
+                             allTasks={tasks}
+                             onRemove={() => removeScheduleTask(label, tIdx)}
+                             activeData={activeData}
+                             setRepeatSuggestion={setRepeatSuggestion}
+                             appliedRepeatCache={appliedRepeatCache}
+                           />
+                           
+                            
                             
                             ))}
                             {!viewMode && (
@@ -1585,6 +1826,7 @@ export default function App() {
                       });
                     }
                   });
+                  
                   
                   const percentage = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
                   const color = percentage >= 80 ? "green" : 

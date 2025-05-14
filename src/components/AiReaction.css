@@ -1,0 +1,126 @@
+.ai-reaction {
+    position: fixed;
+    top: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    animation: floatUp 7s ease-out forwards;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .ai-avatar {
+    font-size: 40px;
+    animation: bounce 1s infinite;
+  }
+  
+  .ai-bubble {
+    background: white;
+    color: black;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    box-shadow: 0 0 12px rgba(0,0,0,0.1);
+  }
+  
+  @keyframes floatUp {
+    0% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px);
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-80px);
+    }
+  }
+  
+  @keyframes bounce {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+
+  .ai-reaction {
+    position: fixed;
+    top: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none;
+    animation: floatUp 7s ease-out forwards;
+  }
+  
+  .ai-avatar {
+    font-size: 40px;
+    animation: bounce 1s infinite;
+  }
+  
+  .ai-bubble {
+    background: white;
+    color: black;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.1);
+    font-family: 'Courier New', monospace;
+    white-space: pre;
+  }
+  
+  .cursor {
+    display: inline-block;
+    width: 8px;
+    animation: blink 0.8s infinite;
+  }
+  
+  @keyframes blink {
+    0%, 50% {
+      opacity: 1;
+    }
+    50.01%, 100% {
+      opacity: 0;
+    }
+  }
+  
+  @keyframes floatUp {
+    0% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(20px);
+    }
+    10% {
+      opacity: 1;
+    }
+    90% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-80px);
+    }
+  }
+  
+  @keyframes bounce {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+  
+  

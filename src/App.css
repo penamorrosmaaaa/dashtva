@@ -364,28 +364,98 @@ textarea.brain-textarea {
   position: relative;
 }
 
-.completed-item {
+/* ── STRIKE-THROUGH LINE ON <textarea> ── */
+
+/* 1) Make every textarea a positioning context */
+.priority-row textarea,
+.brain-dump-row textarea {
   position: relative;
 }
 
-.completed-item::after {
+/* 2) Draw a 2px line via ::after, start hidden (scaleX(0)) */
+.priority-row textarea::after,
+.brain-dump-row textarea::after {
   content: "";
   position: absolute;
   top: 50%;
   left: 0;
-  height: 2px;
   width: 100%;
-  background-color: #ff0000;
-  transform: scaleX(1);
+  height: 2px;
+  background: currentColor;
   transform-origin: left center;
-  animation: crossOut 0.4s ease-out forwards;
+  transform: scaleX(0);
+  transition: transform 0.4s ease-out;
 }
 
-@keyframes crossOut {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
+/* 3) When .completed is toggled on the textarea, scale the line to full width */
+.priority-row textarea.completed::after,
+.brain-dump-row textarea.completed::after {
+  transform: scaleX(1);
+}
+
+.completed {
+  text-decoration: line-through;
+  color: gray; /* optional: you can also fade the text color */
+}
+
+/* ✨ Cross-out completed tasks */
+textarea.completed {
+  text-decoration: line-through;
+  color: #999;
+  background-color: #f5f5f5;
+  transition: 
+    text-decoration 0.3s ease,
+    color 0.3s ease,
+    background-color 0.3s ease;
+}
+
+/* ✨ Default textarea styling (if you want) */
+.priority-row textarea,
+.brain-dump-row textarea {
+  width: 100%;
+  min-height: 24px;
+  resize: none;
+  overflow: hidden;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  transition: 
+    text-decoration 0.3s ease,
+    color 0.3s ease,
+    background-color 0.3s ease;
+}
+
+/* === Repeat Options Panel Styling === */
+.repeat-options {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  width: 160px;
+}
+
+.repeat-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.repeat-options input[type="radio"] {
+  accent-color: #007bff;
+  cursor: pointer;
+}
+
+.repeat-options {
+  display: flex;
+  flex-direction: column;
 }

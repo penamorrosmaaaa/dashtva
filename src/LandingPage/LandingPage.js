@@ -13,6 +13,8 @@ import {
 } from 'react-icons/ai';
 import nasaVideo from '../assets/150253-798222949.mp4';
 import logoImage from '../assets/Diseño sin título (1).png';
+import { GiLighthouse } from 'react-icons/gi'; // ✅ NEW
+
 
 /**
  * Wrap react-router's RouterLink so Chakra doesn't complain about string refs.
@@ -332,7 +334,6 @@ const LandingPage = ({ handleLogout }) => {
   const flexDir  = useBreakpointValue({ base: 'column', lg: 'row' });
   const gap      = useBreakpointValue({ base: 6, lg: 10 });
 
-  /* Card data */
   const cards = [
     {
       id: 'popular',
@@ -358,7 +359,16 @@ const LandingPage = ({ handleLogout }) => {
       adminRoute: '/ADMIN-TimeBox',
       delay: '.8s',
     },
+    {
+      id: 'lighthouse',
+      label: 'Lighthouse',
+      icon: GiLighthouse, // You can change to a better icon
+      route: '/Lighthouse',
+      adminRoute: '/ADMIN-Lighthouse',
+      delay: '1.2s',
+    },
   ];
+  
 
   /* Random stars: ~420. */
   const starElements = Array.from({ length: 1020 }).map((_, i) => {

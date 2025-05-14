@@ -557,20 +557,24 @@ function renderBusyHeatmapCalendar(
                 }
                 const alpha = Math.min(1, cell.busyPct / 100);
                 const shortDate = formatShortDateMMDDYY(cell.dateObj);
-                return (
-                  <td
-                    key={j}
-                    className="heatmap-cell"
-                    title={`${shortDate} - ${cell.busyPct.toFixed(0)}% busy`}
-                    style={{ backgroundColor: `rgba(255, 99, 132, ${alpha})` }}
-                  >
-                    <span className="heatmap-label">
-                      {shortDate}
-                      <br />
-                      {cell.busyPct.toFixed(0)}%
-                    </span>
-                  </td>
-                );
+                const isHomeOffice = !!activeData?.timeBox?.[cell.dateStr]?.homeOffice;
+
+return (
+  <td
+    key={j}
+    className={`heatmap-cell${isHomeOffice ? " home-office-border" : ""}`}
+    title={`${shortDate} - ${cell.busyPct.toFixed(0)}% busy${isHomeOffice ? " (Home Office)" : ""}`}
+    style={{ backgroundColor: `rgba(255, 99, 132, ${alpha})` }}
+  >
+    <span className="heatmap-label">
+      {shortDate}
+      <br />
+      {cell.busyPct.toFixed(0)}%
+      {isHomeOffice ? " 🏠" : ""}
+    </span>
+  </td>
+);
+
               })}
             </tr>
           ))}

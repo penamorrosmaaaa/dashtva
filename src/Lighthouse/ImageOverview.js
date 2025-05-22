@@ -53,6 +53,7 @@ const ImageScoresOverview = () => {
   const [contentType, setContentType] = useState('nota');
   const [selectedMetric, setSelectedMetric] = useState("cls");
   const [expandedCompanies, setExpandedCompanies] = useState([]);
+  const [labelMode, setLabelMode] = useState("raw");
 
 
 
@@ -740,7 +741,7 @@ const companyPerformance = useMemo(() => {
           {/* Bar Chart with Companies to Display */}
           <Box className="anb-chart-container" width="100%" maxW="1200px" height="auto" pb={6}>
             <Flex justify="space-between" align="center" mb={4}>
-              <Text className="anb-chart-title">Individual Company Performance by Date</Text>
+              <Text className="anb-chart-title">Individual Company Performance</Text>
               <Button 
                 size="sm" 
                 leftIcon={<FaChartLine />} 
@@ -823,50 +824,116 @@ const companyPerformance = useMemo(() => {
               </VStack>
             )}
 
+            {/* Label Mode Toggle */}
+<Flex justify="center" mb={2}>
+  <HStack spacing={2}>
+    <Text fontSize="sm" color="white">Labels:</Text>
+    <ButtonGroup isAttached size="sm" variant="outline">
+      <Button 
+        colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+        onClick={() => setLabelMode('raw')}
+      >
+        Raw
+      </Button>
+      <Button 
+        colorScheme={labelMode === 'percent' ? 'blue' : 'gray'} 
+        onClick={() => setLabelMode('percent')}
+      >
+        %
+      </Button>
+      <Button 
+        colorScheme={labelMode === 'none' ? 'purple' : 'gray'} 
+        onClick={() => setLabelMode('none')}
+      >
+        ↔
+      </Button>
+    </ButtonGroup>
+  </HStack>
+</Flex>
+
             {/* Bar Chart */}
-            <Box height="400px">
-              <Bar
-                data={getBarChartData()}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                      callbacks: {
-                        label: (context) => `${context.dataset.label}: ${context.parsed.y}`
-                      }
-                    }
-                  },
-                  scales: {
-                    x: {
-                      stacked: false,
-                      grid: { display: false },
-                      ticks: {
-                        color: "white",
-                        maxRotation: 90,
-                        minRotation: 45
-                      }
-                    },
-                    y: {
-                      min: 0,
-                      max: 100,
-                      ticks: { color: "white" },
-                      grid: { color: "rgba(255,255,255,0.1)" }
-                    }
-                  },
-                  elements: {
-                    bar: {
-                      borderWidth: 0,
-                      borderRadius: 2
-                    }
-                  },
-                  barPercentage: 0.6,
-                  categoryPercentage: 0.8
-                }}
-                plugins={[ChartDataLabels]}
-              />
-            </Box>
+            {/* Bar Chart */}
+<Box height="400px">
+  <Bar
+    data={getBarChartData()}
+    options={{
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+          }
+        },
+        datalabels: {
+          display: function(context) {
+            return labelMode !== 'none';
+          },
+          color: (context) => {
+            if (labelMode === 'percent') {
+              const label = context.chart.data.labels[context.dataIndex];
+              const company = companyPerformance?.find(c => c.name === label);
+              if (!company || isNaN(company.change)) return 'white';
+              return company.change >= 0 ? '#2BFFB9' : '#FF2965';
+            }
+            return 'white';
+          },
+          font: (context) => {
+            const bar = context.chart.getDatasetMeta(context.datasetIndex).data[context.dataIndex];
+            const width = bar.width || 30;
+            const adjusted = Math.max(10, Math.min(16, width * 0.5));
+            return {
+              size: adjusted,
+              weight: 'bold'
+            };
+          },
+          formatter: (value, context) => {
+            if (labelMode === 'none') return '';
+            
+            const label = context.chart.data.labels[context.dataIndex];
+            const company = companyPerformance?.find(c => c.name === label);
+            
+            if (labelMode === 'percent') {
+              if (!company || isNaN(company.change)) return '';
+              return company.change >= 0 ? '⬆️' : '⬇️';
+            }
+            return Math.round(value);
+          },
+          anchor: 'end',
+          align: 'top'
+        }
+      },
+      scales: {
+        x: {
+          stacked: false,
+          grid: { display: false },
+          ticks: {
+            color: "white",
+            maxRotation: 90,
+            minRotation: 45
+          }
+        },
+        y: {
+          min: 0,
+          max: 100,
+          ticks: { color: "white" },
+          grid: { color: "rgba(255,255,255,0.1)" }
+        }
+      },
+      elements: {
+        bar: {
+          borderWidth: 0,
+          borderRadius: 2
+        }
+      },
+      barPercentage: 0.6,
+      categoryPercentage: 0.8
+    }}
+    plugins={[ChartDataLabels]}
+    key={labelMode} // This forces re-render when labelMode changes
+  />
+</Box>
 
             {/* Date Slider */}
             <Flex mt={4} align="center" justify="center" flexDirection="column" gap={4}>
@@ -1056,7 +1123,7 @@ const companyPerformance = useMemo(() => {
 
           {/* Radar Charts - Only show Azteca since there are no competition companies */}
           <Flex wrap="wrap" gap={10} justify="center">
-            <Box className="anb-chart-container" width="480px" height="480px">
+            <Box className="anb-chart-container" width="480px" height="600px">
               <Flex justify="space-between" align="center" mb={2}>
                 <Text className="anb-chart-title">TV Azteca Image Radar</Text>
                 <Tooltip 

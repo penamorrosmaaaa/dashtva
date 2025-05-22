@@ -10,6 +10,7 @@ import {
   IconButton,
   useToast,
   Button,
+  ButtonGroup,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -55,6 +56,10 @@ import {
 import "./Lighthouse.css";
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import CountUp from 'react-countup';
+import { saveAs } from 'file-saver';
+import AiChat from "./AiChat";
+
+
 
 // Register ChartJS components
 ChartJS.register(
@@ -103,7 +108,57 @@ const GeneralOverview = () => {
 const [compareRefEndDate, setCompareRefEndDate] = useState(null);
   const [insightsModalOpen, setInsightsModalOpen] = useState(false);
   const [currentInsights, setCurrentInsights] = useState("");
+  const [labelMode, setLabelMode] = useState("none");
   const toast = useToast();
+  
+  const exportWeeklyCSV = () => {
+    if (!data.length || !generateChartData.dateRange?.length) return;
+  
+    const header = [
+      "Date",
+      "Company",
+      "Score",
+      "Change",
+      "Status",
+      "Label Mode",
+      "Time Range"
+    ];
+  
+    const rows = [];
+  
+    const companies = [...COMPETITION_COMPANIES, ...AZTECA_COMPANIES];
+  
+    companies.forEach(company => {
+      const { score, change, status } = getCompanyScore(company);
+      generateChartData.dateRange.forEach(date => {
+        rows.push([
+          date.toISOString().split('T')[0],
+          company,
+          score,
+          change ?? "-",
+          status,
+          labelMode,
+          timeRange
+        ]);
+      });
+    });
+  
+    // Add summary stats
+    rows.push([]);
+    rows.push(["", "TV Azteca Average", aztecaScore]);
+    rows.push(["", "Competition Average", competitionScore]);
+    rows.push(["", "Azteca Growth", `${calculateTrendAnalysis.azteca.growth}%`]);
+    rows.push(["", "Competition Growth", `${calculateTrendAnalysis.competition.growth}%`]);
+    rows.push(["", "Azteca Projection", calculateTrendAnalysis.azteca.projection]);
+    rows.push(["", "Competition Projection", calculateTrendAnalysis.competition.projection]);
+    rows.push(["", "Current Gap", calculateTrendAnalysis.comparison.current]);
+    rows.push(["", "Trend", calculateTrendAnalysis.comparison.trend]);
+  
+    const csv = Papa.unparse([header, ...rows]);
+  
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    saveAs(blob, `Weekly_Report_${new Date().toISOString().split('T')[0]}.csv`);
+  };
   
 
   // Calculate previous period data for comparison
@@ -259,6 +314,7 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     };
   }, [data, selectedDate, selectedType, timeRange, uniqueDates, compareStartDate, compareEndDate]);
 
+  
   const { competitionScore, aztecaScore } = useMemo(() => {
     if (!data.length || !generateChartData.dateRange?.length) return { competitionScore: "N/A", aztecaScore: "N/A" };
     
@@ -307,6 +363,7 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
       azteca: [],
       dates: []
     };
+    
   
     if (!data.length || !uniqueDates.length) {
       return {
@@ -1041,33 +1098,92 @@ const labelBefore = prevDateObj
           }
         },
         datalabels: {
-          display: generateChartData.labels.length <= 7,
+          display: context => labelMode !== 'none',
           color: 'white',
-          font: { weight: 'bold', size: 14 },
+          font: context => {
+            const chart = context.chart;
+            const meta = context.chart.getDatasetMeta(context.datasetIndex);
+            const bar = meta.data[context.dataIndex];
+        
+            // width of the bar (bar chart) or spacing between points (line chart)
+            let width = 0;
+            if (bar && bar.width) {
+              width = bar.width; // for bar charts
+            } else if (bar && bar.x !== undefined && bar.base !== undefined) {
+              width = Math.abs(bar.x - bar.base); // fallback
+            } else {
+              width = chart.width / context.chart.data.labels.length;
+            }
+        
+            const size = Math.max(8, Math.min(0.5 * width, 16)); // Scale between 8 and 16
+            return {
+              weight: 'bold',
+              size
+            };
+          },
           anchor: 'end',
           align: 'top',
-          formatter: (value) => value
+          formatter: (value, context) => {
+            if (labelMode === 'none') return '';
+            if (labelMode === 'percent') {
+              const index = context.dataIndex;
+              const dataset = context.dataset.data;
+              if (index === 0 || !dataset[index - 1]) return '-';
+              const prev = dataset[index - 1];
+              if (prev === 0) return '-';
+              const change = ((value - prev) / prev) * 100;
+              return `${change > 0 ? '+' : ''}${change.toFixed(1)}%`;
+            }
+            return value; // raw value
+          }
         }
+        
       }
     };
 
     return (
       <Box className="anb-chart-container" flex={1}>
         <Flex justify="space-between" align="center">
-          <Text className="anb-chart-title">{title}</Text>
-          <HStack>
-            <ChakraTooltip label="Show Insights">
-              <IconButton
-                icon={<FaInfoCircle />}
-                aria-label="Show Insights"
-                size="sm"
-                variant="ghost"
-                color="white"
-                onClick={() => openInsightsModal(isCompetition ? 'competition' : 'azteca')}
-              />
-            </ChakraTooltip>
-          </HStack>
-        </Flex>
+  <Text className="anb-chart-title">{title}</Text>
+  <HStack spacing={3}>
+    <HStack spacing={1}>
+      <Text fontSize="xs" color="white"></Text>
+      <ButtonGroup isAttached size="sm" variant="outline">
+  <Button 
+    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+    onClick={() => setLabelMode('raw')}
+  >
+    Raw
+  </Button>
+  <Button 
+    colorScheme={labelMode === 'percent' ? 'green' : 'gray'} 
+    onClick={() => setLabelMode('percent')}
+  >
+    %
+  </Button>
+  <Button 
+    onClick={() => setLabelMode('none')}
+    colorScheme={labelMode === 'none' ? 'purple' : 'gray'}
+  >
+    ↔
+  </Button>
+</ButtonGroup>
+
+
+    </HStack>
+    <ChakraTooltip label="Show Insights">
+      <IconButton
+        icon={<FaInfoCircle />}
+        aria-label="Show Insights"
+        size="sm"
+        variant="ghost"
+        color="white"
+        onClick={() => openInsightsModal(isCompetition ? 'competition' : 'azteca')}
+      />
+    </ChakraTooltip>
+  </HStack>
+</Flex>
+
         
         <Flex mb={4} justify="center">
           <HStack spacing={4}>
@@ -1199,8 +1315,47 @@ const labelBefore = prevDateObj
           }
         },
         datalabels: {
-          display: false
+          display: context => labelMode !== 'none',
+          color: 'white',
+          font: context => {
+            const chart = context.chart;
+            const meta = context.chart.getDatasetMeta(context.datasetIndex);
+            const bar = meta.data[context.dataIndex];
+        
+            // width of the bar (bar chart) or spacing between points (line chart)
+            let width = 0;
+            if (bar && bar.width) {
+              width = bar.width; // for bar charts
+            } else if (bar && bar.x !== undefined && bar.base !== undefined) {
+              width = Math.abs(bar.x - bar.base); // fallback
+            } else {
+              width = chart.width / context.chart.data.labels.length;
+            }
+        
+            const size = Math.max(8, Math.min(0.5 * width, 16)); // Scale between 8 and 16
+            return {
+              weight: 'bold',
+              size
+            };
+          },
+          anchor: 'end',
+          align: 'top',
+          formatter: (value, context) => {
+            if (labelMode === 'none') return '';
+            if (labelMode === 'percent') {
+              const index = context.dataIndex;
+              const dataset = context.dataset.data;
+              if (index === 0 || !dataset[index - 1]) return '-';
+              const prev = dataset[index - 1];
+              if (prev === 0) return '-';
+              const change = ((value - prev) / prev) * 100;
+              return `${change > 0 ? '+' : ''}${change.toFixed(1)}%`;
+            }
+            return value; // raw value
+          }
         }
+        
+          
       },
       scales: {
         x: {
@@ -1230,20 +1385,45 @@ const labelBefore = prevDateObj
     return (
       <Box className="anb-chart-container" mt={8} mb={8} maxW="1200px" mx="auto">
         <Flex justify="space-between" align="center">
-          <Text className="anb-chart-title">Performance Trend</Text>
-          <HStack>
-            <ChakraTooltip label="Show Insights">
-              <IconButton
-                icon={<FaInfoCircle />}
-                aria-label="Show Insights"
-                size="sm"
-                variant="ghost"
-                color="white"
-                onClick={() => openInsightsModal('trend')}
-              />
-            </ChakraTooltip>
-          </HStack>
-        </Flex>
+  <Text className="anb-chart-title">Performance Trend</Text>
+  <HStack spacing={3}>
+    <HStack spacing={1}>
+      <Text fontSize="xs" color="white"></Text>
+      <ButtonGroup isAttached size="sm" variant="outline">
+  <Button 
+    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+    onClick={() => setLabelMode('raw')}
+  >
+    Raw
+  </Button>
+  <Button 
+    colorScheme={labelMode === 'percent' ? 'green' : 'gray'} 
+    onClick={() => setLabelMode('percent')}
+  >
+    %
+  </Button>
+  <Button 
+    onClick={() => setLabelMode('none')}
+    colorScheme={labelMode === 'none' ? 'purple' : 'gray'}
+  >
+    ↔
+  </Button>
+</ButtonGroup>
+
+    </HStack>
+    <ChakraTooltip label="Show Insights">
+      <IconButton
+        icon={<FaInfoCircle />}
+        aria-label="Show Insights"
+        size="sm"
+        variant="ghost"
+        color="white"
+        onClick={() => openInsightsModal('trend')}
+      />
+    </ChakraTooltip>
+  </HStack>
+</Flex>
+
         
         <Box height="300px">
           <Line data={chartData} options={chartOptions} />
@@ -1431,6 +1611,7 @@ const labelBefore = prevDateObj
         />
         
         <Box textAlign="center" mx={4}>
+          
   <Text fontSize="sm" color="rgba(255,255,255,0.7)" mb={1}>Viewing data for</Text>
   <Input
     type="date"
@@ -1527,6 +1708,8 @@ const labelBefore = prevDateObj
           
           {/* Trend Chart */}
           {renderTrendChart()}
+
+
         </>
       )}
 

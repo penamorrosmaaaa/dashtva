@@ -34,7 +34,7 @@ ChartJS.register(
   Title, ChartTooltip, Legend, ChartDataLabels, Filler
 );
 
-const VerticalOverview = () => {
+const AMPOverview = () => {
   // State
   const [data, setData] = useState([]);
   const [selectedType, setSelectedType] = useState("video");
@@ -61,31 +61,49 @@ const [labelMode, setLabelMode] = useState("raw");
   // Constants
   const TIME_RANGES = ['daily', 'monthly', 'yearly', 'all', 'custom'];
   const competitionCompanies = [
-    "Heraldo", "Televisa", "Milenio", "Universal", "As", "Infobae", "NyTimes", "Terra"
+    "Milenio", "Universal", "As"
   ];
+  
   
   const aztecaCompanies = [
-    "Azteca 7", "Azteca UNO", "ADN40", "Deportes", "A+", "Noticias"
+    "Azteca 7", "Azteca UNO", "ADN40", "Deportes", "A+", "Noticias",
+    "Quintana Roo", "Bajío", "Ciudad Juárez", "Yúcatan", "Jalisco", "Puebla",
+    "Veracruz", "Baja California", "Morelos", "Guerrero", "Chiapas", "Sinaloa",
+    "Aguascalientes", "Queretaro", "Chihuahua", "Laguna"
   ];
   
+  
   const allCompanies = [...competitionCompanies, ...aztecaCompanies];
+  
 
   const companyColors = {
-    "Azteca UNO": "#FF3B3B",
+    "Milenio": "#21C285",
+    "Universal": "#EE5253",
+    "As": "#F44336",
     "Azteca 7": "#22D34C",
-    "Deportes": "#2255FF",
+    "Azteca UNO": "#FF3B3B",
     "ADN40": "#F2C744",
+    "Deportes": "#2255FF",
     "A+": "#A452D1",
     "Noticias": "#E46B17",
-    "Milenio": "#21C285",
-    "Heraldo": "#3B9EFF",
-    "Universal": "#EE5253",
-    "Televisa": "#20C997",
-    "Terra": "#FFA726",
-    "As": "#F44336",
-    "Infobae": "#66E34F",
-    "NyTimes": "#4285F4"
+    "Quintana Roo": "#00B8D9",
+    "Bajío": "#A8DADC",
+    "Ciudad Juárez": "#1D3557",
+    "Yúcatan": "#FF9F1C",
+    "Jalisco": "#E84855",
+    "Puebla": "#F4A261",
+    "Veracruz": "#2A9D8F",
+    "Baja California": "#E76F51",
+    "Morelos": "#6A4C93",
+    "Guerrero": "#3A86FF",
+    "Chiapas": "#8338EC",
+    "Sinaloa": "#FF006E",
+    "Aguascalientes": "#FB5607",
+    "Queretaro": "#FFBE0B",
+    "Chihuahua": "#9B5DE5",
+    "Laguna": "#5F0F40"
   };
+  
 
   const COLORS = {
     poor: '#FF2965',
@@ -140,14 +158,17 @@ const [labelMode, setLabelMode] = useState("raw");
     "Terra": { cls: "CLS_40", lcp: "LCP_40", si: "SI_40", tbt: "TBT_40", fcp: "FCP_40" },
     "As": { cls: "CLS_41", lcp: "LCP_41", si: "SI_41", tbt: "TBT_41", fcp: "FCP_41" },
     "Infobae": { cls: "CLS_42", lcp: "LCP_42", si: "SI_42", tbt: "TBT_42", fcp: "FCP_42" },
-    "NyTimes": { cls: "CLS_43", lcp: "LCP_43", si: "SI_43", tbt: "TBT_43", fcp: "FCP_43" }
+    "NyTimes": { cls: "CLS_43", lcp: "LCP_43", si: "SI_43", tbt: "TBT_43", fcp: "FCP_43" },
+    "img.Azteca7": { cls: "CLS.25", lcp: "LCP.25", si: "SI.25", tbt: "TBT.25", fcp: "FCP.25" },
+    "img.AztecaUNO": { cls: "CLS.26", lcp: "LCP.26", si: "SI.26", tbt: "TBT.26", fcp: "FCP.26" },
+    "img.AztecaNoticias": { cls: "CLS.27", lcp: "LCP.27", si: "SI.27", tbt: "TBT.27", fcp: "FCP.27" }
   };
   
 
   // Data Fetching
   useEffect(() => {
     Papa.parse(
-      "https://docs.google.com/spreadsheets/d/e/2PACX-1vRzIonikYeUwzVTUUO7bDLQ1DDzqzKB-BFIJ4tzJMqMlNFnxPF0eVRypNmykYVP0Pn-w1tfnOCTaKaP/pub?output=csv",
+        "https://docs.google.com/spreadsheets/d/e/2PACX-1vRxE-B3B1KVYTw6h4-4GNTNr-EyRfA513pWjZIgw7f70h_lheqTVxtwspDdRMs7bvWTQDRDCsoXERpY/pub?output=csv",      
       {
         download: true,
         header: true,
@@ -156,7 +177,13 @@ const [labelMode, setLabelMode] = useState("raw");
           setData(parsed);
           const dateKey = Object.keys(parsed[0])[0];
           const dates = Array.from(new Set(parsed.map(row => row[dateKey])))
-            .map(d => new Date(d)).sort((a, b) => a - b);
+  .map(d => {
+    const dateObj = new Date(d);
+    return isNaN(dateObj.getTime()) ? null : dateObj;
+  })
+  .filter(Boolean)
+  .sort((a, b) => a - b);
+
           
           const years = Array.from(new Set(dates.map(d => d.getFullYear()))).sort();
           setAvailableYears(years);
@@ -234,15 +261,16 @@ const [labelMode, setLabelMode] = useState("raw");
     if (type === "both") {
       const notaScore = computeScore(company, "nota", date);
       const videoScore = computeScore(company, "video", date);
-      const valid = [notaScore, videoScore].filter(s => typeof s === "number" && s > 0);
-      return valid.length ? parseFloat((valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(1)) : 0;
+      const both = [notaScore, videoScore].filter(s => !isNaN(s));
+      if (both.length === 0) return 0;
+      return parseFloat((both.reduce((a, b) => a + b, 0) / both.length).toFixed(1));
     }
   
     let total = 0, count = 0;
     data.forEach(row => {
       if (row[dateKey] === date && row[typeKey] === type) {
         const score = parseFloat(row[scoreKey]);
-        if (!isNaN(score) && score > 0) {
+        if (!isNaN(score)) {
           total += score;
           count++;
         }
@@ -251,29 +279,9 @@ const [labelMode, setLabelMode] = useState("raw");
   
     return count ? parseFloat((total / count).toFixed(1)) : 0;
   };
-  
 
   const getMetricsForCompany = (company, type = selectedType, date = dateStr) => {
     if (!data.length || !date) return {};
-  
-    if (type === "both") {
-      const notaMetrics = getMetricsForCompany(company, "nota", date);
-      const videoMetrics = getMetricsForCompany(company, "video", date);
-    
-      const merged = {};
-      ["cls", "lcp", "si", "tbt", "fcp"].forEach(metric => {
-        const notaVal = notaMetrics?.[metric];
-        const videoVal = videoMetrics?.[metric];
-        const valid = [notaVal, videoVal].filter(v => typeof v === "number" && v > 0 && !isNaN(v));
-        merged[metric] = valid.length
-          ? parseFloat((valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(metric === "cls" ? 3 : 1))
-          : null;
-      });
-    
-      return merged;
-    }
-    
-    
   
     const keys = Object.keys(data[0]);
     const blockSize = 9;
@@ -320,7 +328,6 @@ const [labelMode, setLabelMode] = useState("raw");
       fcp: parseFloat((fcpSum / count).toFixed(1))
     };
   };
-  
   
   
   
@@ -551,10 +558,7 @@ const [labelMode, setLabelMode] = useState("raw");
       };
     }).filter(Boolean);
   
-    const chartData = { labels: orderedCompanies, datasets };
-chartData.companyPerformance = companyPerformance; // <-- REQUIRED for labelMode to work
-return chartData;
-
+    return { labels: orderedCompanies, datasets };
   };
   
   
@@ -641,7 +645,7 @@ return chartData;
 
   return (
     <Box pt="80px" px={6} className="glass-bg">
-      <Text className="title">Vertical Overview</Text>
+      <Text className="title">AMP Overview</Text>
 
       {!selectedDate ? (
         <Flex justify="center" align="center" height="30vh">
@@ -835,7 +839,7 @@ return chartData;
     </Button>
   </Flex>
 
-  {/* Label Mode Toggle */}
+ {/* Label Mode Toggle */}
 <Flex justify="center" mb={2}>
   <HStack spacing={2}>
     <Text fontSize="sm" color="white">Labels:</Text>
@@ -862,79 +866,79 @@ return chartData;
   </HStack>
 </Flex>
 
-{/* Time Range Selector */}
-<Flex justify="center" mb={4}>
-  <HStack spacing={4}>
-    {TIME_RANGES.map(range => (
-      <Button
-        key={range}
-        size="sm"
-        variant={timeRange === range ? "solid" : "outline"}
-        onClick={() => setTimeRange(range)}
-        colorScheme="blue"
-        color="white"
-        borderColor="white"
-        _hover={{ bg: "blue.600" }}
-        _active={{ bg: "blue.700" }}
-        fontWeight="bold"
-      >
-        {range.charAt(0).toUpperCase() + range.slice(1)}
-      </Button>
-    ))}
-  </HStack>
-</Flex>
+  {/* Time Range Selector */}
+  <Flex justify="center" mb={4}>
+    <HStack spacing={4}>
+      {TIME_RANGES.map(range => (
+        <Button
+          key={range}
+          size="sm"
+          variant={timeRange === range ? "solid" : "outline"}
+          onClick={() => setTimeRange(range)}
+          colorScheme="blue"
+          color="white"
+          borderColor="white"
+          _hover={{ bg: "blue.600" }}
+          _active={{ bg: "blue.700" }}
+          fontWeight="bold"
+        >
+          {range.charAt(0).toUpperCase() + range.slice(1)}
+        </Button>
+      ))}
+    </HStack>
+  </Flex>
 
-{/* Custom Date Range Selector */}
-{timeRange === "custom" && (
-  <VStack spacing={4} mb={4}>
-    <Flex justify="center" gap={4}>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Primary Start Date</Text>
-        <Input
-          type="date"
-          value={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareStartDate(new Date(e.target.value))}
-          max={compareEndDate ? compareEndDate.toISOString().split('T')[0] : selectedDate.toISOString().split('T')[0]}
-          color="white"
-        />
-      </Box>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Primary End Date</Text>
-        <Input
-          type="date"
-          value={compareEndDate ? compareEndDate.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareEndDate(new Date(e.target.value))}
-          min={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
-          max={selectedDate.toISOString().split('T')[0]}
-          color="white"
-        />
-      </Box>
-    </Flex>
-    <Flex justify="center" gap={4}>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Compare Start Date</Text>
-        <Input
-          type="date"
-          value={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareStartDate2(new Date(e.target.value))}
-          color="white"
-        />
-      </Box>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Compare End Date</Text>
-        <Input
-          type="date"
-          value={compareEndDate2 ? compareEndDate2.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareEndDate2(new Date(e.target.value))}
-          min={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
-          color="white"
-        />
-      </Box>
-    </Flex>
-  </VStack>
-)}
+  {/* Custom Date Range Selector */}
+  {timeRange === "custom" && (
+    <VStack spacing={4} mb={4}>
+      <Flex justify="center" gap={4}>
+        <Box>
+          <Text fontSize="sm" color="white" mb={1}>Primary Start Date</Text>
+          <Input
+            type="date"
+            value={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
+            onChange={(e) => setCompareStartDate(new Date(e.target.value))}
+            max={compareEndDate ? compareEndDate.toISOString().split('T')[0] : selectedDate.toISOString().split('T')[0]}
+            color="white"
+          />
+        </Box>
+        <Box>
+          <Text fontSize="sm" color="white" mb={1}>Primary End Date</Text>
+          <Input
+            type="date"
+            value={compareEndDate ? compareEndDate.toISOString().split('T')[0] : ''}
+            onChange={(e) => setCompareEndDate(new Date(e.target.value))}
+            min={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
+            max={selectedDate.toISOString().split('T')[0]}
+            color="white"
+          />
+        </Box>
+      </Flex>
+      <Flex justify="center" gap={4}>
+        <Box>
+          <Text fontSize="sm" color="white" mb={1}>Compare Start Date</Text>
+          <Input
+            type="date"
+            value={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
+            onChange={(e) => setCompareStartDate2(new Date(e.target.value))}
+            color="white"
+          />
+        </Box>
+        <Box>
+          <Text fontSize="sm" color="white" mb={1}>Compare End Date</Text>
+          <Input
+            type="date"
+            value={compareEndDate2 ? compareEndDate2.toISOString().split('T')[0] : ''}
+            onChange={(e) => setCompareEndDate2(new Date(e.target.value))}
+            min={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
+            color="white"
+          />
+        </Box>
+      </Flex>
+    </VStack>
+  )}
 
-{/* Bar Chart */}
+  {/* Bar Chart */}
 <Box height="400px">
   <Bar
     data={getBarChartData()}
@@ -961,37 +965,29 @@ return chartData;
             }
             return 'white';
           },
-          
           font: (context) => {
             const bar = context.chart.getDatasetMeta(context.datasetIndex).data[context.dataIndex];
             const width = bar.width || 30;
-            const adjusted = Math.max(8, Math.min(14, width * 0.45));
+            const adjusted = Math.max(10, Math.min(16, width * 0.5));
             return {
               size: adjusted,
               weight: 'bold'
             };
           },
-          align: 'center',
-          anchor: 'center',
-          clip: false,
-
           formatter: (value, context) => {
             if (labelMode === 'none') return '';
-          
+            
             const label = context.chart.data.labels[context.dataIndex];
-            const company = context.chart.data.companyPerformance?.find(c => c.name === label);
-          
+            const company = window.companyPerformanceGlobal?.find(c => c.name === label);
+            
             if (labelMode === 'percent') {
               if (!company || isNaN(company.change)) return '';
               return company.change >= 0 ? '⬆️' : '⬇️';
             }
-          
             return Math.round(value);
           },
-          
-anchor: 'end',
-align: 'top'
-
+          anchor: 'end',
+          align: 'top'
         }
       },
       scales: {
@@ -1391,4 +1387,4 @@ align: 'top'
   );
 };
 
-export default VerticalOverview;
+export default AMPOverview;

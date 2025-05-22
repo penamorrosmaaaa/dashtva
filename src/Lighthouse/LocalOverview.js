@@ -23,6 +23,7 @@ import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./Lighthouse.css"; // Assuming you have the same CSS file
 import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import CountUp from 'react-countup';
+import Map from './Map';
 
 
 ChartJS.register(
@@ -52,6 +53,8 @@ const LocalScoresOverview = () => {
   const [expandedCompanies, setExpandedCompanies] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState("All");
   const [contentType, setContentType] = useState("nota");
+  const [labelMode, setLabelMode] = useState('raw'); // 'raw', 'percent', 'none'
+
 
 
 
@@ -639,48 +642,47 @@ const LocalScoresOverview = () => {
     const labels = companySet;
     const datasets = [];
   
-    datasets.push({
-      label: "Nota",
-      data: labels.map(c => computeScore(c, "nota", dateStr, timeRange !== "daily")),
-      borderColor: "#00FFFF",
-      pointBackgroundColor: "#00FFFF",
-      backgroundColor: "#00FFFF22",
-      borderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      datalabels: {
-        display: true,
-        color: "white",
-        font: {
-          weight: "bold",
-          size: 11
-        },
-        align: "end"
-      }
-    });
+    if (contentType === "nota" || contentType === "both") {
+      datasets.push({
+        label: "Nota",
+        data: labels.map(c => computeScore(c, "nota", dateStr, timeRange !== "daily")),
+        borderColor: "#00FFFF",
+        pointBackgroundColor: "#00FFFF",
+        backgroundColor: "#00FFFF22",
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        datalabels: {
+          display: true,
+          color: "white",
+          font: { weight: "bold", size: 11 },
+          align: "end"
+        }
+      });
+    }
   
-    datasets.push({
-      label: "Video",
-      data: labels.map(c => computeScore(c, "video", dateStr, timeRange !== "daily")),
-      borderColor: "#FF00FF",
-      pointBackgroundColor: "#FF00FF",
-      backgroundColor: "#FF00FF22",
-      borderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      datalabels: {
-        display: true,
-        color: "white",
-        font: {
-          weight: "bold",
-          size: 11
-        },
-        align: "end"
-      }
-    });
+    if (contentType === "video" || contentType === "both") {
+      datasets.push({
+        label: "Video",
+        data: labels.map(c => computeScore(c, "video", dateStr, timeRange !== "daily")),
+        borderColor: "#FF00FF",
+        pointBackgroundColor: "#FF00FF",
+        backgroundColor: "#FF00FF22",
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        datalabels: {
+          display: true,
+          color: "white",
+          font: { weight: "bold", size: 11 },
+          align: "end"
+        }
+      });
+    }
   
     return { labels, datasets };
   };
+  
 
 
   const formatDisplayDate = (date) => {
@@ -713,6 +715,7 @@ const LocalScoresOverview = () => {
     return Math.max(0, 100 - stdDev * 2).toFixed(1);
   }, [localCompanies, contentType, dateStr, timeRange]);
   
+  
   const visibleCompanies = useMemo(() => {
     if (selectedRegion === "All") return companyPerformance;
   
@@ -738,8 +741,6 @@ const LocalScoresOverview = () => {
   const radarData = useMemo(() => {
     return getRadarData(visibleCompanies.map(c => c.name));
   }, [visibleCompanies, dateStr, timeRange, contentType]);
-  
-  
   
   
 
@@ -1014,7 +1015,34 @@ const LocalScoresOverview = () => {
           {/* Bar Chart with Companies to Display */}
           <Box className="anb-chart-container" width="100%" maxW="1200px" height="auto" pb={6}>
             <Flex justify="space-between" align="center" mb={4}>
-              <Text className="anb-chart-title">Individual Company Performance by Date</Text>
+            <Flex direction="column" align="center" mb={4}>
+  <Text className="anb-chart-title" mb={2}>Individual Company Performance</Text>
+  
+  <HStack spacing={2}>
+    <Text fontSize="sm" color="white">Labels:</Text>
+    <ButtonGroup isAttached size="sm" variant="outline">
+      <Button 
+        colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+        onClick={() => setLabelMode('raw')}
+      >
+        Raw
+      </Button>
+      <Button 
+        colorScheme={labelMode === 'percent' ? 'blue' : 'gray'} 
+        onClick={() => setLabelMode('percent')}
+      >
+        %
+      </Button>
+      <Button 
+        colorScheme={labelMode === 'none' ? 'purple' : 'gray'} 
+        onClick={() => setLabelMode('none')}
+      >
+        ↔
+      </Button>
+    </ButtonGroup>
+  </HStack>
+</Flex>
+
               <Button 
                 size="sm" 
                 leftIcon={<FaChartLine />} 
@@ -1098,49 +1126,86 @@ const LocalScoresOverview = () => {
             )}
 
             {/* Bar Chart */}
-            <Box height="400px">
-              <Bar
-                data={getBarChartData()}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                      callbacks: {
-                        label: (context) => `${context.dataset.label}: ${context.parsed.y}`
-                      }
-                    }
-                  },
-                  scales: {
-                    x: {
-                      stacked: false,
-                      grid: { display: false },
-                      ticks: {
-                        color: "white",
-                        maxRotation: 90,
-                        minRotation: 45
-                      }
-                    },
-                    y: {
-                      min: 0,
-                      max: 100,
-                      ticks: { color: "white" },
-                      grid: { color: "rgba(255,255,255,0.1)" }
-                    }
-                  },
-                  elements: {
-                    bar: {
-                      borderWidth: 0,
-                      borderRadius: 2
-                    }
-                  },
-                  barPercentage: 0.6,
-                  categoryPercentage: 0.8
-                }}
-                plugins={[ChartDataLabels]}
-              />
-            </Box>
+            
+<Box height="400px">
+  <Bar
+    data={getBarChartData()}
+    options={{
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+          }
+        },
+        datalabels: {
+          display: labelMode !== 'none',
+          color: (context) => {
+            if (labelMode === 'percent') {
+              const companyName = context.chart.data.labels[context.dataIndex];
+              const company = companyPerformance.find(c => c.name === companyName);
+              if (!company || isNaN(company.change)) return 'white';
+              return company.change >= 0 ? '#2BFFB9' : '#FF2965';
+            }
+            return 'white';
+          },
+          font: (context) => {
+            const bar = context.chart.getDatasetMeta(0).data[context.dataIndex];
+            const barWidth = bar?.width || 30;
+            const fontSize = Math.max(8, Math.min(14, Math.floor(barWidth / 2)));
+            return {
+              size: fontSize,
+              weight: 'bold'
+            };
+          },
+          formatter: (value, context) => {
+            if (labelMode === 'none') return '';
+            
+            const companyName = context.chart.data.labels[context.dataIndex];
+            const company = companyPerformance.find(c => c.name === companyName);
+            
+            if (labelMode === 'percent') {
+              if (!company || isNaN(company.change)) return '';
+              return company.change >= 0 ? `+${company.change}%` : `${company.change}%`;
+            }
+            
+            return Math.round(value);
+          },
+          anchor: 'end',
+          align: 'top'
+        }
+      },
+      scales: {
+        x: {
+          stacked: false,
+          grid: { display: false },
+          ticks: {
+            color: "white",
+            maxRotation: 90,
+            minRotation: 45
+          }
+        },
+        y: {
+          min: 0,
+          max: 100,
+          ticks: { color: "white" },
+          grid: { color: "rgba(255,255,255,0.1)" }
+        }
+      },
+      elements: {
+        bar: {
+          borderWidth: 0,
+          borderRadius: 2
+        }
+      },
+      barPercentage: 0.6,
+      categoryPercentage: 0.8
+    }}
+    plugins={[ChartDataLabels]}
+  />
+</Box>
 
             {/* Date Slider */}
             <Flex mt={4} align="center" justify="center" flexDirection="column" gap={4}>
@@ -1347,79 +1412,92 @@ const LocalScoresOverview = () => {
             </Box>
           )}
 
-          {/* Radar Chart for Local Stations */}
-          <Flex wrap="wrap" gap={10} justify="center">
-            <Box className="anb-chart-container" width="600px" height="600px">
-              <Flex justify="space-between" align="center" mb={2}>
-                <Text className="anb-chart-title">Local Stations Radar</Text>
-                <Tooltip 
-                  label={
-                    `This radar shows average performance across local stations.\n\n` +
-                    `A more balanced shape = higher Equitative Score.\n\n` +
-                    `Equitative Score: ${equitativeScore} / 100`
-                  }
-                  bg="gray.700"
-                  color="white"
-                  fontSize="sm"
-                  borderRadius="md"
-                  hasArrow
-                  placement="left"
-                  whiteSpace="pre-line"
-                >
-                  <Box cursor="pointer" ml={2}>
-                    <FaInfoCircle color="white" />
-                  </Box>
-                </Tooltip>
-              </Flex>
+<Flex wrap="wrap" gap={10} justify="center">
+  {/* Radar Chart */}
+  <Box className="anb-chart-container" width="600px" height="700px">
+    <Flex justify="space-between" align="center" mb={2}>
+      <Text className="anb-chart-title">Local Stations Radar</Text>
+      <Tooltip 
+        label={
+          `This radar shows average performance across local stations.\n\n` +
+          `A more balanced shape = higher Equitative Score.\n\n` +
+          `Equitative Score: ${equitativeScore} / 100`
+        }
+        bg="gray.700"
+        color="white"
+        fontSize="sm"
+        borderRadius="md"
+        hasArrow
+        placement="left"
+        whiteSpace="pre-line"
+      >
+        <Box cursor="pointer" ml={2}>
+          <FaInfoCircle color="white" />
+        </Box>
+      </Tooltip>
+    </Flex>
 
-              <Radar 
-  data={radarData}
+    <Radar 
+      data={radarData}
+      options={{
+        scales: {
+          r: {
+            angleLines: { color: "rgba(255, 255, 255, 0.2)" },
+            grid: { color: "rgba(255, 255, 255, 0.2)" },
+            pointLabels: {
+              color: "white",
+              font: { size: 12, weight: "bold" }
+            },
+            ticks: {
+              color: "white",
+              font: { weight: "bold", size: 13 },
+              backdropColor: "transparent"
+            },
+            min: 0,
+            max: 100
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            display: true,
+            color: "white",
+            anchor: "end",
+            align: "start",
+            formatter: function (value, context) {
+              const datasetIndex = context.datasetIndex;
+              const companyIndex = context.dataIndex;
+              const dataset = context.chart.data.datasets[datasetIndex];
+              const currentValue = dataset.data[companyIndex];
+        
+              if (labelMode === 'none') return '';
+              if (labelMode === 'raw') return currentValue.toFixed(1);
+        
+              // Percent mode
+              const companyName = context.chart.data.labels[companyIndex];
+              const previousScore = companyPerformance.find(c => c.name === companyName)?.previousScore;
+              if (!previousScore || previousScore === 0) return '-';
+              const change = ((currentValue - previousScore) / previousScore * 100).toFixed(1);
+              return `${change > 0 ? '+' : ''}${change}%`;
+            },
+            font: {
+              weight: "bold",
+              size: 11
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+            }
+          }
+        }
+        
+      }}
+    />
+  </Box>
+</Flex>
 
-  
-  
 
-                options={{
-                  scales: {
-                    r: {
-                      angleLines: {
-                        color: "rgba(255, 255, 255, 0.2)",
-                      },
-                      grid: {
-                        color: "rgba(255, 255, 255, 0.2)",
-                      },
-                      pointLabels: {
-                        color: "white",
-                        font: {
-                          size: 12,
-                          weight: "bold"
-                        }
-                      },
-                      ticks: {
-                        color: "white",
-                        font: {
-                          weight: "bold",
-                          size: 13
-                        },
-                        backdropColor: "transparent"
-                      },
-                      min: 0,
-                      max: 100
-                    }
-                  },
-                  plugins: {
-                    legend: {
-                      labels: {
-                        color: "white",
-                        font: {
-                          weight: "bold"
-                        }
-                      }
-                    }
-                  }
-                }}
-              />
-            </Box>
-          </Flex>
 
           {/* Insights Panel */}
           <Box p={4} bg="rgba(255,255,255,0.05)" borderRadius="lg" width="100%" maxW="1000px">

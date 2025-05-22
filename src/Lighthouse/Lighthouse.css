@@ -82,7 +82,7 @@
   font-size: 3.5rem;
   font-weight: 900;
   text-align: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0rem;
   color: var(--primary-glow);
   text-shadow: 0 0 10px rgba(0, 247, 255, 0.7), 0 0 20px rgba(0, 247, 255, 0.5);
   font-family: 'Orbitron', sans-serif;
@@ -1004,7 +1004,8 @@
   font-size: 3.5rem;
   font-weight: 900;
   text-align: center;
-  margin-bottom: 1.5rem;
+  margin-top: 0rem;
+  margin-bottom: 0rem;
   color: var(--primary-glow);
   font-family: 'Orbitron', sans-serif;
   letter-spacing: 2px;
@@ -1016,6 +1017,7 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+
 
 .lighthouse-scope .title::after {
   content: '';
@@ -1035,4 +1037,265 @@
   100% { background-position: 0 200%; }
 }
 
+.lighthouse-scope .header-nav button {
+  background: rgba(0, 30, 60, 0.85);
+  color: var(--primary-glow);
+  border: 1px solid rgba(0, 247, 255, 0.6);
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-weight: 700;
+  font-size: 1rem;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+  box-shadow:
+    0 0 8px rgba(0, 247, 255, 0.4),
+    inset 0 0 4px rgba(0, 247, 255, 0.1);
+  backdrop-filter: blur(6px);
+}
 
+.lighthouse-scope .header-nav button:hover {
+  background: rgba(0, 60, 100, 0.95);
+  color: #ffffff;
+  transform: scale(1.05);
+  box-shadow:
+    0 0 12px rgba(0, 247, 255, 0.7),
+    inset 0 0 6px rgba(0, 247, 255, 0.2);
+  border-color: rgba(0, 247, 255, 0.8);
+}
+
+.lighthouse-scope .header-nav {
+  height: 100px;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 20, 40, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 247, 255, 0.3);
+  border-bottom: 2px solid rgba(0, 247, 255, 0.2);
+}
+
+
+.lighthouse-scope .main-content {
+  margin-top: 100px;
+}
+
+.lighthouse-scope [id]::before {
+  content: '';
+  display: block;
+  height: 100px;
+  margin-top: -100px;
+  visibility: hidden;
+}
+
+
+.cyber-nav-btn {
+  color: var(--primary-glow) !important;
+  text-shadow:
+    0 0 4px rgba(0, 247, 255, 0.6),
+    0 0 10px rgba(0, 247, 255, 0.4),
+    0 0 20px rgba(0, 247, 255, 0.3);
+}
+
+
+
+.cyber-nav-btn:hover {
+  background: rgba(0, 60, 100, 0.85);
+  transform: translateY(-2px);
+  box-shadow: 0 0 12px rgba(0, 247, 255, 0.5), inset 0 0 6px rgba(0, 247, 255, 0.3);
+  color: white;
+}
+
+.cyber-nav-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 247, 255, 0.2),
+    transparent
+  );
+  transition: all 0.6s ease;
+  z-index: -1;
+}
+
+.cyber-nav-btn:hover::before {
+  left: 100%;
+}
+
+/* Add this to your Lighthouse.css file */
+
+/* TV Glitch Effect */
+.tv-glitch-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    /* Horizontal scanlines */
+    linear-gradient(rgba(0, 247, 255, 0.03) 0.5px, transparent 0.5px),
+    /* Vertical scanlines */
+    linear-gradient(90deg, rgba(0, 247, 255, 0.02) 0.5px, transparent 0.5px);
+  background-size: 4px 4px;
+  z-index: 9999;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.15;
+  animation: glitchEffect 8s linear infinite;
+}
+
+/* Subtle glitch animation */
+@keyframes glitchEffect {
+  0% {
+    transform: translate(0);
+    opacity: 0.15;
+  }
+  97% {
+    transform: translate(0);
+    opacity: 0.15;
+  }
+  98% {
+    transform: translate(-1px, 1px);
+    opacity: 0.2;
+  }
+  99% {
+    transform: translate(1px, -1px);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translate(0);
+    opacity: 0.15;
+  }
+}
+
+/* Add occasional screen flicker */
+.tv-glitch-overlay::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 247, 255, 0.05);
+  animation: flicker 12s infinite;
+  opacity: 0;
+}
+
+@keyframes flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 72%, 100% {
+    opacity: 0;
+  }
+  20%, 21.999%, 63%, 63.999%, 65%, 71.999% {
+    opacity: 0.1;
+  }
+}
+
+/* Add subtle horizontal noise */
+.tv-glitch-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="1" stitchTiles="stitch"/></filter><rect width="100" height="100" filter="url(%23noise)" opacity="0.1"/></svg>');
+  opacity: 0.1;
+  mix-blend-mode: overlay;
+}
+
+/* TV Glitch Effect - Enhanced Version */
+.tv-glitch-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    /* Horizontal scanlines */
+    linear-gradient(rgba(0, 247, 255, 0.03) 0.5px, transparent 0.5px),
+    /* Vertical scanlines */
+    linear-gradient(90deg, rgba(0, 247, 255, 0.02) 0.5px, transparent 0.5px);
+  background-size: 3px 3px;
+  z-index: 9999;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.3;
+  animation: glitchEffect 5s linear infinite;
+}
+
+/* Enhanced glitch animation */
+@keyframes glitchEffect {
+  0%, 96% {
+    transform: translate(0);
+    opacity: 0.25;
+  }
+  97% {
+    transform: translate(-1px, 1px);
+    opacity: 0.3;
+  }
+  98% {
+    transform: translate(1px, -1px);
+    opacity: 0.3;
+  }
+  99% {
+    transform: translate(0);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translate(0);
+    opacity: 0.25;
+  }
+}
+
+/* More noticeable flicker */
+.tv-glitch-overlay::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 247, 255, 0.1);
+  animation: flicker 15s infinite;
+  opacity: 0;
+}
+
+@keyframes flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 0;
+  }
+  20%, 22%, 24%, 55% {
+    opacity: 0.1;
+  }
+}
+
+/* Better noise texture */
+.tv-glitch-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    linear-gradient(rgba(0, 247, 255, 0.01) 50%, transparent 50%),
+    linear-gradient(90deg, rgba(0, 247, 255, 0.01) 50%, transparent 50%);
+  background-size: 2px 2px;
+  opacity: 0.2;
+  mix-blend-mode: overlay;
+  animation: noise 0.5s infinite;
+}
+
+@keyframes noise {
+  0% { background-position: 0 0; }
+  100% { background-position: 2px 2px; }
+}

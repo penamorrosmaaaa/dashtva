@@ -1,0 +1,263 @@
+/* ------------------------------------------------------------------ */
+/*  WHOOP-STYLE AI CHAT - AUTHENTIC DARK THEME                         */
+/* ------------------------------------------------------------------ */
+
+/* Floating Action Button */
+.ai-fab {
+    position: fixed !important;
+    bottom: 24px;
+    right: 24px;
+    width: 56px !important;
+    height: 56px !important;
+    background: #2d3748 !important;
+    border: none !important;
+    border-radius: 50% !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+    transition: all 0.3s ease !important;
+    z-index: 1000;
+  }
+  
+  .ai-fab:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5) !important;
+    background: #3d4758 !important;
+  }
+  
+  .ai-fab svg {
+    color: #63b3ed !important;
+  }
+  
+  /* Navigation Icon (Inline) */
+  .ai-nav-icon.cyber-nav-btn {
+    background: transparent !important;
+    border: 1px solid #4a5568 !important;
+    border-radius: 8px !important;
+  }
+  
+  .ai-nav-icon.cyber-nav-btn:hover {
+    background: #2d3748 !important;
+    border-color: #63b3ed !important;
+  }
+  
+  /* Drawer Background */
+  .chakra-drawer__content {
+    background: #0f1114 !important;
+  }
+  
+  .chakra-drawer__header {
+    background: #0f1114 !important;
+    border-bottom: 1px solid #1a1d23 !important;
+    padding: 12px 16px !important;
+  }
+  
+  .chakra-drawer__body {
+    background: #0f1114 !important;
+  }
+  
+  /* Header Title */
+  .chakra-drawer__header .chakra-text {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.5px !important;
+    color: #a0aec0 !important;
+  }
+  
+  /* Scrollbar Styling */
+  .chakra-drawer__body::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .chakra-drawer__body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .chakra-drawer__body::-webkit-scrollbar-thumb {
+    background: #2d3139;
+    border-radius: 3px;
+  }
+  
+  .chakra-drawer__body::-webkit-scrollbar-thumb:hover {
+    background: #3d4149;
+  }
+  
+  /* Message Area Background */
+  .chakra-drawer__body > div:first-child {
+    background: #0f1114 !important;
+  }
+  
+  /* User Message Bubbles */
+  .chakra-drawer__body .chakra-flex:has(> .chakra-box[style*="flex-end"]) .chakra-box {
+    background: #4a5568 !important;
+    color: #f7fafc !important;
+  }
+  
+  /* AI Message Bubbles */
+  .chakra-drawer__body .chakra-flex:has(> .chakra-box:not([style*="flex-end"])) > div > .chakra-box:last-child {
+    background: #1a1d23 !important;
+    border: 1px solid #2d3139 !important;
+  }
+  
+  /* AI Avatar */
+  .chakra-drawer__body .chakra-box[style*="width: 24px"] {
+    background: #4a5568 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+  }
+  
+  /* Message Text */
+  .chakra-drawer__body .chakra-text {
+    line-height: 1.6 !important;
+    color: #e2e8f0 !important;
+  }
+  
+  /* Follow-up Questions */
+  .chakra-button[variant="outline"] {
+    background: transparent !important;
+    border: 1px solid #2d3139 !important;
+    color: #718096 !important;
+    font-weight: normal !important;
+  }
+  
+  .chakra-button[variant="outline"]:hover {
+    background: #1a1d23 !important;
+    border-color: #4a5568 !important;
+    color: #a0aec0 !important;
+    transform: translateX(2px);
+  }
+  
+  /* Input Area Background */
+  .chakra-drawer__body > div:last-child {
+    background: #0f1114 !important;
+    border-top: 1px solid #1a1d23 !important;
+  }
+  
+  /* Textarea */
+  .chakra-textarea {
+    background: #1a1d23 !important;
+    border: 1px solid #2d3139 !important;
+    color: #e2e8f0 !important;
+    min-height: 40px !important;
+    max-height: 120px !important;
+    overflow-y: auto !important;
+  }
+  
+  .chakra-textarea:hover {
+    border-color: #3d4149 !important;
+  }
+  
+  .chakra-textarea:focus {
+    border-color: #4a5568 !important;
+    box-shadow: none !important;
+  }
+  
+  .chakra-textarea::placeholder {
+    color: #4a5568 !important;
+  }
+  
+  /* Send Button */
+  .chakra-button[aria-label="Send"] {
+    background: #4a5568 !important;
+    color: #f7fafc !important;
+  }
+  
+  .chakra-button[aria-label="Send"]:hover {
+    background: #5a6578 !important;
+  }
+  
+  .chakra-button[aria-label="Send"]:active {
+    background: #3a4558 !important;
+  }
+  
+  /* Filter Controls */
+  .chakra-drawer__body .chakra-box[style*="border: 1px solid"] {
+    background: #1a1d23 !important;
+    border-color: #2d3139 !important;
+  }
+  
+  /* Select Dropdown */
+  .chakra-select {
+    background: #1a1d23 !important;
+    border: 1px solid #2d3139 !important;
+    color: #e2e8f0 !important;
+  }
+  
+  .chakra-select:hover {
+    border-color: #3d4149 !important;
+  }
+  
+  .chakra-select option {
+    background: #1a1d23;
+    color: #e2e8f0;
+  }
+  @keyframes blink {
+    0% { opacity: 0; }
+    50% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  
+  .dot-1, .dot-2, .dot-3 {
+    animation: blink 1.4s infinite;
+    display: inline-block;
+  }
+  .dot-2 {
+    animation-delay: 0.2s;
+  }
+  .dot-3 {
+    animation-delay: 0.4s;
+  }
+
+  /* ------------------------------------------------------------------ */
+/*  MOBILE RESPONSIVENESS                                             */
+/* ------------------------------------------------------------------ */
+@media only screen and (max-width: 480px) {
+    .ai-fab {
+      bottom: 16px !important;
+      right: 16px !important;
+      width: 48px !important;
+      height: 48px !important;
+    }
+  
+    .chakra-drawer__header .chakra-text {
+      font-size: 12px !important;
+    }
+  
+    .chakra-textarea {
+      font-size: 14px !important;
+    }
+  
+    .chakra-drawer__body .chakra-text {
+      font-size: 13px !important;
+    }
+  
+    .chakra-button[variant="outline"] {
+      font-size: 12px !important;
+      padding: 6px 8px !important;
+    }
+  
+    .chakra-select {
+      font-size: 13px !important;
+      height: 32px !important;
+    }
+  
+    .chakra-drawer__body .chakra-box[style*="flex-end"],
+    .chakra-drawer__body .chakra-box:not([style*="flex-end"]) {
+      font-size: 13px !important;
+    }
+  
+    .chakra-drawer__body > div:last-child {
+      padding: 12px 10px !important;
+    }
+  
+    .chakra-drawer__body > div:first-child {
+      padding: 12px 10px !important;
+    }
+  
+    .chakra-drawer__body .chakra-box[style*="border: 1px solid"] {
+      padding: 8px !important;
+    }
+  }
+  
+  

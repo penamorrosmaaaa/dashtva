@@ -1,16 +1,14 @@
-// FILE: src/Lighthouse/AiChat.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box, Textarea, Button, VStack, Text, Select, useToast, HStack,
   IconButton, Drawer, DrawerOverlay, DrawerContent, DrawerHeader,
-  DrawerBody, useDisclosure, Spacer
+  DrawerBody, useDisclosure, Flex
 } from "@chakra-ui/react";
-import { FiZap, FiX, FiMaximize2, FiMinimize2 } from "react-icons/fi";
+import { FiZap, FiX, FiMaximize2, FiMinimize2, FiSend } from "react-icons/fi";
 import { motion } from "framer-motion";
-import "./AiChatCyberpunk.css";
+import "./AiChatWhoop.css";
 import { Checkbox, CheckboxGroup, Stack } from "@chakra-ui/react";
-import Plot from "react-plotly.js"; // ADD THIS
-
+import Plot from "react-plotly.js";
 
 /* ------------------------------------------------------------------ */
 /*  LISTAS DE OUTLETS & MÉTRICAS                                       */
@@ -36,7 +34,6 @@ const MEDIA_OUTLETS = [
 ];
 const METRICS = ["Score","CLS","LCP","SI","TBT","FCP"];
 
-
 /* ------------------------------------------------------------------ */
 /*  FUNCIÓN QUE CREA EL CONTEXTO PARA OPENAI                           */
 /* ------------------------------------------------------------------ */
@@ -44,119 +41,134 @@ const buildSystemContext = () => {
     return {
       role: "system",
       content: `
-  You are an expert web performance analyst helping a media company evaluate Lighthouse performance across news websites.
-  
-  Here is the full context of the system you're working with:
-  
-  📅 DAILY WORKFLOW
-  - Each day, the system extracts up to 10 new URLs of each content type (nota, video, image) for each media outlet.
-  - These URLs are extracted from sitemap.xml, .txt, or RSS feeds using robust retry logic and parsed via \`lxml\`.
-  - The system avoids duplicate URLs **within the same day**.
-  
-  🏷️ TYPES OF CONTENT
-  - 'nota': standard articles, excluding URLs with 'video'
-  - 'video': video-based articles (e.g., containing '/video/', ending in '-video', etc.)
-  - 'img': image galleries, extracted from image sitemaps if more than one \`<image:image>\` is present
-  
-  📊 METRICS (captured via Lighthouse and stored in Google Sheets)
-  Each URL is tested using Lighthouse in headless Chrome, and the following metrics are captured:
-  - Score: overall Lighthouse performance score (0–100)
-  - CLS: Cumulative Layout Shift
-  - LCP: Largest Contentful Paint
-  - SI: Speed Index
-  - TBT: Total Blocking Time
-  - FCP: First Contentful Paint
-  
-  🏢 COMPANIES — Organized in 3 groups
-  
-  1. 🟣 TV Azteca Main Brands
-     - Azteca 7
-     - Azteca UNO
-     - ADN40
-     - Deportes
-     - A+
-     - Noticias
-  
-  2. 🟡 TV Azteca Local Brands
-     - Quintana Roo
-     - Bajío
-     - Ciudad Juárez
-     - Yúcatan
-     - Jalisco
-     - Puebla
-     - Veracruz
-     - Baja California
-     - Morelos
-     - Guerrero
-     - Chiapas
-     - Sinaloa
-     - Aguascalientes
-     - Queretaro
-     - Chihuahua
-     - Laguna
-  
-  3. 🔴 Competition Companies
-     - Heraldo
-     - Televisa
-     - Milenio
-     - Universal
-     - As
-     - Infobae
-     - NYTimes
-     - Terra
-  
-  4. 🖼️ Image Brands (specialized image sitemaps)
-     - IMG.AZTECA7
-     - IMG.AZTECAUNO
-     - IMG.AZTECANOTICIAS
-  
-  📈 DATA FORMAT
-  Each row in the Google Sheet includes 9 columns per group:
-  [Date, Type, URL, Score, CLS, LCP, SI, TBT, FCP]
-  
-  Multiple groups are stored horizontally per row. A single row can contain URLs and metrics for several companies across types.
-  
-  🧠 YOUR ROLE
-  As the AI assistant:
-  - Understand the differences between outlet groups.
-  - Distinguish content types: 'nota' vs. 'video' vs. 'img'.
-  - Use metrics to compare companies on any given day or over time.
-  - Provide insights like "which outlet had the best score", "which company improved the most in LCP", or "how does Azteca compare to its competitors this week".
-  - Make sure to use precise metric values and name the company group if relevant.
-  
-  Be clear, accurate, and analytical. If data is missing or null, acknowledge it.
+You are an expert web performance analyst helping a media company evaluate Lighthouse performance across news websites. Keep responses conversational and concise like a performance coach.
+
+Here is the full context of the system you're working with:
+
+📅 DAILY WORKFLOW
+- Each day, the system extracts up to 10 new URLs of each content type (nota, video, image) for each media outlet.
+- These URLs are extracted from sitemap.xml, .txt, or RSS feeds using robust retry logic and parsed via \`lxml\`.
+- The system avoids duplicate URLs **within the same day**.
+
+🏷️ TYPES OF CONTENT
+- 'nota': standard articles, excluding URLs with 'video'
+- 'video': video-based articles (e.g., containing '/video/', ending in '-video', etc.)
+- 'img': image galleries, extracted from image sitemaps if more than one \`<image:image>\` is present
+
+📊 METRICS (captured via Lighthouse and stored in Google Sheets)
+Each URL is tested using Lighthouse in headless Chrome, and the following metrics are captured:
+- Score: overall Lighthouse performance score (0–100)
+- CLS: Cumulative Layout Shift
+- LCP: Largest Contentful Paint
+- SI: Speed Index
+- TBT: Total Blocking Time
+- FCP: First Contentful Paint
+
+🏢 COMPANIES — Organized in 3 groups
+
+1. 🟣 TV Azteca Main Brands
+   - Azteca 7
+   - Azteca UNO
+   - ADN40
+   - Deportes
+   - A+
+   - Noticias
+
+2. 🟡 TV Azteca Local Brands
+   - Quintana Roo
+   - Bajío
+   - Ciudad Juárez
+   - Yúcatan
+   - Jalisco
+   - Puebla
+   - Veracruz
+   - Baja California
+   - Morelos
+   - Guerrero
+   - Chiapas
+   - Sinaloa
+   - Aguascalientes
+   - Queretaro
+   - Chihuahua
+   - Laguna
+
+3. 🔴 Competition Companies
+   - Heraldo
+   - Televisa
+   - Milenio
+   - Universal
+   - As
+   - Infobae
+   - NYTimes
+   - Terra
+
+4. 🖼️ Image Brands (specialized image sitemaps)
+   - IMG.AZTECA7
+   - IMG.AZTECAUNO
+   - IMG.AZTECANOTICIAS
+
+📈 DATA FORMAT
+Each row in the Google Sheet includes 9 columns per group:
+[Date, Type, URL, Score, CLS, LCP, SI, TBT, FCP]
+
+🧠 YOUR ROLE
+As the AI assistant:
+- Be conversational and friendly, like a performance coach
+- Keep responses concise and actionable
+- Understand the differences between outlet groups
+- Distinguish content types: 'nota' vs. 'video' vs. 'img'
+- Use metrics to compare companies on any given day or over time
+- Provide insights like "which outlet had the best score", "which company improved the most in LCP", or "how does Azteca compare to its competitors this week"
+- Make sure to use precise metric values and name the company group if relevant
+- After answering a question, suggest 2-3 relevant follow-up questions that a user might ask next
+
+Be clear, accurate, and analytical. If data is missing or null, acknowledge it.
       `.trim()
     };
   };
-  
 
 /* ------------------------------------------------------------------ */
 /*  COMPONENTE PRINCIPAL                                              */
 /* ------------------------------------------------------------------ */
 const AiChat = ({ visibleData, inline = false }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
-
-  /* ---------- estado local ---------- */
-  const [input, setInput]         = useState("");
-  const [answer, setAnswer]       = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [tokenInfo, setTokenInfo] = useState(null);
-
-  const [selectedDates, setSelectedDates] = useState([]);
-  const [selectedType, setSelectedType] = useState("");
-  const [allDates, setAllDates]         = useState([]);
-  const [allTypes, setAllTypes]         = useState([]);
-  const [analysis, setAnalysis]         = useState(null);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const [chartData, setChartData] = useState(null);
-
-
+  const messagesEndRef = useRef(null);
   const toast = useToast();
 
+  /* ---------- estado local ---------- */
+  const [input, setInput] = useState("");
+  const [displayedText, setDisplayedText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [tokenInfo, setTokenInfo] = useState(null);
+  const [selectedDates, setSelectedDates] = useState([]);
+  const [selectedType, setSelectedType] = useState("");
+  const [allDates, setAllDates] = useState([]);
+  const [allTypes, setAllTypes] = useState([]);
+  const [analysis, setAnalysis] = useState(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState(() => {
+    const saved = localStorage.getItem('aiChatConversation');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [followUpQuestions, setFollowUpQuestions] = useState([]);
+  const [showControls, setShowControls] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('aiChatConversation', JSON.stringify(conversationHistory));
+  }, [conversationHistory]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [conversationHistory]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   /* ---------- helpers ---------- */
-  const safeParse      = v => { const n = parseFloat(String(v).replace(",",".")); return isNaN(n) ? null : n; };
-  const estimateTokens = str => Math.ceil(str.length / 2.3);          // ≈
-  const dayCount       = ()  => analysis ? Object.keys(analysis).length : 0;
+  const safeParse = v => { const n = parseFloat(String(v).replace(",",".")); return isNaN(n) ? null : n; };
+  const estimateTokens = str => Math.ceil(str.length / 2.3);
+  const dayCount = () => analysis ? Object.keys(analysis).length : 0;
 
   /* ---------- construir caché analizable ---------- */
   useEffect(() => {
@@ -170,7 +182,7 @@ const AiChat = ({ visibleData, inline = false }) => {
         const type = r[`Type${suf}`];
         if (!date || !type) return;
 
-        if (!agg[date])       agg[date]       = {};
+        if (!agg[date]) agg[date] = {};
         if (!agg[date][type]) agg[date][type] = {};
         if (!agg[date][type][outlet]) {
           agg[date][type][outlet] = {};
@@ -179,7 +191,7 @@ const AiChat = ({ visibleData, inline = false }) => {
         METRICS.forEach(m => {
           const v = safeParse(r[`${m}${suf}`]);
           if (v !== null) {
-            agg[date][type][outlet][m].sum   += v;
+            agg[date][type][outlet][m].sum += v;
             agg[date][type][outlet][m].count += 1;
           }
         });
@@ -227,25 +239,34 @@ const AiChat = ({ visibleData, inline = false }) => {
     });
   
     return `
+### CONVERSATION HISTORY
+${conversationHistory.map(msg => `${msg.role === 'user' ? 'USER' : 'AI'}: ${msg.content}`).join('\n')}
+
 ### DATOS HISTÓRICOS
 ${blocks.join("\n")}
 
 ### PREGUNTA
 ${input}
 
+Keep responses conversational and concise. If appropriate, include a visualization.
+
 If possible, respond with a chart JSON like:
 {
   "chart": {
-    "type": "pie" or "bar",
+    "type": "pie" or "bar" or "line" or "radar",
     "title": "Example Chart",
     "labels": ["Company A", "Company B"],
     "values": [50, 100]
   }
 }
-`.trim();
 
+At the end of your response, include 2-3 suggested follow-up questions in this format:
+<!-- FOLLOW_UP -->
+- Question 1?
+- Question 2?
+- Question 3?
+`.trim();
   };
-  
 
   const buildSinglePrompt = (obj, dateLabel) => {
     const lines = Object.entries(obj).map(([outlet, metrics]) => {
@@ -257,42 +278,46 @@ If possible, respond with a chart JSON like:
     }).filter(Boolean).join("\n");
   
     return `
-  ### CONTEXTO
-  Promedio de métricas para el tipo de contenido "${selectedType}" en las fechas: ${dateLabel}.
-  
-  Cada valor corresponde al promedio entre los días seleccionados para cada medio.
-  
-  ${lines}
-  
-  ### PREGUNTA
-${input}
+### CONVERSATION HISTORY
+${conversationHistory.map(msg => `${msg.role === 'user' ? 'USER' : 'AI'}: ${msg.content}`).join('\n')}
+
+### CONTEXTO
+Promedio de métricas para el tipo de contenido "${selectedType}" en las fechas: ${dateLabel}.
+
+Cada valor corresponde al promedio entre los días seleccionados para cada medio.
+
+${lines}
 
 ### PREGUNTA
 ${input}
 
-Incluye resultados para todas las marcas que tengan datos en las fechas seleccionadas, aunque el usuario haya mencionado una sola.
+Keep responses conversational and concise. If appropriate, include a visualization.
 
 If possible, respond with a chart JSON like:
 {
   "chart": {
-    "type": "pie" or "bar",
+    "type": "pie" or "bar" or "line" or "radar",
     "title": "Example Chart",
     "labels": ["Company A", "Company B"],
     "values": [50, 100]
   }
 }
-`.trim();
 
+At the end of your response, include 2-3 suggested follow-up questions in this format:
+<!-- FOLLOW_UP -->
+- Question 1?
+- Question 2?
+- Question 3?
+`.trim();
   };
-  
 
   /* ---------- OpenAI ---------- */
   const askOpenAI = async prompt => {
     try {
       setLoading(true);
       setTokenInfo(null);
-      setChartData(null);  // 🔄 Clear old chart
-  
+      setFollowUpQuestions([]);
+
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -304,69 +329,105 @@ If possible, respond with a chart JSON like:
           temperature: 0.3,
           messages: [
             buildSystemContext(),
+            ...conversationHistory,
             { role: "user", content: prompt },
           ],
         }),
       });
-  
+
       const data = await res.json();
       let content = data.choices?.[0]?.message?.content || "Sin respuesta.";
+      let chartData = null;
 
-// Intentar extraer JSON del gráfico
-let match = content.match(/```json\s*([\s\S]*?)\s*```/); // entre bloques ```json ... ```
-if (!match) match = content.match(/\{[\s\S]*\}/);        // o solo {...}
+      // Extract chart JSON if present
+      let match = content.match(/```json\s*([\s\S]*?)\s*```/);
+      if (!match) match = content.match(/\{[\s\S]*"chart"[\s\S]*\}/);
 
-if (match) {
-  try {
-    const rawJson = match[1] || match[0];
-    const parsed = JSON.parse(rawJson);
-    if (parsed.chart) {
-      setChartData(parsed.chart);
-      content = content
-        .replace(match[0], "")        // eliminar el bloque JSON
-        .replace(/```json|```/g, "")  // eliminar etiquetas markdown
-        .trim();                      // limpiar espacios extra
-    }
-  } catch (err) {
-    console.warn("Chart JSON not valid:", err);
-  }
-}
-
-setAnswer(content);
-
-  
-      // 🧠 Try to extract JSON from the message
-      try {
-        const match = content.match(/\{[\s\S]*\}/);
-        if (match) {
-          const parsed = JSON.parse(match[0]);
-          if (parsed.chart) setChartData(parsed.chart);
+      if (match) {
+        try {
+          const rawJson = match[1] || match[0];
+          const parsed = JSON.parse(rawJson);
+          if (parsed.chart) {
+            chartData = parsed.chart;
+            content = content.replace(match[0], "").replace(/```json|```/g, "").trim();
+          }
+        } catch (err) {
+          console.warn("Chart JSON not valid:", err);
         }
-      } catch (err) {
-        console.warn("No chart JSON found:", err);
       }
-  
+
+      // Extract follow-up questions
+      const followUpMatch = content.match(/<!-- FOLLOW_UP -->([\s\S]*)/);
+      if (followUpMatch) {
+        const followUpBlock = followUpMatch[1];
+        const questions = followUpBlock
+          .split('\n')
+          .map(line => line.trim().replace(/^- /, ''))
+          .filter(line => line && line.endsWith('?'));
+        
+        setFollowUpQuestions(questions);
+        content = content.replace(followUpMatch[0], '').trim();
+      }
+
+      setConversationHistory(prev => [
+        ...prev,
+        { role: "user", content: input },
+        { role: "assistant", content, chartData }
+      ]);
+
       const usage = data.usage || {};
       const nowTok = estimateTokens(prompt);
       const projTok = dayCount() ? Math.ceil(nowTok * 31 / dayCount()) : 0;
       setTokenInfo({ ...usage, nowTok, projTok });
-  
+
     } catch (e) {
       console.error(e);
-      setAnswer("Error al generar respuesta.");
+      setConversationHistory(prev => [
+        ...prev,
+        { role: "user", content: input },
+        { role: "assistant", content: "Error al generar respuesta." }
+      ]);
     } finally {
       setLoading(false);
+      setInput("");
     }
   };
-  
 
   /* ---------- handlers ---------- */
-  const handleSingle = () => {
-    if (!input || selectedDates.length === 0 || !selectedType || !analysis) {
-      toast({ title:"Selecciona al menos una fecha y un tipo", status:"warning", duration:3500, isClosable:true });
+  const handleSend = () => {
+    if (!input.trim()) {
+      toast({ title:"Escribe una pregunta", status:"warning", duration:3500, isClosable:true });
       return;
     }
-  
+    
+    if (!analysis) {
+      toast({ title:"No hay datos disponibles", status:"warning", duration:3500, isClosable:true });
+      return;
+    }
+
+    if (selectedDates.length > 0 && selectedType) {
+      handleSingle();
+    } else if (selectedDates.length > 0) {
+      handleTrend();
+    } else {
+      // General question without filters
+      askOpenAI(`
+### PREGUNTA
+${input}
+
+Please provide a general response about the media outlet performance tracking system.
+Keep it conversational and helpful.
+
+At the end of your response, include 2-3 suggested follow-up questions in this format:
+<!-- FOLLOW_UP -->
+- Question 1?
+- Question 2?
+- Question 3?
+      `);
+    }
+  };
+
+  const handleSingle = () => {
     const combined = {};
   
     selectedDates.forEach(date => {
@@ -398,17 +459,23 @@ setAnswer(content);
   
     askOpenAI(buildSinglePrompt(combined, selectedDates.join(", ")));
   };
-  
 
   const handleTrend = () => {
-    if (!input || !analysis || selectedDates.length === 0) {
-      toast({ title:"Falta información", status:"warning", duration:3500, isClosable:true });
-      return;
-    }
     askOpenAI(buildTrendPrompt());
   };
 
-  
+  const handleFollowUpClick = (question) => {
+    setInput(question);
+    setTimeout(() => {
+      handleSend();
+    }, 100);
+  };
+
+  const clearConversation = () => {
+    setConversationHistory([]);
+    localStorage.removeItem('aiChatConversation');
+    setFollowUpQuestions([]);
+  };
 
   /* ------------------------------------------------------------------ */
   /*  UI (Botón + Drawer)                                               */
@@ -432,192 +499,334 @@ setAnswer(content);
       {iconButton}
 
       <Drawer
-  isOpen={isOpen}
-  placement="right"
-  onClose={onClose}
-  size={isFullScreen ? "full" : { base: "full", md: "sm" }}
->
+        isOpen={isOpen}
+        placement="right"
+        onClose={onClose}
+        size={isFullScreen ? "full" : { base: "full", md: "md" }}
+      >
         <DrawerOverlay />
         <DrawerContent
-  bg="#0d0d0d"
-  borderLeft="2px solid #00f0ff"
-  maxW={isFullScreen ? "100%" : { base: "100%", md: "420px" }}
->
-
-          <DrawerHeader pl={4} pr={4} display="flex" alignItems="center">
-            <Text className="ai-chat-title" flexGrow={1}>Media Outlet Analyzer</Text>
-            <HStack spacing={2}>
-  <IconButton
-    icon={isFullScreen ? <FiMinimize2 /> : <FiMaximize2 />}
-    variant="ghost"
-    size="sm"
-    onClick={() => setIsFullScreen(prev => !prev)}
-    aria-label="Toggle Fullscreen"
-  />
-  <IconButton
-    icon={<FiX />}
-    variant="ghost"
-    size="sm"
-    onClick={onClose}
-    aria-label="Close"
-  />
-</HStack>
-
+          bg="#000000"
+          color="white"
+          maxW={isFullScreen ? "100%" : { base: "100%", md: "480px" }}
+        >
+          <DrawerHeader 
+            borderBottom="1px solid #222" 
+            display="flex" 
+            alignItems="center"
+            py={3}
+          >
+            <Text fontSize="md" fontWeight="600" flexGrow={1}>MEDIA OUTLET ANALYZER</Text>
+            <HStack spacing={1}>
+              <IconButton
+                icon={isFullScreen ? <FiMinimize2 /> : <FiMaximize2 />}
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsFullScreen(prev => !prev)}
+                aria-label="Toggle Fullscreen"
+                color="gray.400"
+                _hover={{ color: "white" }}
+              />
+              <IconButton
+                icon={<FiX />}
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                aria-label="Close"
+                color="gray.400"
+                _hover={{ color: "white" }}
+              />
+            </HStack>
           </DrawerHeader>
 
-          <DrawerBody p={0} display="flex" flexDir="column">
-  {/* Respuesta */}
-  <Box flex="1" px={{ base: 3, md: 4 }} py={4}>
-    {answer && (
-
-                <motion.div
-                  className="ai-answer"
-                  initial={{ opacity:0 }}
-                  animate={{ opacity:1 }}
-                  transition={{ duration:0.4 }}
-                >
-                  <Text whiteSpace="pre-wrap">{answer}</Text>
-
-{/* 🔥 Show chart if available */}
-{chartData && (
-  <Box mt={6}>
-    <Plot
-      data={[
-        chartData.type === "pie"
-          ? {
-              type: "pie",
-              labels: chartData.labels,
-              values: chartData.values,
-            }
-          : chartData.type === "donut"
-          ? {
-              type: "pie",
-              labels: chartData.labels,
-              values: chartData.values,
-              hole: 0.4,
-            }
-          : chartData.type === "radar"
-          ? {
-              type: "scatterpolar",
-              r: chartData.values,
-              theta: chartData.labels,
-              fill: "toself",
-              name: chartData.title || "Radar Chart",
-            }
-          : chartData.type === "line"
-          ? {
-              type: "scatter",
-              mode: "lines",
-              x: chartData.labels,
-              y: chartData.values,
-            }
-          : chartData.type === "area"
-          ? {
-              type: "scatter",
-              mode: "lines",
-              fill: "tozeroy",
-              x: chartData.labels,
-              y: chartData.values,
-            }
-          : chartData.type === "horizontal-bar"
-          ? {
-              type: "bar",
-              orientation: "h",
-              x: chartData.values,
-              y: chartData.labels,
-            }
-          : {
-              type: "bar",
-              x: chartData.labels,
-              y: chartData.values,
-            },
-      ]}
-      
-      layout={{
-  title: chartData.title || "Gráfico generado por AI",
-  paper_bgcolor: "#0d0d0d",
-  font: { color: "#fff" },
-  margin: { t: 40, l: 40, r: 20, b: 40 },
-  height: 320,
-  ...(chartData.type === "radar"
-    ? {
-        polar: {
-          radialaxis: {
-            visible: true,
-            range: [0, Math.max(...chartData.values) * 1.2],
-          },
-        },
-        showlegend: false,
-      }
-    : {}),
-}}
-
-      config={{ responsive: true }}
-    />
-  </Box>
-)}
-
-{tokenInfo && (
-
-              
-                    <Text mt={2} fontSize="sm" color="gray.400">
-                      🔢 prompt:{tokenInfo.prompt_tokens ?? "?"} • compl:{tokenInfo.completion_tokens ?? "?"} • total:{tokenInfo.total_tokens ?? "?"}<br/>
-                      🧮 ahora:{tokenInfo.nowTok} • 31d:{tokenInfo.projTok}
-                    </Text>
-                  )}
-                </motion.div>
+          <DrawerBody p={0} display="flex" flexDir="column" bg="#000">
+            {/* Messages Area */}
+            <Box flex="1" overflowY="auto" px={4} py={4}>
+              {conversationHistory.length === 0 && (
+                <Box textAlign="center" py={8}>
+                  <Text color="gray.500" fontSize="sm">How can I help?</Text>
+                </Box>
               )}
+              
+              {conversationHistory.map((msg, idx) => (
+                <Box key={idx} mb={4}>
+                  {msg.role === 'user' ? (
+                    <Flex justify="flex-end">
+                      <Box 
+                        maxW="80%" 
+                        bg="#1a1a1a" 
+                        color="white" 
+                        px={4} 
+                        py={3} 
+                        borderRadius="18px"
+                        borderTopRightRadius="4px"
+                      >
+                        <Text fontSize="sm">{msg.content}</Text>
+<Text fontSize="xs" color="gray.500" mt={1} textAlign="right">
+  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+</Text>
+
+                      </Box>
+                    </Flex>
+                  ) : (
+                    <Flex justify="flex-start">
+                      <Box maxW="80%">
+                        <Flex align="center" mb={2}>
+                          <Box w="24px" h="24px" borderRadius="full" bg="#00f0ff" mr={2} />
+                          <Text fontSize="xs" color="gray.400">AI Coach</Text>
+                        </Flex>
+                        <Box 
+                          bg="#1a1a1a" 
+                          px={4} 
+                          py={3} 
+                          borderRadius="18px"
+                          borderTopLeftRadius="4px"
+                        >
+                          <Text fontSize="sm" whiteSpace="pre-wrap">
+  {idx === conversationHistory.length - 1 && loading ? displayedText : msg.content}
+</Text>
+<Text fontSize="xs" color="gray.500" mt={1}>
+  {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+</Text>
+
+                          
+                          {/* Chart if available */}
+                          {msg.chartData && (
+                            <Box mt={3} bg="#0d0d0d" borderRadius="md" p={2}>
+                              <Plot
+                                data={[
+                                  msg.chartData.type === "pie"
+                                    ? {
+                                        type: "pie",
+                                        labels: msg.chartData.labels,
+                                        values: msg.chartData.values,
+                                        textfont: { color: '#fff' },
+                                        marker: { 
+                                          colors: ['#00f0ff', '#ff006e', '#fb5607', '#ffbe0b', '#8338ec', '#3a86ff']
+                                        }
+                                      }
+                                    : msg.chartData.type === "radar"
+                                    ? {
+                                        type: "scatterpolar",
+                                        r: msg.chartData.values,
+                                        theta: msg.chartData.labels,
+                                        fill: "toself",
+                                        marker: { color: '#00f0ff' }
+                                      }
+                                    : msg.chartData.type === "line"
+                                    ? {
+                                        type: "scatter",
+                                        mode: "lines+markers",
+                                        x: msg.chartData.labels,
+                                        y: msg.chartData.values,
+                                        line: { color: '#00f0ff' },
+                                        marker: { color: '#00f0ff' }
+                                      }
+                                    : {
+                                        type: "bar",
+                                        x: msg.chartData.labels,
+                                        y: msg.chartData.values,
+                                        marker: { color: '#00f0ff' }
+                                      },
+                                ]}
+                                layout={{
+                                  title: {
+                                    text: msg.chartData.title || "",
+                                    font: { color: '#fff', size: 14 }
+                                  },
+                                  paper_bgcolor: "#0d0d0d",
+                                  plot_bgcolor: "#0d0d0d",
+                                  font: { color: "#fff", size: 12 },
+                                  margin: { t: 40, l: 40, r: 20, b: 40 },
+                                  height: 280,
+                                  showlegend: false,
+                                  xaxis: { gridcolor: '#333' },
+                                  yaxis: { gridcolor: '#333' },
+                                  ...(msg.chartData.type === "radar"
+                                    ? {
+                                        polar: {
+                                          bgcolor: '#0d0d0d',
+                                          radialaxis: {
+                                            visible: true,
+                                            gridcolor: '#333',
+                                            range: [0, Math.max(...msg.chartData.values) * 1.2],
+                                          },
+                                          angularaxis: { gridcolor: '#333' }
+                                        },
+                                      }
+                                    : {}),
+                                }}
+                                config={{ 
+                                  responsive: true,
+                                  displayModeBar: false
+                                }}
+                              />
+                            </Box>
+                          )}
+                        </Box>
+
+                        {/* Follow-up questions */}
+                        {idx === conversationHistory.length - 1 && followUpQuestions.length > 0 && (
+                          <VStack align="start" spacing={2} mt={3}>
+                            {followUpQuestions.map((question, i) => (
+                              <Button
+                                key={i}
+                                variant="outline"
+                                size="sm"
+                                borderColor="#333"
+                                color="gray.300"
+                                _hover={{ bg: "#1a1a1a", borderColor: "#00f0ff" }}
+                                onClick={() => handleFollowUpClick(question)}
+                                textAlign="left"
+                                whiteSpace="normal"
+                                height="auto"
+                                py={2}
+                                px={3}
+                                fontSize="xs"
+                                fontWeight="normal"
+                              >
+                                {question}
+                              </Button>
+                            ))}
+                          </VStack>
+                        )}
+                      </Box>
+                    </Flex>
+                  )}
+                </Box>
+              ))}
+              {loading && (
+  <Flex justify="flex-start" mt={2}>
+    <Box maxW="80%">
+      <Flex align="center" mb={2}>
+        <Box w="24px" h="24px" borderRadius="full" bg="#00f0ff" mr={2} />
+        <Text fontSize="xs" color="gray.400">AI Coach</Text>
+      </Flex>
+      <Box 
+        bg="#1a1a1a" 
+        px={4} 
+        py={3} 
+        borderRadius="18px" 
+        borderTopLeftRadius="4px"
+      >
+        <Text fontSize="sm" color="gray.400" fontStyle="italic">
+          typing<span className="dot-1">.</span><span className="dot-2">.</span><span className="dot-3">.</span>
+        </Text>
+      </Box>
+    </Box>
+  </Flex>
+)}
+<div ref={messagesEndRef} />
+
             </Box>
 
-            {/* Input */}
-            <Box className="ai-chat-input-area" px={{ base: 3, md: 4 }} py={4}>
-            <HStack spacing={2} flexWrap="wrap">
-              <Box maxH="150px" overflowY="auto" border="1px solid #333" borderRadius="md" p={2} w="100%">
-  <CheckboxGroup value={selectedDates} onChange={setSelectedDates}>
-    <Stack spacing={1}>
-      {allDates.map(d => (
-        <Checkbox key={d} value={d} color="white" _checked={{ color: "cyan.300" }}>{d}</Checkbox>
-
-      ))}
-    </Stack>
-  </CheckboxGroup>
-</Box>
-
-                <Select
-                  size="sm"
-                  placeholder="Tipo"
-                  value={selectedType}
-                  onChange={e => setSelectedType(e.target.value)}
-                  className="ai-select"
-                >
-                  {allTypes.map(t => <option key={t}>{t}</option>)}
-                </Select>
-              </HStack>
-
-              <Textarea
-                size="sm"
-                placeholder="Pregunta…"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                className="ai-textarea"
-                mt={2}
-              />
-
-              <HStack mt={2} spacing={2}>
+            {/* Filter Controls Toggle */}
+            <Box px={4}>
               <Button
-  size="sm"
-  className="ai-btn-primary"
-  onClick={handleSingle}
-  isDisabled={selectedDates.length === 0}
-  isLoading={loading}
-  loadingText="…"
-  flex="1"
->
-  Generate
-</Button>
+                size="xs"
+                variant="ghost"
+                onClick={() => setShowControls(!showControls)}
+                color="gray.400"
+                _hover={{ color: "white" }}
+                fontSize="xs"
+              >
+                {showControls ? "Hide filters" : "Show filters"}
+              </Button>
+            </Box>
 
-                
+            {/* Filter Controls */}
+            {showControls && (
+              <Box px={4} py={2} borderTop="1px solid #222">
+                <HStack spacing={2} mb={2}>
+                  <Text fontSize="xs" color="gray.400">Filters:</Text>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={clearConversation}
+                    color="red.400"
+                    _hover={{ color: "red.300" }}
+                  >
+                    Clear chat
+                  </Button>
+                </HStack>
+                <HStack spacing={2} align="start">
+                  <Box flex="1" maxH="100px" overflowY="auto" border="1px solid #333" borderRadius="md" p={2}>
+                    <CheckboxGroup value={selectedDates} onChange={setSelectedDates}>
+                      <Stack spacing={1}>
+                        {allDates.map(d => (
+                          <Checkbox 
+                            key={d} 
+                            value={d} 
+                            size="sm"
+                            colorScheme="cyan"
+                            iconColor="black"
+                          >
+                            <Text fontSize="xs">{d}</Text>
+                          </Checkbox>
+                        ))}
+                      </Stack>
+                    </CheckboxGroup>
+                  </Box>
+
+                  <Select
+                    size="sm"
+                    placeholder="Type"
+                    value={selectedType}
+                    onChange={e => setSelectedType(e.target.value)}
+                    bg="#1a1a1a"
+                    border="1px solid #333"
+                    _hover={{ borderColor: "#444" }}
+                    fontSize="xs"
+                    width="120px"
+                  >
+                    {allTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                  </Select>
+                </HStack>
+              </Box>
+            )}
+
+            {/* Input Area */}
+            <Box px={4} py={3} borderTop="1px solid #222">
+              <HStack spacing={2}>
+                <Textarea
+                  size="sm"
+                  placeholder="Ask about performance metrics..."
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyPress={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  bg="#1a1a1a"
+                  border="1px solid #333"
+                  _hover={{ borderColor: "#444" }}
+                  _focus={{ borderColor: "#00f0ff", boxShadow: "none" }}
+                  rows={1}
+                  resize="none"
+                  fontSize="sm"
+                />
+                <IconButton
+                  icon={<FiSend />}
+                  onClick={handleSend}
+                  isLoading={loading}
+                  bg="#00f0ff"
+                  color="black"
+                  _hover={{ bg: "#00d4e6" }}
+                  _active={{ bg: "#00b8cc" }}
+                  size="sm"
+                  borderRadius="full"
+                  aria-label="Send"
+                />
               </HStack>
+              
+              {selectedDates.length > 0 && (
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  {selectedDates.length} date{selectedDates.length > 1 ? 's' : ''} selected
+                  {selectedType && ` • ${selectedType}`}
+                </Text>
+              )}
             </Box>
           </DrawerBody>
         </DrawerContent>

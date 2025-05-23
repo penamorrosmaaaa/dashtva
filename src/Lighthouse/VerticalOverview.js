@@ -16,7 +16,7 @@ import { FaChevronDown, FaChevronUp } from "react-icons/fa";
 import CountUp from 'react-countup';
 
 import Papa from "papaparse";
-import { Radar, Bar } from "react-chartjs-2";
+import { Radar, Bar, Line } from "react-chartjs-2";
 import {
   Chart as ChartJS, RadialLinearScale, CategoryScale, LinearScale,
   BarElement, PointElement, LineElement, Title, Tooltip as ChartTooltip, 
@@ -25,8 +25,6 @@ import {
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./Lighthouse.css";
 import { Wrap } from "@chakra-ui/react";
-
-
 
 ChartJS.register(
   RadialLinearScale, CategoryScale, LinearScale,
@@ -51,13 +49,11 @@ const VerticalOverview = () => {
   const [compareStartDate, setCompareStartDate] = useState(null);
   const [compareEndDate, setCompareEndDate] = useState(null);
   const [compareStartDate2, setCompareStartDate2] = useState(null);
-const [compareEndDate2, setCompareEndDate2] = useState(null);
-const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
-const [expandedCompanies, setExpandedCompanies] = useState([]);
-const [labelMode, setLabelMode] = useState("raw");
-
-
-
+  const [compareEndDate2, setCompareEndDate2] = useState(null);
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const [expandedCompanies, setExpandedCompanies] = useState([]);
+  const [labelMode, setLabelMode] = useState('raw'); // 'raw', 'percent', 'none'
+  const [trendCompany, setTrendCompany] = useState(null); // Add this line
   // Constants
   const TIME_RANGES = ['daily', 'monthly', 'yearly', 'all', 'custom'];
   const competitionCompanies = [
@@ -119,7 +115,6 @@ const [labelMode, setLabelMode] = useState("raw");
     }
     return "white";
   };
-  
 
   const MONTHS = [
     "January", "February", "March", "April", "May", "June", 
@@ -142,7 +137,6 @@ const [labelMode, setLabelMode] = useState("raw");
     "Infobae": { cls: "CLS_42", lcp: "LCP_42", si: "SI_42", tbt: "TBT_42", fcp: "FCP_42" },
     "NyTimes": { cls: "CLS_43", lcp: "LCP_43", si: "SI_43", tbt: "TBT_43", fcp: "FCP_43" }
   };
-  
 
   // Data Fetching
   useEffect(() => {
@@ -251,7 +245,6 @@ const [labelMode, setLabelMode] = useState("raw");
   
     return count ? parseFloat((total / count).toFixed(1)) : 0;
   };
-  
 
   const getMetricsForCompany = (company, type = selectedType, date = dateStr) => {
     if (!data.length || !date) return {};
@@ -272,8 +265,6 @@ const [labelMode, setLabelMode] = useState("raw");
     
       return merged;
     }
-    
-    
   
     const keys = Object.keys(data[0]);
     const blockSize = 9;
@@ -320,10 +311,31 @@ const [labelMode, setLabelMode] = useState("raw");
       fcp: parseFloat((fcpSum / count).toFixed(1))
     };
   };
+
+  // Added trend data function
+  const getTrendData = (company) => {
+    if (!company || !data.length || !filteredDates.length) return null;
   
+    const formatDate = (d) => d.toISOString().split("T")[0];
   
+    const dateObjects = filteredDates.filter(d => d <= selectedDate);
+    const labels = dateObjects.map(formatDate);
+    const values = dateObjects.map(d => computeScore(company, selectedType, formatDate(d)));
   
-  
+    return {
+      labels,
+      datasets: [{
+        label: `${company} Trend`,
+        data: values,
+        borderColor: companyColors[company] || "cyan",
+        backgroundColor: "rgba(255,255,255,0.1)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        borderWidth: 2
+      }]
+    };
+  };
 
   // Calculate average scores for each group
   const getGroupScores = useMemo(() => {
@@ -418,8 +430,6 @@ const [labelMode, setLabelMode] = useState("raw");
     window.companyPerformanceGlobal = computed;
     return computed;
   }, [selectedCompanies, selectedType, selectedDate, timeRange, compareStartDate, compareEndDate]);
-  
-  
 
   // Top and bottom performers
   const topPerformers = useMemo(() => {
@@ -552,12 +562,9 @@ const [labelMode, setLabelMode] = useState("raw");
     }).filter(Boolean);
   
     const chartData = { labels: orderedCompanies, datasets };
-chartData.companyPerformance = companyPerformance; // <-- REQUIRED for labelMode to work
-return chartData;
-
+    chartData.companyPerformance = companyPerformance;
+    return chartData;
   };
-  
-  
 
   // Radar chart data
   const getRadarData = (companySet, isAzteca = true) => {
@@ -588,7 +595,6 @@ return chartData;
               align: "end"
             }
           });
-          
       }
       
       if (selectedType === "video" || selectedType === "both") {
@@ -611,9 +617,7 @@ return chartData;
               align: "end"
             }
           });
-          
       }
-      
 
     return { labels, datasets };
   };
@@ -634,10 +638,9 @@ return chartData;
     const variance = scores.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / scores.length;
     const stdDev = Math.sqrt(variance);
   
-    const score = Math.max(0, 100 - stdDev * 2); // You can adjust multiplier (2) if needed
+    const score = Math.max(0, 100 - stdDev * 2);
     return score.toFixed(1);
   };
-  
 
   return (
     <Box pt="80px" px={6} className="glass-bg">
@@ -664,45 +667,43 @@ return chartData;
             />
             
             <Box textAlign="center" mx={4}>
-  <Text fontSize="sm" color="rgba(255,255,255,0.7)" mb={1}>Viewing data for</Text>
-  <Input
-    type="date"
-    value={selectedDate ? selectedDate.toISOString().split('T')[0] : ''}
-    onChange={(e) => {
-      const newDate = new Date(e.target.value);
-      if (!isNaN(newDate)) {
-        const matchedDate = uniqueDates.find(d => d.toISOString().split('T')[0] === newDate.toISOString().split('T')[0]);
-        if (matchedDate) {
-            const newIndex = filteredDates.findIndex(d => d.getTime() === matchedDate.getTime());
-            if (newIndex !== -1) {
-              setPreviousDateIndex(selectedDateIndex);
-              setSelectedDateIndex(newIndex);
-            }
-          }
-          
-      }
-    }}
-    list="available-dates"
-    max={uniqueDates.length ? uniqueDates[uniqueDates.length - 1].toISOString().split('T')[0] : ''}
-    min={uniqueDates.length ? uniqueDates[0].toISOString().split('T')[0] : ''}
-    bg="rgba(255,255,255,0.1)"
-    color="white"
-    borderColor="rgba(255,255,255,0.2)"
-    _hover={{ bg: 'rgba(255,255,255,0.15)' }}
-    _focus={{ bg: 'rgba(255,255,255,0.15)' }}
-    sx={{
-      '::-webkit-calendar-picker-indicator': {
-        filter: 'invert(1)', // Makes the calendar icon white
-      }
-    }}
-  />
-  <datalist id="available-dates">
-    {uniqueDates.map((date) => (
-      <option key={date.toISOString()} value={date.toISOString().split('T')[0]} />
-    ))}
-  </datalist>
-</Box>
-
+              <Text fontSize="sm" color="rgba(255,255,255,0.7)" mb={1}>Viewing data for</Text>
+              <Input
+                type="date"
+                value={selectedDate ? selectedDate.toISOString().split('T')[0] : ''}
+                onChange={(e) => {
+                  const newDate = new Date(e.target.value);
+                  if (!isNaN(newDate)) {
+                    const matchedDate = uniqueDates.find(d => d.toISOString().split('T')[0] === newDate.toISOString().split('T')[0]);
+                    if (matchedDate) {
+                        const newIndex = filteredDates.findIndex(d => d.getTime() === matchedDate.getTime());
+                        if (newIndex !== -1) {
+                          setPreviousDateIndex(selectedDateIndex);
+                          setSelectedDateIndex(newIndex);
+                        }
+                      }
+                  }
+                }}
+                list="available-dates"
+                max={uniqueDates.length ? uniqueDates[uniqueDates.length - 1].toISOString().split('T')[0] : ''}
+                min={uniqueDates.length ? uniqueDates[0].toISOString().split('T')[0] : ''}
+                bg="rgba(255,255,255,0.1)"
+                color="white"
+                borderColor="rgba(255,255,255,0.2)"
+                _hover={{ bg: 'rgba(255,255,255,0.15)' }}
+                _focus={{ bg: 'rgba(255,255,255,0.15)' }}
+                sx={{
+                  '::-webkit-calendar-picker-indicator': {
+                    filter: 'invert(1)',
+                  }
+                }}
+              />
+              <datalist id="available-dates">
+                {uniqueDates.map((date) => (
+                  <option key={date.toISOString()} value={date.toISOString().split('T')[0]} />
+                ))}
+              </datalist>
+            </Box>
             
             <IconButton
               icon={<FaChevronRight />}
@@ -733,368 +734,401 @@ return chartData;
             </Select>
           </Flex>
 
-
           {/* Performance Summary */}
           <Box width="100%" maxW="1200px" mx="auto">
-  <Grid 
-    templateColumns={{ base: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)", lg: "repeat(4, 1fr)", xl: "repeat(5, 1fr)" }} 
-    gap={4}
-  >
-    {companyPerformance.map((company) => {
-  const showMetrics = expandedCompanies.includes(company.name);
-  const metrics = getMetricsForCompany(company.name);
-
-  const toggleExpand = () => {
-    setExpandedCompanies(prev =>
-      prev.includes(company.name)
-        ? prev.filter(c => c !== company.name)
-        : [...prev, company.name]
-    );
-  };
-
-  return (
-    <GridItem key={company.name}>
-      <Box className="anb-chart-container" p={3} borderRadius="md" minH="120px">
-        <Flex justify="space-between" align="center">
-          <Text fontWeight="bold" fontSize="sm" mb={1} color="white">
-            {company.name}
-          </Text>
-          <IconButton
-            icon={showMetrics ? <FaChevronUp /> : <FaChevronDown />}
-            size="xs"
-            variant="ghost"
-            color="white"
-            aria-label="Toggle metrics"
-            onClick={toggleExpand}
-          />
-        </Flex>
-        <Stat>
-          <StatLabel fontSize="xs" color="rgba(255,255,255,0.5)">Average</StatLabel>
-          <StatNumber
-  fontSize="xl"
-  color={
-    typeof company.score === "number" && !isNaN(company.score)
-      ? company.score >= 50
-        ? "#2BFFB9"   // Green
-        : company.score >= 35
-        ? "#FFA73D"   // Yellow
-        : "#FF2965"   // Red
-      : "white"
-  }
->
-  {typeof company.score === "number" && !isNaN(company.score) ? (
-    <CountUp end={company.score} duration={1.5} decimals={1} />
-  ) : (
-    "-"
-  )}
-</StatNumber>
-
-        </Stat>
-        {showMetrics && metrics && (
-  <Box mt={2}>
-    <Text fontSize="xs" color="white">
-      CLS: <b style={{ color: getMetricColor("cls", metrics.cls) }}>{metrics.cls.toFixed(3)}</b>
-    </Text>
-    <Text fontSize="xs" color="white">
-      LCP: <b style={{ color: getMetricColor("lcp", metrics.lcp) }}>{metrics.lcp.toLocaleString()}</b>
-    </Text>
-    <Text fontSize="xs" color="white">
-      SI: <b style={{ color: getMetricColor("si", metrics.si) }}>{metrics.si.toLocaleString()}</b>
-    </Text>
-    <Text fontSize="xs" color="white">
-      TBT: <b style={{ color: getMetricColor("tbt", metrics.tbt) }}>{metrics.tbt.toLocaleString()}</b>
-    </Text>
-    <Text fontSize="xs" color="white">
-      FCP: <b style={{ color: getMetricColor("fcp", metrics.fcp) }}>{metrics.fcp.toLocaleString()}</b>
-    </Text>
-  </Box>
-)}
-
-      </Box>
-    </GridItem>
-  );
-})}
-
-  </Grid>
-</Box>
-
-
-
-          {/* Bar Chart with Responsive Sizing */}
-          {/* Bar Chart with Companies to Display */}
-<Box className="anb-chart-container" width="100%" maxW="1200px" height="auto" pb={6}>
-  <Flex justify="space-between" align="center" mb={4}>
-    <Text className="anb-chart-title">Individual Company Performance</Text>
-    <Button 
-      size="sm" 
-      leftIcon={<FaChartLine />} 
-      onClick={() => setShowAnalytics(!showAnalytics)} 
-      colorScheme={showAnalytics ? "blue" : "gray"}
-    >
-      {showAnalytics ? "Hide Analytics" : "Show Analytics"}
-    </Button>
-  </Flex>
-
-  {/* Label Mode Toggle */}
-<Flex justify="center" mb={2}>
-  <HStack spacing={2}>
-    <Text fontSize="sm" color="white">Labels:</Text>
-    <ButtonGroup isAttached size="sm" variant="outline">
-      <Button 
-        colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
-        onClick={() => setLabelMode('raw')}
-      >
-        Raw
-      </Button>
-      <Button 
-        colorScheme={labelMode === 'percent' ? 'blue' : 'gray'} 
-        onClick={() => setLabelMode('percent')}
-      >
-        %
-      </Button>
-      <Button 
-        colorScheme={labelMode === 'none' ? 'purple' : 'gray'} 
-        onClick={() => setLabelMode('none')}
-      >
-        ↔
-      </Button>
-    </ButtonGroup>
-  </HStack>
-</Flex>
-
-{/* Time Range Selector */}
-<Flex justify="center" mb={4}>
-  <HStack spacing={4}>
-    {TIME_RANGES.map(range => (
-      <Button
-        key={range}
-        size="sm"
-        variant={timeRange === range ? "solid" : "outline"}
-        onClick={() => setTimeRange(range)}
-        colorScheme="blue"
-        color="white"
-        borderColor="white"
-        _hover={{ bg: "blue.600" }}
-        _active={{ bg: "blue.700" }}
-        fontWeight="bold"
-      >
-        {range.charAt(0).toUpperCase() + range.slice(1)}
-      </Button>
-    ))}
-  </HStack>
-</Flex>
-
-{/* Custom Date Range Selector */}
-{timeRange === "custom" && (
-  <VStack spacing={4} mb={4}>
-    <Flex justify="center" gap={4}>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Primary Start Date</Text>
-        <Input
-          type="date"
-          value={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareStartDate(new Date(e.target.value))}
-          max={compareEndDate ? compareEndDate.toISOString().split('T')[0] : selectedDate.toISOString().split('T')[0]}
-          color="white"
-        />
-      </Box>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Primary End Date</Text>
-        <Input
-          type="date"
-          value={compareEndDate ? compareEndDate.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareEndDate(new Date(e.target.value))}
-          min={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
-          max={selectedDate.toISOString().split('T')[0]}
-          color="white"
-        />
-      </Box>
-    </Flex>
-    <Flex justify="center" gap={4}>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Compare Start Date</Text>
-        <Input
-          type="date"
-          value={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareStartDate2(new Date(e.target.value))}
-          color="white"
-        />
-      </Box>
-      <Box>
-        <Text fontSize="sm" color="white" mb={1}>Compare End Date</Text>
-        <Input
-          type="date"
-          value={compareEndDate2 ? compareEndDate2.toISOString().split('T')[0] : ''}
-          onChange={(e) => setCompareEndDate2(new Date(e.target.value))}
-          min={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
-          color="white"
-        />
-      </Box>
-    </Flex>
-  </VStack>
-)}
-
-{/* Bar Chart */}
-<Box height="400px">
-  <Bar
-    data={getBarChartData()}
-    options={{
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
-          }
-        },
-        datalabels: {
-          display: function(context) {
-            return labelMode !== 'none';
-          },
-          color: (context) => {
-            if (labelMode === 'percent') {
-              const label = context.chart.data.labels[context.dataIndex];
-              const company = window.companyPerformanceGlobal?.find(c => c.name === label);
-              if (!company || isNaN(company.change)) return 'white';
-              return company.change >= 0 ? '#2BFFB9' : '#FF2965';
-            }
-            return 'white';
-          },
-          
-          font: (context) => {
-            const bar = context.chart.getDatasetMeta(context.datasetIndex).data[context.dataIndex];
-            const width = bar.width || 30;
-            const adjusted = Math.max(8, Math.min(14, width * 0.45));
-            return {
-              size: adjusted,
-              weight: 'bold'
-            };
-          },
-          align: 'center',
-          anchor: 'center',
-          clip: false,
-
-          formatter: (value, context) => {
-            if (labelMode === 'none') return '';
-          
-            const label = context.chart.data.labels[context.dataIndex];
-            const company = context.chart.data.companyPerformance?.find(c => c.name === label);
-          
-            if (labelMode === 'percent') {
-              if (!company || isNaN(company.change)) return '';
-              return company.change >= 0 ? '⬆️' : '⬇️';
-            }
-          
-            return Math.round(value);
-          },
-          
-anchor: 'end',
-align: 'top'
-
-        }
-      },
-      scales: {
-        x: {
-          stacked: false,
-          grid: { display: false },
-          ticks: {
-            color: "white",
-            maxRotation: 90,
-            minRotation: 45
-          }
-        },
-        y: {
-          min: 0,
-          max: 100,
-          ticks: { color: "white" },
-          grid: { color: "rgba(255,255,255,0.1)" }
-        }
-      },
-      elements: {
-        bar: {
-          borderWidth: 0,
-          borderRadius: 2
-        }
-      },
-      barPercentage: 0.6,
-      categoryPercentage: 0.8
-    }}
-    plugins={[ChartDataLabels]}
-    key={labelMode} // This forces re-render when labelMode changes
-  />
-</Box>
-
-  {/* Date Slider */}
-  <Flex mt={4} align="center" justify="center" flexDirection="column" gap={4}>
-    <Slider
-      value={selectedDateIndex}
-      min={0}
-      max={Math.max(0, filteredDates.length - 1)}
-      onChange={(val) => {
-        setPreviousDateIndex(selectedDateIndex);
-        setSelectedDateIndex(val);
-      }}
-      width="70%"
-      height="40px"
-      isDisabled={filteredDates.length <= 1}
-    >
-      <SliderTrack bg="rgba(255,255,255,0.2)" height="8px">
-        <SliderFilledTrack bg="#00f7ff" />
-      </SliderTrack>
-      <SliderThumb boxSize={6} />
-    </Slider>
-    <Text color="white" fontSize="sm" fontWeight="medium" textAlign="center">
-      {filteredDates.length > 0 ? (
-        <>
-          <Text as="span" fontWeight="bold">{selectedDateIndex + 1}</Text> of <Text as="span" fontWeight="bold">{filteredDates.length}</Text> dates shown
-        </>
-      ) : (
-        "No dates match the current filter"
-      )}
-    </Text>
-  </Flex>
-
-
-  {/* Company Selector - Toggle Dropdown */}
-<Box mt={6}>
-  <Box
-    onClick={() => setShowCompanyDropdown(prev => !prev)}
-    cursor="pointer"
-    display="inline-block"
-    px={4}
-    py={2}
-    borderRadius="md"
-    bg="rgba(255,255,255,0.1)"
-    color="white"
-    fontWeight="bold"
-    _hover={{ bg: "rgba(255,255,255,0.2)" }}
-  >
-    {showCompanyDropdown ? "Hide Companies to Display" : "Show Companies to Display"}
-  </Box>
-
-  {showCompanyDropdown && (
-    <Box mt={4}>
-      <CheckboxGroup value={selectedCompanies} onChange={setSelectedCompanies}>
-        <Wrap spacing={4} justify="center">
-          {allCompanies.map(c => (
-            <Checkbox 
-              key={c} 
-              value={c} 
-              color="white" 
-              colorScheme={aztecaCompanies.includes(c) ? "blue" : "red"}
+            <Grid 
+              templateColumns={{ base: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)", lg: "repeat(4, 1fr)", xl: "repeat(5, 1fr)" }} 
+              gap={4}
             >
-              {c}
-            </Checkbox>
-          ))}
-        </Wrap>
-      </CheckboxGroup>
-    </Box>
-  )}
-</Box>
+              {companyPerformance.map((company) => {
+                const showMetrics = expandedCompanies.includes(company.name);
+                const metrics = getMetricsForCompany(company.name);
 
-</Box>
+                const toggleExpand = () => {
+                  setExpandedCompanies(prev =>
+                    prev.includes(company.name)
+                      ? prev.filter(c => c !== company.name)
+                      : [...prev, company.name]
+                  );
+                };
 
+                return (
+                  <GridItem key={company.name}>
+                    <Box className="anb-chart-container" p={3} borderRadius="md" minH="120px">
+                      <Flex justify="space-between" align="center">
+                        <Text fontWeight="bold" fontSize="sm" mb={1} color="white">
+                          {company.name}
+                        </Text>
+                        <IconButton
+                          icon={showMetrics ? <FaChevronUp /> : <FaChevronDown />}
+                          size="xs"
+                          variant="ghost"
+                          color="white"
+                          aria-label="Toggle metrics"
+                          onClick={toggleExpand}
+                        />
+                      </Flex>
+                      <Stat>
+                        <StatLabel fontSize="xs" color="rgba(255,255,255,0.5)">Average</StatLabel>
+                        <StatNumber
+                          fontSize="xl"
+                          color={
+                            typeof company.score === "number" && !isNaN(company.score)
+                              ? company.score >= 50
+                                ? "#2BFFB9"
+                                : company.score >= 35
+                                ? "#FFA73D"
+                                : "#FF2965"
+                              : "white"
+                          }
+                        >
+                          {typeof company.score === "number" && !isNaN(company.score) ? (
+                            <CountUp end={company.score} duration={1.5} decimals={1} />
+                          ) : (
+                            "-"
+                          )}
+                        </StatNumber>
+                      </Stat>
+                      {showMetrics && metrics && (
+                        <Box mt={2}>
+                          <Text fontSize="xs" color="white">
+                            CLS: <b style={{ color: getMetricColor("cls", metrics.cls) }}>{metrics.cls.toFixed(3)}</b>
+                          </Text>
+                          <Text fontSize="xs" color="white">
+                            LCP: <b style={{ color: getMetricColor("lcp", metrics.lcp) }}>{metrics.lcp.toLocaleString()}</b>
+                          </Text>
+                          <Text fontSize="xs" color="white">
+                            SI: <b style={{ color: getMetricColor("si", metrics.si) }}>{metrics.si.toLocaleString()}</b>
+                          </Text>
+                          <Text fontSize="xs" color="white">
+                            TBT: <b style={{ color: getMetricColor("tbt", metrics.tbt) }}>{metrics.tbt.toLocaleString()}</b>
+                          </Text>
+                          <Text fontSize="xs" color="white">
+                            FCP: <b style={{ color: getMetricColor("fcp", metrics.fcp) }}>{metrics.fcp.toLocaleString()}</b>
+                          </Text>
+                        </Box>
+                      )}
+                    </Box>
+                  </GridItem>
+                );
+              })}
+            </Grid>
+          </Box>
+
+          {/* Bar Chart with Companies to Display */}
+          <Box className="anb-chart-container" width="100%" maxW="1200px" height="auto" pb={6}>
+            <Flex justify="space-between" align="center" mb={4}>
+              <Text className="anb-chart-title">Individual Company Performance</Text>
+              <Button 
+                size="sm" 
+                leftIcon={<FaChartLine />} 
+                onClick={() => setShowAnalytics(!showAnalytics)} 
+                colorScheme={showAnalytics ? "blue" : "gray"}
+              >
+                {showAnalytics ? "Hide Analytics" : "Show Analytics"}
+              </Button>
+            </Flex>
+
+            {/* Label Mode Toggle */}
+            <Flex justify="center" mb={2}>
+              <HStack spacing={2}>
+                <Text fontSize="sm" color="white">Labels:</Text>
+                <ButtonGroup isAttached size="sm" variant="outline">
+                  <Button 
+                    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+                    onClick={() => setLabelMode('raw')}
+                  >
+                    Raw
+                  </Button>
+                  <Button 
+                    colorScheme={labelMode === 'percent' ? 'blue' : 'gray'} 
+                    onClick={() => setLabelMode('percent')}
+                  >
+                    %
+                  </Button>
+                  <Button 
+                    colorScheme={labelMode === 'none' ? 'purple' : 'gray'} 
+                    onClick={() => setLabelMode('none')}
+                  >
+                    ↔
+                  </Button>
+                </ButtonGroup>
+              </HStack>
+            </Flex>
+
+            {/* Time Range Selector */}
+            <Flex justify="center" mb={4}>
+              <HStack spacing={4}>
+                {TIME_RANGES.map(range => (
+                  <Button
+                    key={range}
+                    size="sm"
+                    variant={timeRange === range ? "solid" : "outline"}
+                    onClick={() => setTimeRange(range)}
+                    colorScheme="blue"
+                    color="white"
+                    borderColor="white"
+                    _hover={{ bg: "blue.600" }}
+                    _active={{ bg: "blue.700" }}
+                    fontWeight="bold"
+                  >
+                    {range.charAt(0).toUpperCase() + range.slice(1)}
+                  </Button>
+                ))}
+              </HStack>
+            </Flex>
+
+            {/* Custom Date Range Selector */}
+            {timeRange === "custom" && (
+              <VStack spacing={4} mb={4}>
+                <Flex justify="center" gap={4}>
+                  <Box>
+                    <Text fontSize="sm" color="white" mb={1}>Primary Start Date</Text>
+                    <Input
+                      type="date"
+                      value={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setCompareStartDate(new Date(e.target.value))}
+                      max={compareEndDate ? compareEndDate.toISOString().split('T')[0] : selectedDate.toISOString().split('T')[0]}
+                      color="white"
+                    />
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" color="white" mb={1}>Primary End Date</Text>
+                    <Input
+                      type="date"
+                      value={compareEndDate ? compareEndDate.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setCompareEndDate(new Date(e.target.value))}
+                      min={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
+                      max={selectedDate.toISOString().split('T')[0]}
+                      color="white"
+                    />
+                  </Box>
+                </Flex>
+                <Flex justify="center" gap={4}>
+                  <Box>
+                    <Text fontSize="sm" color="white" mb={1}>Compare Start Date</Text>
+                    <Input
+                      type="date"
+                      value={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setCompareStartDate2(new Date(e.target.value))}
+                      color="white"
+                    />
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" color="white" mb={1}>Compare End Date</Text>
+                    <Input
+                      type="date"
+                      value={compareEndDate2 ? compareEndDate2.toISOString().split('T')[0] : ''}
+                      onChange={(e) => setCompareEndDate2(new Date(e.target.value))}
+                      min={compareStartDate2 ? compareStartDate2.toISOString().split('T')[0] : ''}
+                      color="white"
+                    />
+                  </Box>
+                </Flex>
+              </VStack>
+            )}
+
+            {/* Bar Chart */}
+            <Box height="400px">
+              <Bar
+                data={getBarChartData()}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  onClick: (event, elements, chart) => {
+                    const element = chart.getElementsAtEventForMode(event.native, 'nearest', { intersect: true }, false)[0];
+                    if (element) {
+                      const companyName = chart.data.labels[element.index];
+                      setTrendCompany(companyName);
+                    }
+                  },
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: {
+                        label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+                      }
+                    },
+                    datalabels: {
+                      display: function(context) {
+                        return labelMode !== 'none';
+                      },
+                      color: (context) => {
+                        if (labelMode === 'percent') {
+                          const label = context.chart.data.labels[context.dataIndex];
+                          const company = window.companyPerformanceGlobal?.find(c => c.name === label);
+                          if (!company || isNaN(company.change)) return 'white';
+                          return company.change >= 0 ? '#2BFFB9' : '#FF2965';
+                        }
+                        return 'white';
+                      },
+                      
+                      font: (context) => {
+                        const bar = context.chart.getDatasetMeta(context.datasetIndex).data[context.dataIndex];
+                        const width = bar.width || 30;
+                        const adjusted = Math.max(8, Math.min(14, width * 0.45));
+                        return {
+                          size: adjusted,
+                          weight: 'bold'
+                        };
+                      },
+                      align: 'center',
+                      anchor: 'center',
+                      clip: false,
+
+                      formatter: (value, context) => {
+                        if (labelMode === 'none') return '';
+                      
+                        const label = context.chart.data.labels[context.dataIndex];
+                        const company = context.chart.data.companyPerformance?.find(c => c.name === label);
+                      
+                        if (labelMode === 'percent') {
+                          if (!company || isNaN(company.change)) return '';
+                          return company.change >= 0 ? '⬆️' : '⬇️';
+                        }
+                      
+                        return Math.round(value);
+                      },
+                      
+                      anchor: 'end',
+                      align: 'top'
+                    }
+                  },
+                  scales: {
+                    x: {
+                      stacked: false,
+                      grid: { display: false },
+                      ticks: {
+                        color: "white",
+                        maxRotation: 90,
+                        minRotation: 45
+                      }
+                    },
+                    y: {
+                      min: 0,
+                      max: 100,
+                      ticks: { color: "white" },
+                      grid: { color: "rgba(255,255,255,0.1)" }
+                    }
+                  },
+                  elements: {
+                    bar: {
+                      borderWidth: 0,
+                      borderRadius: 2
+                    }
+                  },
+                  barPercentage: 0.6,
+                  categoryPercentage: 0.8
+                }}
+                plugins={[ChartDataLabels]}
+                key={labelMode}
+              />
+            </Box>
+
+            {/* Trend Chart */}
+            {trendCompany && (
+              <Box className="anb-chart-container" width="100%" maxW="1200px" height="300px" mt={4}>
+                <Flex justify="space-between" align="center" mb={2}>
+                  <Text className="anb-chart-title">{trendCompany} Performance Trend</Text>
+                  <Button size="sm" colorScheme="red" onClick={() => setTrendCompany(null)}>Close</Button>
+                </Flex>
+                <Line
+                  data={getTrendData(trendCompany)}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { display: true },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+                        }
+                      }
+                    },
+                    scales: {
+                      x: {
+                        ticks: { color: "#ffffff", maxRotation: 45 },
+                        grid: { display: false }
+                      },
+                      y: {
+                        min: 0,
+                        max: 100,
+                        ticks: { color: "#ffffff" },
+                        grid: { color: "rgba(255,255,255,0.1)" }
+                      }
+                    }
+                  }}
+                />
+              </Box>
+            )}
+
+            {/* Date Slider */}
+            <Flex mt={4} align="center" justify="center" flexDirection="column" gap={4}>
+              <Slider
+                value={selectedDateIndex}
+                min={0}
+                max={Math.max(0, filteredDates.length - 1)}
+                onChange={(val) => {
+                  setPreviousDateIndex(selectedDateIndex);
+                  setSelectedDateIndex(val);
+                }}
+                width="70%"
+                height="40px"
+                isDisabled={filteredDates.length <= 1}
+              >
+                <SliderTrack bg="rgba(255,255,255,0.2)" height="8px">
+                  <SliderFilledTrack bg="#00f7ff" />
+                </SliderTrack>
+                <SliderThumb boxSize={6} />
+              </Slider>
+              <Text color="white" fontSize="sm" fontWeight="medium" textAlign="center">
+                {filteredDates.length > 0 ? (
+                  <>
+                    <Text as="span" fontWeight="bold">{selectedDateIndex + 1}</Text> of <Text as="span" fontWeight="bold">{filteredDates.length}</Text> dates shown
+                  </>
+                ) : (
+                  "No dates match the current filter"
+                )}
+              </Text>
+            </Flex>
+
+            {/* Company Selector - Toggle Dropdown */}
+            <Box mt={6}>
+              <Box
+                onClick={() => setShowCompanyDropdown(prev => !prev)}
+                cursor="pointer"
+                display="inline-block"
+                px={4}
+                py={2}
+                borderRadius="md"
+                bg="rgba(255,255,255,0.1)"
+                color="white"
+                fontWeight="bold"
+                _hover={{ bg: "rgba(255,255,255,0.2)" }}
+              >
+                {showCompanyDropdown ? "Hide Companies to Display" : "Show Companies to Display"}
+              </Box>
+
+              {showCompanyDropdown && (
+                <Box mt={4}>
+                  <CheckboxGroup value={selectedCompanies} onChange={setSelectedCompanies}>
+                    <Wrap spacing={4} justify="center">
+                      {allCompanies.map(c => (
+                        <Checkbox 
+                          key={c} 
+                          value={c} 
+                          color="white" 
+                          colorScheme={aztecaCompanies.includes(c) ? "blue" : "red"}
+                        >
+                          {c}
+                        </Checkbox>
+                      ))}
+                    </Wrap>
+                  </CheckboxGroup>
+                </Box>
+              )}
+            </Box>
+          </Box>
 
           {/* Analytics Section */}
           {showAnalytics && (
@@ -1216,28 +1250,27 @@ align: 'top'
           {/* Radar Charts */}
           <Flex wrap="wrap" gap={10} justify="center">
             <Box className="anb-chart-container" width="480px" height="600px">
-            <Flex justify="space-between" align="center" mb={2}>
-  <Text className="anb-chart-title">TV Azteca Radar</Text>
-  <Tooltip 
-  label={
-    `This radar shows average performance.\n\n` +
-    `A more balanced shape = higher Equitative Score.\n\n` +
-    `Equitative Score: ${getEquitativeScore(aztecaCompanies, selectedType)} / 100`
-  }
-  bg="gray.700"
-  color="white"
-  fontSize="sm"
-  borderRadius="md"
-  hasArrow
-  placement="left"
-  whiteSpace="pre-line"
->
-  <Box cursor="pointer" ml={2}>
-    <FaInfoCircle color="white" />
-  </Box>
-</Tooltip>
-
-</Flex>
+              <Flex justify="space-between" align="center" mb={2}>
+                <Text className="anb-chart-title">TV Azteca Radar</Text>
+                <Tooltip 
+                  label={
+                    `This radar shows average performance.\n\n` +
+                    `A more balanced shape = higher Equitative Score.\n\n` +
+                    `Equitative Score: ${getEquitativeScore(aztecaCompanies, selectedType)} / 100`
+                  }
+                  bg="gray.700"
+                  color="white"
+                  fontSize="sm"
+                  borderRadius="md"
+                  hasArrow
+                  placement="left"
+                  whiteSpace="pre-line"
+                >
+                  <Box cursor="pointer" ml={2}>
+                    <FaInfoCircle color="white" />
+                  </Box>
+                </Tooltip>
+              </Flex>
 
               <Radar 
                 data={getRadarData(aztecaCompanies, true)} 
@@ -1265,7 +1298,6 @@ align: 'top'
                         },
                         backdropColor: "transparent"
                       },
-                      
                       min: 0,
                       max: 100
                     }
@@ -1286,22 +1318,22 @@ align: 'top'
             <Box className="anb-chart-container" width="480px" height="600px">
               <Text className="anb-chart-title">Competition Radar</Text>
               <Tooltip 
-  label={
-    `This radar compares competition.\n\n` +
-    `Equitative Score: ${getEquitativeScore(competitionCompanies, selectedType)} / 100`
-  }
-  bg="gray.700"
-  color="white"
-  fontSize="sm"
-  borderRadius="md"
-  hasArrow
-  placement="left"
-  whiteSpace="pre-line"
->
-  <Box cursor="pointer" ml={2}>
-    <FaInfoCircle color="white" />
-  </Box>
-</Tooltip>
+                label={
+                  `This radar compares competition.\n\n` +
+                  `Equitative Score: ${getEquitativeScore(competitionCompanies, selectedType)} / 100`
+                }
+                bg="gray.700"
+                color="white"
+                fontSize="sm"
+                borderRadius="md"
+                hasArrow
+                placement="left"
+                whiteSpace="pre-line"
+              >
+                <Box cursor="pointer" ml={2}>
+                  <FaInfoCircle color="white" />
+                </Box>
+              </Tooltip>
 
               <Radar 
                 data={getRadarData(competitionCompanies, false)}

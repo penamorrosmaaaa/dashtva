@@ -15,7 +15,7 @@ import {
   FaChevronDown
 } from "react-icons/fa";
 import Papa from "papaparse";
-import { Bar, Radar } from "react-chartjs-2";
+import { Bar, Radar, Line } from "react-chartjs-2";
 import {
   Chart as ChartJS, RadialLinearScale, CategoryScale, LinearScale,
   BarElement, PointElement, LineElement, Title, Tooltip as ChartTooltip, 
@@ -24,7 +24,6 @@ import {
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./Lighthouse.css"; // Assuming you have the same CSS file
 import CountUp from 'react-countup';
-
 
 ChartJS.register(
   RadialLinearScale, CategoryScale, LinearScale,
@@ -54,9 +53,7 @@ const ImageScoresOverview = () => {
   const [selectedMetric, setSelectedMetric] = useState("cls");
   const [expandedCompanies, setExpandedCompanies] = useState([]);
   const [labelMode, setLabelMode] = useState("raw");
-
-
-
+  const [trendCompany, setTrendCompany] = useState(null);
 
   // Constants
   const TIME_RANGES = ['daily', 'monthly', 'yearly', 'all', 'custom'];
@@ -157,7 +154,6 @@ const ImageScoresOverview = () => {
       fcp: "FCP_32"
     }
   };
-  
 
   // Filter dates based on selected year and month
   const filteredDates = useMemo(() => {
@@ -196,7 +192,6 @@ const ImageScoresOverview = () => {
     return [selectedDate]; // fallback
   }, [timeRange, selectedDate, uniqueDates]);
   
-  
   const previousDate = previousDateIndex !== null ? 
     (filteredDates[previousDateIndex] || uniqueDates[uniqueDates.length - 2]) : null;
   const previousDateStr = previousDate?.toISOString().split("T")[0];
@@ -214,13 +209,12 @@ const ImageScoresOverview = () => {
   }, [filteredDates]);
 
   // Update selected date index again when time range changes (needed for dynamic view)
-useEffect(() => {
+  useEffect(() => {
     if (filteredDates.length > 0) {
       setSelectedDateIndex(filteredDates.length - 1);
       setPreviousDateIndex(filteredDates.length > 1 ? filteredDates.length - 2 : null);
     }
   }, [timeRange]);
-  
 
   // Score computation
   const computeScore = (company, date = dateStr, type = "nota", dateList = [new Date(date)]) => {
@@ -237,6 +231,31 @@ useEffect(() => {
   
     const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     return parseFloat(avg.toFixed(1));
+  };
+
+  // Added trend data function
+  const getTrendData = (company) => {
+    if (!company || !data.length || !filteredDates.length) return null;
+  
+    const formatDate = (d) => d.toISOString().split("T")[0];
+  
+    const dateObjects = filteredDates.filter(d => d <= selectedDate);
+    const labels = dateObjects.map(formatDate);
+    const values = dateObjects.map(d => computeScore(company, formatDate(d), contentType, [d]));
+  
+    return {
+      labels,
+      datasets: [{
+        label: `${company} Trend`,
+        data: values,
+        borderColor: companyColors[company] || "cyan",
+        backgroundColor: "rgba(255,255,255,0.1)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        borderWidth: 2
+      }]
+    };
   };
 
   const getMetricsForCompany = (company, type = contentType, date = dateStr) => {
@@ -268,9 +287,6 @@ useEffect(() => {
       fcp: average("fcp")
     };
   };
-  
-  
-  
 
   // Calculate average scores for each group
   const getGroupScores = useMemo(() => {
@@ -316,10 +332,9 @@ useEffect(() => {
       competitionChange: parseFloat(competitionChange),
       difference: (aztecaScore - competitionScore).toFixed(1)
     };
-}, [selectedDate, previousDateStr, imageCompanies, competitionCompanies, timeRange]);
+  }, [selectedDate, previousDateStr, imageCompanies, competitionCompanies, timeRange]);
 
-
-const companyPerformance = useMemo(() => {
+  const companyPerformance = useMemo(() => {
     return selectedCompanies.map(company => {
       const currentScore = computeScore(company, dateStr, contentType, dateRangeForCurrentView);
       const previousScore = previousDateStr
@@ -340,8 +355,6 @@ const companyPerformance = useMemo(() => {
       };
     }).sort((a, b) => b.score - a.score);
   }, [selectedCompanies, dateStr, previousDateStr, timeRange, contentType, dateRangeForCurrentView]);
-  
-
 
   // Top and bottom performers
   const topPerformers = useMemo(() => {
@@ -524,9 +537,7 @@ const companyPerformance = useMemo(() => {
     const variance = scores.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / scores.length;
     const stdDev = Math.sqrt(variance);
     return Math.max(0, 100 - stdDev * 2).toFixed(1);
-}, [imageCompanies, dateStr, timeRange]);
-
-  
+  }, [imageCompanies, dateStr, timeRange]);
 
   return (
     <Box pt="80px" px={6} className="glass-bg">
@@ -624,119 +635,108 @@ const companyPerformance = useMemo(() => {
           </Flex>
 
           {/* Performance Summary */}
-
           <Flex justify="flex-end" mb={2} mr={2}>
-</Flex>
+          </Flex>
 
           <Box width="100%" maxW="1200px" mx="auto">
-  <Grid 
-  
-    templateColumns={{ base: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" }}
-    gap={6}
-  >
+            <Grid 
+              templateColumns={{ base: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" }}
+              gap={6}
+            >
+              {companyPerformance.map((company) => (
+                <GridItem key={company.name}>
+                  <Box 
+                    className="anb-chart-container" 
+                    p={3} 
+                    borderRadius="md"
+                    minH="120px"
+                  >
+                    <Text fontWeight="bold" fontSize="sm" mb={1} color="white">
+                      {company.name}
+                    </Text>
+                    <Stat>
+                      <StatLabel fontSize="xs" color="rgba(255,255,255,0.5)">Average</StatLabel>
+                      <StatNumber
+                        fontSize="xl"
+                        color={
+                          company.score >= 50
+                            ? "#2BFFB9" // Green
+                            : company.score >= 35
+                            ? "#FFA73D" // Yellow
+                            : "#FF2965" // Red
+                        }
+                      >
+                        <CountUp end={company.score} duration={1.5} decimals={1} />
+                      </StatNumber>
 
-            {companyPerformance.map((company) => (
-              <GridItem key={company.name}>
-                <Box 
-                  className="anb-chart-container" 
-                  p={3} 
-                  borderRadius="md"
-                  minH="120px"
-                >
-                  <Text fontWeight="bold" fontSize="sm" mb={1} color="white">
-                    {company.name}
-                  </Text>
-                  <Stat>
-                    <StatLabel fontSize="xs" color="rgba(255,255,255,0.5)">Average</StatLabel>
-                    <StatNumber
-  fontSize="xl"
-  color={
-    company.score >= 50
-      ? "#2BFFB9" // Green
-      : company.score >= 35
-      ? "#FFA73D" // Yellow
-      : "#FF2965" // Red
-  }
->
-  <CountUp end={company.score} duration={1.5} decimals={1} />
-</StatNumber>
+                      {company.previousScore > 0 && (
+                        <StatHelpText fontSize="xs">
+                          <StatArrow type={company.change >= 0 ? "increase" : "decrease"} />
+                          {Math.abs(company.change)}%
+                        </StatHelpText>
+                      )}
+                    </Stat>
 
-                    {company.previousScore > 0 && (
-                      <StatHelpText fontSize="xs">
-                        <StatArrow type={company.change >= 0 ? "increase" : "decrease"} />
-                        {Math.abs(company.change)}%
-                      </StatHelpText>
-                    )}
-       
-                  </Stat>
+                    {/* METRICS: CLS, LCP, SI, TBT, FCP */}
+                    {(() => {
+                      const showMetrics = expandedCompanies.includes(company.name);
+                      const metrics = getMetricsForCompany(company.name, contentType, dateStr);
+                      const previousMetrics = getMetricsForCompany(company.name, contentType, previousDateStr);
 
-{/* METRICS: CLS, LCP, SI, TBT, FCP */}
-{(() => {
-  const showMetrics = expandedCompanies.includes(company.name);
-  const metrics = getMetricsForCompany(company.name, contentType, dateStr);
-  const previousMetrics = getMetricsForCompany(company.name, contentType, previousDateStr);
+                      const getChange = (curr, prev) => {
+                        if (!prev || prev === 0) return null;
+                        return ((curr - prev) / prev * 100).toFixed(1);
+                      };
 
-  const getChange = (curr, prev) => {
-    if (!prev || prev === 0) return null;
-    return ((curr - prev) / prev * 100).toFixed(1);
-  };
+                      const getColor = (metric, value) => {
+                        if (metric === "cls") return value <= 0.1 ? "lime" : value <= 0.25 ? "orange" : "red";
+                        if (metric === "lcp") return value <= 2500 ? "lime" : value <= 4000 ? "orange" : "red";
+                        if (metric === "si") return value <= 3400 ? "lime" : value <= 5800 ? "orange" : "red";
+                        if (metric === "tbt") return value <= 200 ? "lime" : value <= 600 ? "orange" : "red";
+                        if (metric === "fcp") return value <= 1800 ? "lime" : value <= 3000 ? "orange" : "red";
+                        return "white";
+                      };
 
-  const getColor = (metric, value) => {
-    if (metric === "cls") return value <= 0.1 ? "lime" : value <= 0.25 ? "orange" : "red";
-    if (metric === "lcp") return value <= 2500 ? "lime" : value <= 4000 ? "orange" : "red";
-    if (metric === "si") return value <= 3400 ? "lime" : value <= 5800 ? "orange" : "red";
-    if (metric === "tbt") return value <= 200 ? "lime" : value <= 600 ? "orange" : "red";
-    if (metric === "fcp") return value <= 1800 ? "lime" : value <= 3000 ? "orange" : "red";
-    return "white";
-  };
-
-  return (
-    <>
-      <IconButton
-        icon={showMetrics ? <FaChevronUp /> : <FaChevronDown />}
-        size="xs"
-        variant="ghost"
-        color="white"
-        aria-label="Toggle metrics"
-        onClick={() => {
-          setExpandedCompanies(prev =>
-            prev.includes(company.name)
-              ? prev.filter(c => c !== company.name)
-              : [...prev, company.name]
-          );
-        }}
-      />
-      {showMetrics && (
-        <Box mt={2}>
-          {["cls", "lcp", "si", "tbt", "fcp"].map(metric => {
-            const value = metrics[metric];
-            const prev = previousMetrics[metric];
-            const change = getChange(value, prev);
-            return (
-              <Text fontSize="xs" color="white" key={metric}>
-                {metric.toUpperCase()}: <b style={{ color: getColor(metric, value) }}>
-                  {metric === "cls" ? value?.toFixed(3) : value?.toLocaleString()}
-                </b>
-               
-              </Text>
-            );
-          })}
-        </Box>
-      )}
-    </>
-  );
-})()}
-
-
-
-</Box>
-
-           
-              </GridItem>
-            ))}
-          </Grid>
-</Box>
-
+                      return (
+                        <>
+                          <IconButton
+                            icon={showMetrics ? <FaChevronUp /> : <FaChevronDown />}
+                            size="xs"
+                            variant="ghost"
+                            color="white"
+                            aria-label="Toggle metrics"
+                            onClick={() => {
+                              setExpandedCompanies(prev =>
+                                prev.includes(company.name)
+                                  ? prev.filter(c => c !== company.name)
+                                  : [...prev, company.name]
+                              );
+                            }}
+                          />
+                          {showMetrics && (
+                            <Box mt={2}>
+                              {["cls", "lcp", "si", "tbt", "fcp"].map(metric => {
+                                const value = metrics[metric];
+                                const prev = previousMetrics[metric];
+                                const change = getChange(value, prev);
+                                return (
+                                  <Text fontSize="xs" color="white" key={metric}>
+                                    {metric.toUpperCase()}: <b style={{ color: getColor(metric, value) }}>
+                                      {metric === "cls" ? value?.toFixed(3) : value?.toLocaleString()}
+                                    </b>
+                                  </Text>
+                                );
+                              })}
+                            </Box>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </Box>
+                </GridItem>
+              ))}
+            </Grid>
+          </Box>
 
           {/* Bar Chart with Companies to Display */}
           <Box className="anb-chart-container" width="100%" maxW="1200px" height="auto" pb={6}>
@@ -825,115 +825,158 @@ const companyPerformance = useMemo(() => {
             )}
 
             {/* Label Mode Toggle */}
-<Flex justify="center" mb={2}>
-  <HStack spacing={2}>
-    <Text fontSize="sm" color="white">Labels:</Text>
-    <ButtonGroup isAttached size="sm" variant="outline">
-      <Button 
-        colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
-        onClick={() => setLabelMode('raw')}
-      >
-        Raw
-      </Button>
-      <Button 
-        colorScheme={labelMode === 'percent' ? 'blue' : 'gray'} 
-        onClick={() => setLabelMode('percent')}
-      >
-        %
-      </Button>
-      <Button 
-        colorScheme={labelMode === 'none' ? 'purple' : 'gray'} 
-        onClick={() => setLabelMode('none')}
-      >
-        ↔
-      </Button>
-    </ButtonGroup>
-  </HStack>
-</Flex>
+            <Flex justify="center" mb={2}>
+              <HStack spacing={2}>
+                <Text fontSize="sm" color="white">Labels:</Text>
+                <ButtonGroup isAttached size="sm" variant="outline">
+                  <Button 
+                    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+                    onClick={() => setLabelMode('raw')}
+                  >
+                    Raw
+                  </Button>
+                  <Button 
+                    colorScheme={labelMode === 'percent' ? 'blue' : 'gray'} 
+                    onClick={() => setLabelMode('percent')}
+                  >
+                    %
+                  </Button>
+                  <Button 
+                    colorScheme={labelMode === 'none' ? 'purple' : 'gray'} 
+                    onClick={() => setLabelMode('none')}
+                  >
+                    ↔
+                  </Button>
+                </ButtonGroup>
+              </HStack>
+            </Flex>
 
             {/* Bar Chart */}
-            {/* Bar Chart */}
-<Box height="400px">
-  <Bar
-    data={getBarChartData()}
-    options={{
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
-          }
-        },
-        datalabels: {
-          display: function(context) {
-            return labelMode !== 'none';
-          },
-          color: (context) => {
-            if (labelMode === 'percent') {
-              const label = context.chart.data.labels[context.dataIndex];
-              const company = companyPerformance?.find(c => c.name === label);
-              if (!company || isNaN(company.change)) return 'white';
-              return company.change >= 0 ? '#2BFFB9' : '#FF2965';
-            }
-            return 'white';
-          },
-          font: (context) => {
-            const bar = context.chart.getDatasetMeta(context.datasetIndex).data[context.dataIndex];
-            const width = bar.width || 30;
-            const adjusted = Math.max(10, Math.min(16, width * 0.5));
-            return {
-              size: adjusted,
-              weight: 'bold'
-            };
-          },
-          formatter: (value, context) => {
-            if (labelMode === 'none') return '';
-            
-            const label = context.chart.data.labels[context.dataIndex];
-            const company = companyPerformance?.find(c => c.name === label);
-            
-            if (labelMode === 'percent') {
-              if (!company || isNaN(company.change)) return '';
-              return company.change >= 0 ? '⬆️' : '⬇️';
-            }
-            return Math.round(value);
-          },
-          anchor: 'end',
-          align: 'top'
-        }
-      },
-      scales: {
-        x: {
-          stacked: false,
-          grid: { display: false },
-          ticks: {
-            color: "white",
-            maxRotation: 90,
-            minRotation: 45
-          }
-        },
-        y: {
-          min: 0,
-          max: 100,
-          ticks: { color: "white" },
-          grid: { color: "rgba(255,255,255,0.1)" }
-        }
-      },
-      elements: {
-        bar: {
-          borderWidth: 0,
-          borderRadius: 2
-        }
-      },
-      barPercentage: 0.6,
-      categoryPercentage: 0.8
-    }}
-    plugins={[ChartDataLabels]}
-    key={labelMode} // This forces re-render when labelMode changes
-  />
-</Box>
+            <Box height="400px">
+              <Bar
+                data={getBarChartData()}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  onClick: (event, elements, chart) => {
+                    const element = chart.getElementsAtEventForMode(event.native, 'nearest', { intersect: true }, false)[0];
+                    if (element) {
+                      const companyName = chart.data.labels[element.index];
+                      setTrendCompany(companyName);
+                    }
+                  },
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: {
+                        label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+                      }
+                    },
+                    datalabels: {
+                      display: function(context) {
+                        return labelMode !== 'none';
+                      },
+                      color: (context) => {
+                        if (labelMode === 'percent') {
+                          const label = context.chart.data.labels[context.dataIndex];
+                          const company = companyPerformance?.find(c => c.name === label);
+                          if (!company || isNaN(company.change)) return 'white';
+                          return company.change >= 0 ? '#2BFFB9' : '#FF2965';
+                        }
+                        return 'white';
+                      },
+                      font: (context) => {
+                        const bar = context.chart.getDatasetMeta(context.datasetIndex).data[context.dataIndex];
+                        const width = bar.width || 30;
+                        const adjusted = Math.max(10, Math.min(16, width * 0.5));
+                        return {
+                          size: adjusted,
+                          weight: 'bold'
+                        };
+                      },
+                      formatter: (value, context) => {
+                        if (labelMode === 'none') return '';
+                        
+                        const label = context.chart.data.labels[context.dataIndex];
+                        const company = companyPerformance?.find(c => c.name === label);
+                        
+                        if (labelMode === 'percent') {
+                          if (!company || isNaN(company.change)) return '';
+                          return company.change >= 0 ? '⬆️' : '⬇️';
+                        }
+                        return Math.round(value);
+                      },
+                      anchor: 'end',
+                      align: 'top'
+                    }
+                  },
+                  scales: {
+                    x: {
+                      stacked: false,
+                      grid: { display: false },
+                      ticks: {
+                        color: "white",
+                        maxRotation: 90,
+                        minRotation: 45
+                      }
+                    },
+                    y: {
+                      min: 0,
+                      max: 100,
+                      ticks: { color: "white" },
+                      grid: { color: "rgba(255,255,255,0.1)" }
+                    }
+                  },
+                  elements: {
+                    bar: {
+                      borderWidth: 0,
+                      borderRadius: 2
+                    }
+                  },
+                  barPercentage: 0.6,
+                  categoryPercentage: 0.8
+                }}
+                plugins={[ChartDataLabels]}
+                key={labelMode}
+              />
+            </Box>
+
+            {/* Trend Chart */}
+            {trendCompany && (
+              <Box className="anb-chart-container" width="100%" maxW="1200px" height="300px" mt={4}>
+                <Flex justify="space-between" align="center" mb={2}>
+                  <Text className="anb-chart-title">{trendCompany} Performance Trend</Text>
+                  <Button size="sm" colorScheme="red" onClick={() => setTrendCompany(null)}>Close</Button>
+                </Flex>
+                <Line
+                  data={getTrendData(trendCompany)}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { display: true },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+                        }
+                      }
+                    },
+                    scales: {
+                      x: {
+                        ticks: { color: "#ffffff", maxRotation: 45 },
+                        grid: { display: false }
+                      },
+                      y: {
+                        min: 0,
+                        max: 100,
+                        ticks: { color: "#ffffff" },
+                        grid: { color: "rgba(255,255,255,0.1)" }
+                      }
+                    }
+                  }}
+                />
+              </Box>
+            )}
 
             {/* Date Slider */}
             <Flex mt={4} align="center" justify="center" flexDirection="column" gap={4}>
@@ -1030,7 +1073,6 @@ const companyPerformance = useMemo(() => {
                             <Badge colorScheme={company.change >= 0 ? "green" : "red"} ml={1}>
                             {company.change >= 0 ? '+' : ''}{company.change}%
                           </Badge>
-                          
                           )}
                         </HStack>
                       </Flex>

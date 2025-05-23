@@ -13,7 +13,7 @@ import {
   FaCalendarAlt
 } from "react-icons/fa";
 import Papa from "papaparse";
-import { Bar, Radar } from "react-chartjs-2";
+import { Bar, Radar, Line } from "react-chartjs-2";
 import {
   Chart as ChartJS, RadialLinearScale, CategoryScale, LinearScale,
   BarElement, PointElement, LineElement, Title, Tooltip as ChartTooltip, 
@@ -54,6 +54,8 @@ const LocalScoresOverview = () => {
   const [selectedRegion, setSelectedRegion] = useState("All");
   const [contentType, setContentType] = useState("nota");
   const [labelMode, setLabelMode] = useState('raw'); // 'raw', 'percent', 'none'
+  const [trendCompany, setTrendCompany] = useState(null);
+  
 
 
 
@@ -388,6 +390,30 @@ const LocalScoresOverview = () => {
     });
   
     return count ? parseFloat((total / count).toFixed(1)) : 0;
+  };
+  
+  const getTrendData = (company) => {
+    if (!company || !data.length || !filteredDates.length) return null;
+  
+    const formatDate = (d) => d.toISOString().split("T")[0];
+  
+    const dateObjects = filteredDates.filter(d => d <= selectedDate);
+    const labels = dateObjects.map(formatDate);
+    const values = dateObjects.map(d => computeScore(company, contentType, formatDate(d)));
+  
+    return {
+      labels,
+      datasets: [{
+        label: `${company} Trend`,
+        data: values,
+        borderColor: companyColors[company] || "cyan",
+        backgroundColor: "rgba(255,255,255,0.1)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        borderWidth: 2
+      }]
+    };
   };
   
   
@@ -893,6 +919,7 @@ const LocalScoresOverview = () => {
     }
     return "white";
   };
+  
 
 
   return (
@@ -1128,84 +1155,104 @@ const LocalScoresOverview = () => {
             {/* Bar Chart */}
             
 <Box height="400px">
-  <Bar
-    data={getBarChartData()}
-    options={{
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => `${context.dataset.label}: ${context.parsed.y}`
-          }
-        },
-        datalabels: {
-          display: labelMode !== 'none',
-          color: (context) => {
-            if (labelMode === 'percent') {
-              const companyName = context.chart.data.labels[context.dataIndex];
-              const company = companyPerformance.find(c => c.name === companyName);
-              if (!company || isNaN(company.change)) return 'white';
-              return company.change >= 0 ? '#2BFFB9' : '#FF2965';
-            }
-            return 'white';
-          },
-          font: (context) => {
-            const bar = context.chart.getDatasetMeta(0).data[context.dataIndex];
-            const barWidth = bar?.width || 30;
-            const fontSize = Math.max(8, Math.min(14, Math.floor(barWidth / 2)));
-            return {
-              size: fontSize,
-              weight: 'bold'
-            };
-          },
-          formatter: (value, context) => {
-            if (labelMode === 'none') return '';
-            
-            const companyName = context.chart.data.labels[context.dataIndex];
-            const company = companyPerformance.find(c => c.name === companyName);
-            
-            if (labelMode === 'percent') {
-              if (!company || isNaN(company.change)) return '';
-              return company.change >= 0 ? `+${company.change}%` : `${company.change}%`;
-            }
-            
-            return Math.round(value);
-          },
-          anchor: 'end',
-          align: 'top'
+<Bar
+  data={getBarChartData()}
+  options={{
+    responsive: true,
+    maintainAspectRatio: false,
+    onClick: (event, elements, chart) => {
+      const element = chart.getElementsAtEventForMode(event.native, 'nearest', { intersect: true }, false)[0];
+      if (element) {
+        const companyName = chart.data.labels[element.index];
+        setTrendCompany(companyName);
+      }
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.dataset.label}: ${context.parsed.y}`
         }
       },
-      scales: {
-        x: {
-          stacked: false,
-          grid: { display: false },
-          ticks: {
-            color: "white",
-            maxRotation: 90,
-            minRotation: 45
-          }
-        },
-        y: {
-          min: 0,
-          max: 100,
-          ticks: { color: "white" },
-          grid: { color: "rgba(255,255,255,0.1)" }
+      datalabels: {
+        display: labelMode !== 'none',
+        color: 'white',
+        font: { weight: 'bold' },
+        formatter: (value) => (labelMode === 'raw' ? Math.round(value) : `${value}%`),
+        anchor: 'end',
+        align: 'top'
+      }
+    },
+    scales: {
+      x: {
+        stacked: false,
+        grid: { display: false },
+        ticks: {
+          color: "white",
+          maxRotation: 90,
+          minRotation: 45
         }
       },
-      elements: {
-        bar: {
-          borderWidth: 0,
-          borderRadius: 2
-        }
-      },
-      barPercentage: 0.6,
-      categoryPercentage: 0.8
-    }}
-    plugins={[ChartDataLabels]}
-  />
+      y: {
+        min: 0,
+        max: 100,
+        ticks: { color: "white" },
+        grid: { color: "rgba(255,255,255,0.1)" }
+      }
+    },
+    elements: {
+      bar: {
+        borderWidth: 0,
+        borderRadius: 2
+      }
+    },
+    barPercentage: 0.6,
+    categoryPercentage: 0.8
+  }}
+  plugins={[ChartDataLabels]}
+/>
+
 </Box>
+
+
+{trendCompany && (
+  <Box className="anb-chart-container" width="100%" maxW="1200px" height="300px" mt={4}>
+    <Flex justify="space-between" align="center" mb={2}>
+      <Text className="anb-chart-title">{trendCompany} Performance Trend</Text>
+      <Button size="sm" colorScheme="red" onClick={() => setTrendCompany(null)}>Close</Button>
+    </Flex>
+    <Line
+  data={getTrendData(trendCompany)}
+  options={{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: "#ffffff", maxRotation: 45 },
+        grid: { display: false }
+      },
+      y: {
+        min: 0,
+        max: 100,
+        ticks: { color: "#ffffff" },
+        grid: { color: "rgba(255,255,255,0.1)" }
+      }
+    }
+  }}
+/>
+
+  </Box>
+)}
+
+
 
             {/* Date Slider */}
             <Flex mt={4} align="center" justify="center" flexDirection="column" gap={4}>

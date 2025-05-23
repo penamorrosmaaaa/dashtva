@@ -499,11 +499,14 @@ At the end of your response, include 2-3 suggested follow-up questions in this f
       {iconButton}
 
       <Drawer
-        isOpen={isOpen}
-        placement="right"
-        onClose={onClose}
-        size={isFullScreen ? "full" : { base: "full", md: "md" }}
-      >
+  isOpen={isOpen}
+  placement="right"
+  onClose={onClose}
+  size={isFullScreen ? "full" : { base: "full", md: "md" }}
+  blockScrollOnMount={false}  // ✅ Allows body scroll
+  preserveScrollBarGap={true} // ✅ Prevents layout shift
+>
+
         <DrawerOverlay />
         <DrawerContent
           bg="#000000"

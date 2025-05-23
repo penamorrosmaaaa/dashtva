@@ -5,10 +5,12 @@ import {
   IconButton, Drawer, DrawerOverlay, DrawerContent, DrawerHeader,
   DrawerBody, useDisclosure, Spacer
 } from "@chakra-ui/react";
-import { FiZap, FiX } from "react-icons/fi";
+import { FiZap, FiX, FiMaximize2, FiMinimize2 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import "./AiChatCyberpunk.css";
 import { Checkbox, CheckboxGroup, Stack } from "@chakra-ui/react";
+import Plot from "react-plotly.js"; // ADD THIS
+
 
 /* ------------------------------------------------------------------ */
 /*  LISTAS DE OUTLETS & MÉTRICAS                                       */
@@ -33,6 +35,7 @@ const MEDIA_OUTLETS = [
   ...IMAGE_COMPANIES,
 ];
 const METRICS = ["Score","CLS","LCP","SI","TBT","FCP"];
+
 
 /* ------------------------------------------------------------------ */
 /*  FUNCIÓN QUE CREA EL CONTEXTO PARA OPENAI                           */
@@ -144,6 +147,9 @@ const AiChat = ({ visibleData, inline = false }) => {
   const [allDates, setAllDates]         = useState([]);
   const [allTypes, setAllTypes]         = useState([]);
   const [analysis, setAnalysis]         = useState(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [chartData, setChartData] = useState(null);
+
 
   const toast = useToast();
 
@@ -220,7 +226,24 @@ const AiChat = ({ visibleData, inline = false }) => {
       });
     });
   
-    return `### DATOS HISTÓRICOS\n${blocks.join("\n")}\n\n### PREGUNTA\n${input}`;
+    return `
+### DATOS HISTÓRICOS
+${blocks.join("\n")}
+
+### PREGUNTA
+${input}
+
+If possible, respond with a chart JSON like:
+{
+  "chart": {
+    "type": "pie" or "bar",
+    "title": "Example Chart",
+    "labels": ["Company A", "Company B"],
+    "values": [50, 100]
+  }
+}
+`.trim();
+
   };
   
 
@@ -244,39 +267,90 @@ const AiChat = ({ visibleData, inline = false }) => {
   ### PREGUNTA
 ${input}
 
+### PREGUNTA
+${input}
+
 Incluye resultados para todas las marcas que tengan datos en las fechas seleccionadas, aunque el usuario haya mencionado una sola.
+
+If possible, respond with a chart JSON like:
+{
+  "chart": {
+    "type": "pie" or "bar",
+    "title": "Example Chart",
+    "labels": ["Company A", "Company B"],
+    "values": [50, 100]
+  }
+}
 `.trim();
+
   };
   
 
   /* ---------- OpenAI ---------- */
   const askOpenAI = async prompt => {
     try {
-      setLoading(true); setTokenInfo(null);
-
-      const res  = await fetch("https://api.openai.com/v1/chat/completions", {
-        method : "POST",
+      setLoading(true);
+      setTokenInfo(null);
+      setChartData(null);  // 🔄 Clear old chart
+  
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
         headers: {
-          "Content-Type" : "application/json",
-          Authorization  : `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model       : "gpt-4o",
-          temperature : 0.3,
+          model: "gpt-4o",
+          temperature: 0.3,
           messages: [
             buildSystemContext(),
-            { role: "user", content: prompt }
+            { role: "user", content: prompt },
           ],
-          
         }),
       });
+  
       const data = await res.json();
-      setAnswer(data.choices?.[0]?.message?.content || "Sin respuesta.");
+      let content = data.choices?.[0]?.message?.content || "Sin respuesta.";
 
-      const usage  = data.usage || {};
-      const nowTok = estimateTokens(buildTrendPrompt());
-      const projTok= dayCount() ? Math.ceil(nowTok * 31 / dayCount()) : 0;
+// Intentar extraer JSON del gráfico
+let match = content.match(/```json\s*([\s\S]*?)\s*```/); // entre bloques ```json ... ```
+if (!match) match = content.match(/\{[\s\S]*\}/);        // o solo {...}
+
+if (match) {
+  try {
+    const rawJson = match[1] || match[0];
+    const parsed = JSON.parse(rawJson);
+    if (parsed.chart) {
+      setChartData(parsed.chart);
+      content = content
+        .replace(match[0], "")        // eliminar el bloque JSON
+        .replace(/```json|```/g, "")  // eliminar etiquetas markdown
+        .trim();                      // limpiar espacios extra
+    }
+  } catch (err) {
+    console.warn("Chart JSON not valid:", err);
+  }
+}
+
+setAnswer(content);
+
+  
+      // 🧠 Try to extract JSON from the message
+      try {
+        const match = content.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]);
+          if (parsed.chart) setChartData(parsed.chart);
+        }
+      } catch (err) {
+        console.warn("No chart JSON found:", err);
+      }
+  
+      const usage = data.usage || {};
+      const nowTok = estimateTokens(prompt);
+      const projTok = dayCount() ? Math.ceil(nowTok * 31 / dayCount()) : 0;
       setTokenInfo({ ...usage, nowTok, projTok });
+  
     } catch (e) {
       console.error(e);
       setAnswer("Error al generar respuesta.");
@@ -284,6 +358,7 @@ Incluye resultados para todas las marcas que tengan datos en las fechas seleccio
       setLoading(false);
     }
   };
+  
 
   /* ---------- handlers ---------- */
   const handleSingle = () => {
@@ -333,6 +408,8 @@ Incluye resultados para todas las marcas que tengan datos en las fechas seleccio
     askOpenAI(buildTrendPrompt());
   };
 
+  
+
   /* ------------------------------------------------------------------ */
   /*  UI (Botón + Drawer)                                               */
   /* ------------------------------------------------------------------ */
@@ -354,17 +431,43 @@ Incluye resultados para todas las marcas que tengan datos en las fechas seleccio
     <>
       {iconButton}
 
-      <Drawer isOpen={isOpen} placement="right" onClose={onClose} size="sm">
+      <Drawer
+  isOpen={isOpen}
+  placement="right"
+  onClose={onClose}
+  size={isFullScreen ? "full" : { base: "full", md: "sm" }}
+>
         <DrawerOverlay />
-        <DrawerContent bg="#0d0d0d" borderLeft="2px solid #00f0ff">
+        <DrawerContent
+  bg="#0d0d0d"
+  borderLeft="2px solid #00f0ff"
+  maxW={isFullScreen ? "100%" : { base: "100%", md: "420px" }}
+>
+
           <DrawerHeader pl={4} pr={4} display="flex" alignItems="center">
             <Text className="ai-chat-title" flexGrow={1}>Media Outlet Analyzer</Text>
-            <IconButton icon={<FiX />} variant="ghost" size="sm" onClick={onClose} />
+            <HStack spacing={2}>
+  <IconButton
+    icon={isFullScreen ? <FiMinimize2 /> : <FiMaximize2 />}
+    variant="ghost"
+    size="sm"
+    onClick={() => setIsFullScreen(prev => !prev)}
+    aria-label="Toggle Fullscreen"
+  />
+  <IconButton
+    icon={<FiX />}
+    variant="ghost"
+    size="sm"
+    onClick={onClose}
+    aria-label="Close"
+  />
+</HStack>
+
           </DrawerHeader>
 
           <DrawerBody p={0} display="flex" flexDir="column">
   {/* Respuesta */}
-  <Box flex="1" p={4}>
+  <Box flex="1" px={{ base: 3, md: 4 }} py={4}>
     {answer && (
 
                 <motion.div
@@ -374,7 +477,89 @@ Incluye resultados para todas las marcas que tengan datos en las fechas seleccio
                   transition={{ duration:0.4 }}
                 >
                   <Text whiteSpace="pre-wrap">{answer}</Text>
-                  {tokenInfo && (
+
+{/* 🔥 Show chart if available */}
+{chartData && (
+  <Box mt={6}>
+    <Plot
+      data={[
+        chartData.type === "pie"
+          ? {
+              type: "pie",
+              labels: chartData.labels,
+              values: chartData.values,
+            }
+          : chartData.type === "donut"
+          ? {
+              type: "pie",
+              labels: chartData.labels,
+              values: chartData.values,
+              hole: 0.4,
+            }
+          : chartData.type === "radar"
+          ? {
+              type: "scatterpolar",
+              r: chartData.values,
+              theta: chartData.labels,
+              fill: "toself",
+              name: chartData.title || "Radar Chart",
+            }
+          : chartData.type === "line"
+          ? {
+              type: "scatter",
+              mode: "lines",
+              x: chartData.labels,
+              y: chartData.values,
+            }
+          : chartData.type === "area"
+          ? {
+              type: "scatter",
+              mode: "lines",
+              fill: "tozeroy",
+              x: chartData.labels,
+              y: chartData.values,
+            }
+          : chartData.type === "horizontal-bar"
+          ? {
+              type: "bar",
+              orientation: "h",
+              x: chartData.values,
+              y: chartData.labels,
+            }
+          : {
+              type: "bar",
+              x: chartData.labels,
+              y: chartData.values,
+            },
+      ]}
+      
+      layout={{
+  title: chartData.title || "Gráfico generado por AI",
+  paper_bgcolor: "#0d0d0d",
+  font: { color: "#fff" },
+  margin: { t: 40, l: 40, r: 20, b: 40 },
+  height: 320,
+  ...(chartData.type === "radar"
+    ? {
+        polar: {
+          radialaxis: {
+            visible: true,
+            range: [0, Math.max(...chartData.values) * 1.2],
+          },
+        },
+        showlegend: false,
+      }
+    : {}),
+}}
+
+      config={{ responsive: true }}
+    />
+  </Box>
+)}
+
+{tokenInfo && (
+
+              
                     <Text mt={2} fontSize="sm" color="gray.400">
                       🔢 prompt:{tokenInfo.prompt_tokens ?? "?"} • compl:{tokenInfo.completion_tokens ?? "?"} • total:{tokenInfo.total_tokens ?? "?"}<br/>
                       🧮 ahora:{tokenInfo.nowTok} • 31d:{tokenInfo.projTok}
@@ -385,8 +570,8 @@ Incluye resultados para todas las marcas que tengan datos en las fechas seleccio
             </Box>
 
             {/* Input */}
-            <Box className="ai-chat-input-area">
-              <HStack spacing={2}>
+            <Box className="ai-chat-input-area" px={{ base: 3, md: 4 }} py={4}>
+            <HStack spacing={2} flexWrap="wrap">
               <Box maxH="150px" overflowY="auto" border="1px solid #333" borderRadius="md" p={2} w="100%">
   <CheckboxGroup value={selectedDates} onChange={setSelectedDates}>
     <Stack spacing={1}>
@@ -428,7 +613,7 @@ Incluye resultados para todas las marcas que tengan datos en las fechas seleccio
   loadingText="…"
   flex="1"
 >
-  Fecha + tipo
+  Generate
 </Button>
 
                 

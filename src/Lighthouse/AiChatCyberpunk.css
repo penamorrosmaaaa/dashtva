@@ -261,3 +261,55 @@
     white-space: pre-wrap;
   }
   
+  /* Ensure responsive layout on small screens */
+.ai-select,
+.ai-textarea,
+.ai-btn-primary,
+.ai-btn-secondary {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Ensure floating button adapts to mobile */
+.ai-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 999;
+}
+
+@media screen and (max-width: 480px) {
+  .ai-fab {
+    bottom: 16px;
+    right: 16px;
+  }
+}
+
+/* Responsive text sizing */
+.ai-chat-title {
+  font-size: clamp(18px, 5vw, 24px);
+}
+.ai-answer {
+  font-size: 14px;
+}
+
+.ai-message {
+  padding: 10px 14px;
+  border-radius: 12px;
+  max-width: 85%;
+  word-wrap: break-word;
+}
+
+.ai-message-user {
+  background-color: #232323;
+  color: #00f0ff;
+  align-self: flex-end;
+  text-align: right;
+}
+
+.ai-message-ai {
+  background-color: #1a1a1a;
+  color: #ffffff;
+  align-self: flex-start;
+}

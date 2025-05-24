@@ -318,7 +318,7 @@ const AiChat = ({ visibleData, inline = false }) => {
 - If the question involves comparison, improvement, or trend detection, and there is enough data, include a chart using the format below.
 - Only include a chart if it adds value to the answer.
 - After that, include 2–3 suggested follow-up questions
-- Always be specific if what you are providing is the average sum of the weeks/months or simply an individual week and be sure to acknowledge if the scores you ar eproviding are from nota, video, img or.
+- Always be specific if what you are providing is the average sum of the weeks/months or simply an individual week and be sure to acknowledge if the scores you ar eproviding are from nota, video, img.
 - Do not include a chart if data is missing or all values are nearly zero.
 - Use these types:
   - "bar" → compare brands

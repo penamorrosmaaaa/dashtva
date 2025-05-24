@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Box,
   Text,
@@ -30,14 +30,16 @@ import {
   Grid,
   GridItem
 } from "@chakra-ui/react";
-import { 
-  FaChevronDown, 
-  FaChevronLeft, 
-  FaChevronRight, 
+import {
+  FaChevronDown,
+  FaChevronLeft,
+  FaChevronRight,
   FaChartLine,
   FaChartBar,
   FaInfoCircle,
-  FaExchangeAlt
+  FaExchangeAlt,
+  // FaRobot, // Removed for AI chat button
+  // FaPaperPlane // Removed for AI chat send button
 } from "react-icons/fa";
 import Papa from "papaparse";
 import { Line, Bar } from "react-chartjs-2";
@@ -57,9 +59,7 @@ import "./Lighthouse.css";
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import CountUp from 'react-countup';
 import { saveAs } from 'file-saver';
-import AiChat from "./AiChat";
-
-
+// import AiChat from "./AiChat"; // Not needed if integrated directly
 
 // Register ChartJS components
 ChartJS.register(
@@ -93,6 +93,8 @@ const COLORS = {
   competition: '#FF5F6D'
 };
 
+// AiChat Component removed as per user request
+
 const GeneralOverview = () => {
   // State
   const [data, setData] = useState([]);
@@ -109,11 +111,12 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
   const [insightsModalOpen, setInsightsModalOpen] = useState(false);
   const [currentInsights, setCurrentInsights] = useState("");
   const [labelMode, setLabelMode] = useState("none");
+  // const [aiChatModalOpen, setAiChatModalOpen] = useState(false); // Removed state for AI chat modal
   const toast = useToast();
-  
+
   const exportWeeklyCSV = () => {
     if (!data.length || !generateChartData.dateRange?.length) return;
-  
+
     const header = [
       "Date",
       "Company",
@@ -123,11 +126,11 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
       "Label Mode",
       "Time Range"
     ];
-  
+
     const rows = [];
-  
+
     const companies = [...COMPETITION_COMPANIES, ...AZTECA_COMPANIES];
-  
+
     companies.forEach(company => {
       const { score, change, status } = getCompanyScore(company);
       generateChartData.dateRange.forEach(date => {
@@ -142,7 +145,7 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
         ]);
       });
     });
-  
+
     // Add summary stats
     rows.push([]);
     rows.push(["", "TV Azteca Average", aztecaScore]);
@@ -153,13 +156,13 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     rows.push(["", "Competition Projection", calculateTrendAnalysis.competition.projection]);
     rows.push(["", "Current Gap", calculateTrendAnalysis.comparison.current]);
     rows.push(["", "Trend", calculateTrendAnalysis.comparison.trend]);
-  
+
     const csv = Papa.unparse([header, ...rows]);
-  
+
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     saveAs(blob, `Weekly_Report_${new Date().toISOString().split('T')[0]}.csv`);
   };
-  
+
 
   // Calculate previous period data for comparison
   const getComparisonData = useMemo(() => {
@@ -174,19 +177,19 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     if (timeRange === "daily" && currentIndex > 0) {
       previousDate = uniqueDates[currentIndex - 1];
       previousPeriodLabel = "Previous Day";
-      
+
     } else if (timeRange === "monthly") {
       const prevMonth = new Date(selectedDate);
       prevMonth.setMonth(prevMonth.getMonth() - 1);
-      previousDate = uniqueDates.find(d => 
-        d.getMonth() === prevMonth.getMonth() && 
+      previousDate = uniqueDates.find(d =>
+        d.getMonth() === prevMonth.getMonth() &&
         d.getFullYear() === prevMonth.getFullYear()
       );
       previousPeriodLabel = "Previous Month";
     } else if (timeRange === "yearly") {
       const prevYear = new Date(selectedDate);
       prevYear.setFullYear(prevYear.getFullYear() - 1);
-      previousDate = uniqueDates.find(d => 
+      previousDate = uniqueDates.find(d =>
         d.getFullYear() === prevYear.getFullYear()
       );
       previousPeriodLabel = "Previous Year";
@@ -198,15 +201,15 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     const calculatePreviousAverage = (companies, offset) => {
         let total = 0, count = 0;
         const dateStr = previousDate.toISOString().split('T')[0];
-      
+
         companies.forEach((_, i) => {
           const base = (offset + i) * BLOCK_SIZE;
           const dateKey = keys[base];
           const typeKey = keys[base+1];
           const scoreKey = keys[base+3];
-      
+
           data.forEach(row => {
-            if (row[dateKey] === dateStr && 
+            if (row[dateKey] === dateStr &&
                 (selectedType === "both" || row[typeKey] === selectedType)) {
               const sc = parseFloat(row[scoreKey]);
               if (!isNaN(sc) && sc !== 0) {
@@ -216,10 +219,10 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
             }
           });
         });
-      
+
         return count ? parseFloat((total / count).toFixed(1)) : 0;
       };
-      
+
 
     return {
       previousCompetitionScore: calculatePreviousAverage(COMPETITION_COMPANIES, 0),
@@ -260,7 +263,7 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     weekStart.setDate(weekStart.getDate() - 6);
     dateRange = uniqueDates.filter(d => d >= weekStart && d <= selectedDate);
     labels = dateRange.map(d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-  
+
     } else if (timeRange === "monthly") {
       const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
       dateRange = uniqueDates.filter(d => d >= monthStart && d <= selectedDate);
@@ -271,7 +274,7 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
       labels = dateRange.map(d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
     } else if (timeRange === "all") {
         dateRange = uniqueDates.filter(d => d <= selectedDate);
-        labels = dateRange.map(d => d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }));      
+        labels = dateRange.map(d => d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }));
     } else if (timeRange === "custom" && compareStartDate && compareEndDate) {
       dateRange = uniqueDates.filter(d => d >= compareStartDate && d <= compareEndDate);
       labels = dateRange.map(d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
@@ -282,15 +285,15 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
         return dateRange.map(date => {
           const dateStr = date.toISOString().split('T')[0];
           let total = 0, count = 0;
-      
+
           companies.forEach((_, i) => {
             const base = (offset + i) * BLOCK_SIZE;
             const dateKey = keys[base];
             const typeKey = keys[base+1];
             const scoreKey = keys[base+3];
-      
+
             data.forEach(row => {
-              if (row[dateKey] === dateStr && 
+              if (row[dateKey] === dateStr &&
                   (selectedType === "both" || row[typeKey] === selectedType)) {
                 const sc = parseFloat(row[scoreKey]);
                 if (!isNaN(sc) && sc !== 0) {
@@ -300,11 +303,11 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
               }
             });
           });
-      
+
           return count ? parseFloat((total / count).toFixed(1)) : 0;
         });
       };
-      
+
 
     return {
       competition: calculateAverages(COMPETITION_COMPANIES, 0),
@@ -314,25 +317,25 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     };
   }, [data, selectedDate, selectedType, timeRange, uniqueDates, compareStartDate, compareEndDate]);
 
-  
+
   const { competitionScore, aztecaScore } = useMemo(() => {
     if (!data.length || !generateChartData.dateRange?.length) return { competitionScore: "N/A", aztecaScore: "N/A" };
-    
+
     const keys = Object.keys(data[0]);
-    
+
     const calculateAverageOverDates = (companies, offset) => {
         let total = 0, count = 0;
         generateChartData.dateRange.forEach(date => {
           const dateStr = date.toISOString().split('T')[0];
-      
+
           companies.forEach((_, i) => {
             const base = (offset + i) * BLOCK_SIZE;
             const dateKey = keys[base];
             const typeKey = keys[base+1];
             const scoreKey = keys[base+3];
-      
+
             data.forEach(row => {
-              if (row[dateKey] === dateStr && 
+              if (row[dateKey] === dateStr &&
                   (selectedType === "both" || row[typeKey] === selectedType)) {
                 const sc = parseFloat(row[scoreKey]);
                 if (!isNaN(sc) && sc !== 0) {
@@ -343,18 +346,17 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
             });
           });
         });
-      
+
         return count ? (total / count).toFixed(1) : "N/A";
       };
-      
-      
-  
+
+
     return {
       competitionScore: calculateAverageOverDates(COMPETITION_COMPANIES, 0),
       aztecaScore: calculateAverageOverDates(AZTECA_COMPANIES, COMPETITION_COMPANIES.length)
     };
   }, [data, selectedType, generateChartData.dateRange]);
-  
+
 
   // Calculate trend analysis and projections
   const calculateTrendAnalysis = useMemo(() => {
@@ -363,8 +365,8 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
       azteca: [],
       dates: []
     };
-    
-  
+
+
     if (!data.length || !uniqueDates.length) {
       return {
         competition: { growth: 0, slope: 0, projection: 0 },
@@ -372,12 +374,12 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
         comparison: { current: 0, trend: "" }
       };
     }
-  
+
     const keys = Object.keys(data[0] || {});
     const dateKeyMap = {};
     const scoreKeyMap = {};
     const typeKeyMap = {};
-  
+
     let companyIndex = 0;
     for (let i = 0; i < keys.length; i += BLOCK_SIZE) {
       dateKeyMap[companyIndex] = keys[i];
@@ -385,10 +387,10 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
       scoreKeyMap[companyIndex] = keys[i + 3];
       companyIndex++;
     }
-  
+
     let filteredDates = uniqueDates;
-  
-    
+
+
     if (timeRange === "weekly") {
         const weekStart = new Date(selectedDate);
         weekStart.setDate(weekStart.getDate() - 6);
@@ -406,19 +408,19 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
       } else if (timeRange === "daily") {
         filteredDates = [selectedDate];
       }
-      
-  
+
+
     filteredDates.forEach(date => {
       const dateStr = date.toISOString().split('T')[0];
-  
+
       let compTotal = 0, compCount = 0;
       for (let i = 0; i < COMPETITION_COMPANIES.length; i++) {
         const dateKey = dateKeyMap[i];
         const typeKey = typeKeyMap[i];
         const scoreKey = scoreKeyMap[i];
-  
+
         if (!dateKey || !typeKey || !scoreKey) continue;
-  
+
         data.forEach(row => {
           if (row[dateKey] === dateStr &&
               (selectedType === "both" || row[typeKey] === selectedType)) {
@@ -426,20 +428,20 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
             if (!isNaN(sc) && sc !== 0) {
                 compTotal += sc;
                 compCount++;
-              }              
+              }
           }
         });
       }
-  
+
       let aztecaTotal = 0, aztecaCount = 0;
       for (let i = 0; i < AZTECA_COMPANIES.length; i++) {
         const companyIdx = COMPETITION_COMPANIES.length + i;
         const dateKey = dateKeyMap[companyIdx];
         const typeKey = typeKeyMap[companyIdx];
         const scoreKey = scoreKeyMap[companyIdx];
-  
+
         if (!dateKey || !typeKey || !scoreKey) continue;
-  
+
         data.forEach(row => {
           if (row[dateKey] === dateStr &&
               (selectedType === "both" || row[typeKey] === selectedType)) {
@@ -448,21 +450,21 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
                 aztecaTotal += sc;
                 aztecaCount++;
               }
-              
+
           }
         });
       }
-  
+
       if (compCount > 0 && aztecaCount > 0) {
         const compAvg = parseFloat((compTotal / compCount).toFixed(1));
         const aztecaAvg = parseFloat((aztecaTotal / aztecaCount).toFixed(1));
-  
+
         allHistoricalData.competition.push(compAvg);
         allHistoricalData.azteca.push(aztecaAvg);
         allHistoricalData.dates.push(date);
       }
     });
-  
+
     if (!allHistoricalData.competition.length || !allHistoricalData.azteca.length) {
       return {
         competition: { growth: 0, slope: 0, projection: 0 },
@@ -470,22 +472,22 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
         comparison: { current: 0, trend: "" }
       };
     }
-  
+
     const sortedIndices = allHistoricalData.dates.map((_, i) => i)
       .sort((a, b) => allHistoricalData.dates[a] - allHistoricalData.dates[b]);
-  
+
     allHistoricalData.competition = sortedIndices.map(i => allHistoricalData.competition[i]);
     allHistoricalData.azteca = sortedIndices.map(i => allHistoricalData.azteca[i]);
     allHistoricalData.dates = sortedIndices.map(i => allHistoricalData.dates[i]);
-  
+
     const calcGrowth = (arr) => arr.length > 1
       ? ((arr[arr.length - 1] - arr[0]) / Math.max(0.1, Math.abs(arr[0]))) * 100
       : 0;
-  
+
     const calcSlope = (arr) => arr.length > 1
       ? (arr[arr.length - 1] - arr[0]) / Math.max(1, arr.length - 1)
       : 0;
-  
+
     const compGrowth = calcGrowth(allHistoricalData.competition);
     const aztecaGrowth = calcGrowth(allHistoricalData.azteca);
     const compSlope = calcSlope(allHistoricalData.competition);
@@ -493,13 +495,13 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     const compProjection = allHistoricalData.competition.at(-1) + (compSlope * 3);
     const aztecaProjection = allHistoricalData.azteca.at(-1) + (aztecaSlope * 3);
     const currentGap = allHistoricalData.azteca.at(-1) - allHistoricalData.competition.at(-1);
-  
+
     const trend = aztecaGrowth > compGrowth
       ? "Gaining ground"
       : aztecaGrowth < compGrowth
       ? "Losing ground"
       : "Maintaining position";
-  
+
     return {
       competition: {
         growth: compGrowth.toFixed(1),
@@ -526,14 +528,14 @@ const [compareRefEndDate, setCompareRefEndDate] = useState(null);
     compareEndDate,
     timeRange
   ]);
-  
+
 
   // Effects
   useEffect(() => {
     const fetchData = async () => {
       try {
         const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRzIonikYeUwzVTUUO7bDLQ1DDzqzKB-BFIJ4tzJMqMlNFnxPF0eVRypNmykYVP0Pn-w1tfnOCTaKaP/pub?output=csv";
-        
+
         Papa.parse(csvUrl, {
           download: true,
           header: true,
@@ -591,7 +593,7 @@ useEffect(() => {
       setTimeRange("custom");
     }
   }, [compareStartDate, compareEndDate]);
-  
+
 
   // Handlers
   const goToPreviousDate = () => {
@@ -612,29 +614,29 @@ useEffect(() => {
 
   const formatDisplayDate = (date) => {
     if (!date) return "";
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   };
 
   const getCompanyScore = (company) => {
     if (!data.length || !generateChartData.dateRange?.length) return { score: "N/A", status: "N/A", change: null };
-  
+
     const allCompanies = [...COMPETITION_COMPANIES, ...AZTECA_COMPANIES];
     const companyIndex = allCompanies.indexOf(company);
     if (companyIndex === -1) return { score: "N/A", status: "N/A", change: null };
-  
+
     const keys = Object.keys(data[0]);
     const base = companyIndex * BLOCK_SIZE;
     const dateKey = keys[base];
     const typeKey = keys[base + 1];
     const scoreKey = keys[base + 3];
-  
+
     let total = 0, count = 0;
-  
+
     generateChartData.dateRange.forEach(date => {
       const dateStr = date.toISOString().split('T')[0];
       data.forEach(row => {
@@ -650,7 +652,7 @@ useEffect(() => {
         }
       });
     });
-  
+
     const score = count ? (total / count).toFixed(1) : "N/A";
     const num = parseFloat(score);
     const status = isNaN(num)
@@ -660,16 +662,16 @@ useEffect(() => {
       : num < 90
       ? "NEEDS IMPROVEMENT"
       : "GOOD";
-  
+
     // Calculate previous period score
     let previousScore = null;
     let percentChange = null;
-  
+
     const previousDates = [...generateChartData.dateRange];
     if (previousDates.length >= 2) {
       const prevDate = previousDates[previousDates.length - 2];
       const prevDateStr = prevDate.toISOString().split('T')[0];
-  
+
       let prevTotal = 0, prevCount = 0;
       data.forEach(row => {
         if (
@@ -683,22 +685,22 @@ useEffect(() => {
           }
         }
       });
-  
+
       previousScore = prevCount ? (prevTotal / prevCount).toFixed(1) : null;
-  
+
       if (previousScore && !isNaN(num)) {
         const prevNum = parseFloat(previousScore);
         percentChange = ((num - prevNum) / prevNum * 100).toFixed(1);
       }
     }
-  
+
     return {
       score,
       status,
       change: percentChange
     };
   };
-  
+
 
   const toggleCompareMode = () => {
     if (compareMode) {
@@ -715,7 +717,7 @@ useEffect(() => {
     const isAzteca = graphType === "azteca";
     const isCompetition = graphType === "competition";
     const isTrend = graphType === "trend";
-  
+
     const dataset = isAzteca
       ? generateChartData.azteca
       : isCompetition
@@ -724,7 +726,7 @@ useEffect(() => {
           azteca: generateChartData.azteca,
           competition: generateChartData.competition,
         };
-  
+
     const labels = generateChartData.labels;
     const lastDateObj = generateChartData.dateRange?.at(-1);
 const prevDateObj = generateChartData.dateRange?.length > 1 ? generateChartData.dateRange.at(-2) : null;
@@ -737,33 +739,33 @@ const labelBefore = prevDateObj
   ? prevDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
   : null;
 
-  
+
     // TREND COMPARISON GRAPH
     if (isTrend) {
         const valAz = dataset.azteca.at(-1);
         const valComp = dataset.competition.at(-1);
         const gap = (valAz - valComp).toFixed(1);
         const lead = gap > 0 ? "TV Azteca is ahead" : "the competition leads";
-      
+
         const azSlope = parseFloat(calculateTrendAnalysis.azteca.slope);
         const compSlope = parseFloat(calculateTrendAnalysis.competition.slope);
         const slopeGap = (azSlope - compSlope).toFixed(2);
         const azProj = parseFloat(calculateTrendAnalysis.azteca.projection);
         const compProj = parseFloat(calculateTrendAnalysis.competition.projection);
         const projGap = (azProj - compProj).toFixed(1);
-      
+
         const trendInsight = azSlope > compSlope
           ? `TV Azteca is catching up with a stronger upward trend (+${slopeGap}/period).`
           : azSlope < compSlope
             ? `Competition is pulling ahead with stronger momentum (-${slopeGap}/period).`
             : `Both maintain equal momentum over time.`;
-      
+
         const forecastInsight = azProj > compProj
           ? `Forecast shows Azteca may overtake competition (${azProj} vs ${compProj}).`
           : azProj < compProj
             ? `Forecast suggests competition will maintain lead (${compProj} vs ${azProj}).`
             : `Forecasted performances are tied (${azProj}).`;
-      
+
         return {
           title: "Trend Comparison",
           overview: `${lead} by ${Math.abs(gap)} points as of ${labelNow}.`,
@@ -781,21 +783,21 @@ const labelBefore = prevDateObj
           }
         };
       }
-      
-  
+
+
     // BAR CHART (TV AZTECA or COMPETITION)
     const visibleData = dataset;
     const latestValue = visibleData.at(-1);
     const prevValue = visibleData.length > 1 ? visibleData.at(-2) : null;
     const diff = prevValue !== null ? (latestValue - prevValue).toFixed(1) : null;
     const companyLabel = isAzteca ? "TV Azteca" : "The competition";
-  
+
     // Insights
     let overview = `${companyLabel} scored ${latestValue} in ${labelNow}.`;
     let growth = "";
     let patterns = `You're currently viewing the "${timeRange}" time range.`;
     let projections = "";
-  
+
     if (diff !== null) {
       if (diff > 0) {
         growth = `This represents an increase of ${diff} points since ${labelBefore}.`;
@@ -807,7 +809,7 @@ const labelBefore = prevDateObj
     } else {
       growth = "No prior data is available for comparison.";
     }
-  
+
     // Optional simple forecast logic
     if (visibleData.length >= 3) {
         const last3 = visibleData.slice(-3);
@@ -820,24 +822,24 @@ const labelBefore = prevDateObj
           slope < -1 ? "sharp decline" :
           slope < -0.2 ? "moderate decline" :
           "stable performance";
-      
+
         const momentum =
           Math.abs(change2) > Math.abs(change1)
             ? (change2 > 0 ? "gaining momentum" : "losing momentum")
             : "momentum is leveling";
-      
+
         const historicalAvg = (visibleData.reduce((a, b) => a + b, 0) / visibleData.length).toFixed(1);
         const aboveOrBelow = latestValue > historicalAvg ? "above" : "below";
         const diffFromAvg = Math.abs(latestValue - historicalAvg).toFixed(1);
-      
+
         projections = `
-          This shows a ${trend}, currently ${momentum}. 
-          The latest score of ${latestValue} is ${diffFromAvg} points ${aboveOrBelow} the ${timeRange} average of ${historicalAvg}. 
+          This shows a ${trend}, currently ${momentum}.
+          The latest score of ${latestValue} is ${diffFromAvg} points ${aboveOrBelow} the ${timeRange} average of ${historicalAvg}.
           If the trend persists, the next expected value could be ${(latestValue + parseFloat(slope)).toFixed(1)}.
         `.trim();
       }
-      
-  
+
+
     return {
       title: `${companyLabel} Insight`,
       overview,
@@ -855,47 +857,47 @@ const labelBefore = prevDateObj
       },
     };
   };
-  
-  
-  
-  
+
+
+
+
   // Helper function for time series analysis
   const analyzeTimeSeries = (aztecaData, competitionData, dates) => {
     if (aztecaData.length < 5 || competitionData.length < 5) return "";
-    
+
     // Look for trends over time
     const recentAzteca = aztecaData.slice(-5);
     const recentComp = competitionData.slice(-5);
-    
+
     // Calculate recent trend
     let aztecaTrend = 0;
     let compTrend = 0;
-    
+
     for (let i = 1; i < recentAzteca.length; i++) {
       aztecaTrend += recentAzteca[i] - recentAzteca[i-1];
       compTrend += recentComp[i] - recentComp[i-1];
     }
-    
+
     aztecaTrend /= (recentAzteca.length - 1);
     compTrend /= (recentComp.length - 1);
-    
+
     // Format dates for display
-    const startDate = dates[0].toLocaleDateString('en-US', { 
-      year: 'numeric', month: 'short', day: 'numeric' 
+    const startDate = dates[0].toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric'
     });
-    
-    const endDate = dates[dates.length - 1].toLocaleDateString('en-US', { 
-      year: 'numeric', month: 'short', day: 'numeric' 
+
+    const endDate = dates[dates.length - 1].toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric'
     });
-    
+
     // Analyze recent momentum
-    const momentum = 
+    const momentum =
       aztecaTrend > 0.5 && compTrend < 0.2 ? "TV Azteca has strong positive momentum compared to competition" :
       aztecaTrend > 0.2 && aztecaTrend > compTrend ? "TV Azteca has moderate positive momentum" :
       aztecaTrend < -0.5 && compTrend > 0 ? "TV Azteca shows concerning negative momentum" :
       compTrend > aztecaTrend ? "Competition currently has stronger momentum" :
       "Both TV Azteca and competition show similar momentum patterns";
-    
+
     return `Analysis based on data from ${startDate} to ${endDate}: ${momentum}.`;
   };
 
@@ -903,18 +905,18 @@ const labelBefore = prevDateObj
     setCurrentInsights(generateInsights(graphType));
     setInsightsModalOpen(true);
   };
-  
+
 
   const renderComparisonBadge = (currentValue, previousValue) => {
     if (!previousValue || isNaN(currentValue) || isNaN(previousValue)) return null;
-    
+
     const difference = currentValue - previousValue;
     const percentageChange = ((difference / previousValue) * 100).toFixed(1);
     const isPositive = difference >= 0;
-    
+
     return (
-      <Badge 
-        ml={2} 
+      <Badge
+        ml={2}
         colorScheme={isPositive ? "green" : "red"}
         fontSize="0.8em"
       >
@@ -936,7 +938,7 @@ const labelBefore = prevDateObj
       <Box className="anb-chart-container" p={6} borderRadius="12px">
         <VStack spacing={4} align="center">
           <Box position="relative" width="160px" height="160px">
-            <Box 
+            <Box
               position="relative"
               width="160px"
               height="160px"
@@ -986,11 +988,11 @@ const labelBefore = prevDateObj
               </Box>
             </Box>
           </Box>
-          
-          <Text 
-            fontSize="12px" 
-            color={color} 
-            fontWeight="bold" 
+
+          <Text
+            fontSize="12px"
+            color={color}
+            fontWeight="bold"
             textTransform="uppercase"
             textAlign="center"
             width="100%"
@@ -1002,9 +1004,9 @@ const labelBefore = prevDateObj
           <VStack spacing={2} align="flex-start" width="100%" maxH="200px" overflowY="auto">
             {companies.map(company => {
               const { score, status, change } = getCompanyScore(company);
-              const statusColor = status === "POOR" ? COLORS.poor : 
+              const statusColor = status === "POOR" ? COLORS.poor :
                                 status === "NEEDS IMPROVEMENT" ? COLORS.medium : COLORS.good;
-              
+
               return (
                 <HStack key={company} spacing={2} width="100%">
                   <Box width="8px" height="8px" borderRadius="50%" bg={statusColor} />
@@ -1013,8 +1015,8 @@ const labelBefore = prevDateObj
                     {score}
                   </Text>
                   {change && (
-                    <Badge 
-                      size="xs" 
+                    <Badge
+                      size="xs"
                       colorScheme={parseFloat(change) >= 0 ? "green" : "red"}
                       ml={1}
                     >
@@ -1032,27 +1034,71 @@ const labelBefore = prevDateObj
 
   const renderPerformanceChart = (title, isCompetition = true) => {
     // Get dates corresponding to the labels for tooltip display
-    const dateObjects = timeRange === "daily" 
-      ? [selectedDate]
-      : timeRange === "monthly"
-        ? uniqueDates.filter(d => d >= new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1) && d <= selectedDate)
-        : timeRange === "yearly"
-          ? uniqueDates.filter(d => d >= new Date(selectedDate.getFullYear(), 0, 1) && d <= selectedDate)
-          : timeRange === "all"
-            ? uniqueDates.filter(d => d <= selectedDate)
-            : timeRange === "custom" && compareStartDate && compareEndDate
-              ? uniqueDates.filter(d => d >= compareStartDate && d <= compareEndDate)
-              : [];
+    const dateObjects = generateChartData.dateRange;
+
+    const dataPoints = isCompetition ? generateChartData.competition : generateChartData.azteca;
+
+    // Calculate Average Score
+    const averageScore = dataPoints.length > 0
+      ? (dataPoints.reduce((sum, val) => sum + val, 0) / dataPoints.length)
+      : 0;
+
+    // Calculate Trend Line Data (Simple Linear Regression)
+    // Calculate Trend Line Data (Simple Linear Regression)
+let slope = 0; // 👈 make it accessible later
+const trendData = (() => {
+  const n = dataPoints.length;
+  if (n < 2) return dataPoints.map(() => averageScore);
+
+  const sumX = dataPoints.reduce((acc, _, index) => acc + index, 0);
+  const sumY = dataPoints.reduce((acc, val) => acc + val, 0);
+  const sumXY = dataPoints.reduce((acc, val, index) => acc + (index * val), 0);
+  const sumX2 = dataPoints.reduce((acc, _, index) => acc + (index * index), 0);
+
+  const denominator = (n * sumX2 - sumX * sumX);
+  slope = denominator !== 0 ? (n * sumXY - sumX * sumY) / denominator : 0;
+  const intercept = (sumY - slope * sumX) / n;
+
+  return dataPoints.map((_, i) => intercept + slope * i);
+})();
+
+    
 
     const chartData = {
       labels: generateChartData.labels,
-      datasets: [{
-        label: isCompetition ? 'Competition Score' : 'TV Azteca Score',
-        data: isCompetition ? generateChartData.competition : generateChartData.azteca,
-        backgroundColor: isCompetition ? COLORS.competition : COLORS.azteca[0],
-        borderColor: 'rgba(255,255,255,0.2)',
-        borderWidth: 1
-      }]
+      datasets: [
+        {
+          type: 'bar', // Explicitly define as bar chart
+          label: isCompetition ? 'Competition Score' : 'TV Azteca Score',
+          data: dataPoints,
+          backgroundColor: isCompetition ? COLORS.competition : COLORS.azteca[0],
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderWidth: 1,
+          order: 2 // Render bars first
+        },
+        {
+          type: 'line', // Trend line dataset
+          label: 'Trend Line',
+          data: trendData,
+          borderColor: 'white', // Color for the trend line
+          borderWidth: 2,
+          pointRadius: 0, // No points for the trend line
+          fill: false,
+          tension: 0.1,
+          order: 1 // Render trend line on top of bars
+        },
+        {
+          type: 'line', // Average score line dataset
+          label: 'Average Score',
+          data: Array(dataPoints.length).fill(averageScore), // Fill with average score for all points
+          borderColor: 'yellow', // Color for the average line
+          borderDash: [5, 5], // Dashed line
+          borderWidth: 2,
+          pointRadius: 0, // No points for the average line
+          fill: false,
+          order: 0 // Render average line on top
+        }
+      ]
     };
 
     const chartOptions = {
@@ -1061,14 +1107,14 @@ const labelBefore = prevDateObj
       scales: {
         x: {
           grid: { display: false },
-          ticks: { 
+          ticks: {
             color: 'white',
             font: { weight: 'bold' }
           }
         },
         y: {
           grid: { color: 'rgba(255,255,255,0.1)' },
-          ticks: { 
+          ticks: {
             color: 'white',
             font: { weight: 'bold' }
           },
@@ -1077,34 +1123,57 @@ const labelBefore = prevDateObj
         }
       },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true, // Display legend for trend and average lines
+          labels: {
+            color: 'white',
+            font: {
+              weight: 'bold'
+            },
+            filter: (legendItem, chartData) => {
+              // Only show legend for 'Trend Line' and 'Average Score'
+              return legendItem.text === 'Trend Line' || legendItem.text === 'Average Score';
+            }
+          }
+        },
         tooltip: {
+          mode: 'index', // Show all datasets at the hovered index
+          intersect: false, // Show tooltip even if not directly over a point/bar
           callbacks: {
             label: function(context) {
-              return `${context.dataset.label}: ${context.raw}`;
+              const label = context.dataset.label;
+              const value = context.raw?.toFixed(1) ?? '-';
+            
+              // If it's the trend line, append slope
+              if (label === 'Trend Line') {
+                return `${label}: ${value} (slope: ${slope >= 0 ? '+' : ''}${slope.toFixed(2)})`;
+              }
+            
+              return `${label}: ${value}`;
             },
+            
             title: function(context) {
+              // Custom title to show the exact date
               const index = context[0].dataIndex;
-              // Format the date to show exact date when available
-              return dateObjects[index] 
-                ? dateObjects[index].toLocaleDateString('en-US', { 
+              return dateObjects[index]
+                ? dateObjects[index].toLocaleDateString('en-US', {
                     weekday: 'long',
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
                   })
                 : context[0].label;
             }
           }
         },
         datalabels: {
-          display: context => labelMode !== 'none',
+          display: context => labelMode !== 'none' && context.dataset.type === 'bar', // Only display for bar elements
           color: 'white',
           font: context => {
             const chart = context.chart;
             const meta = context.chart.getDatasetMeta(context.datasetIndex);
             const bar = meta.data[context.dataIndex];
-        
+
             // width of the bar (bar chart) or spacing between points (line chart)
             let width = 0;
             if (bar && bar.width) {
@@ -1114,7 +1183,7 @@ const labelBefore = prevDateObj
             } else {
               width = chart.width / context.chart.data.labels.length;
             }
-        
+
             const size = Math.max(8, Math.min(0.5 * width, 16)); // Scale between 8 and 16
             return {
               weight: 'bold',
@@ -1137,7 +1206,7 @@ const labelBefore = prevDateObj
             return value; // raw value
           }
         }
-        
+
       }
     };
 
@@ -1149,19 +1218,19 @@ const labelBefore = prevDateObj
     <HStack spacing={1}>
       <Text fontSize="xs" color="white"></Text>
       <ButtonGroup isAttached size="sm" variant="outline">
-  <Button 
-    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+  <Button
+    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'}
     onClick={() => setLabelMode('raw')}
   >
     Raw
   </Button>
-  <Button 
-    colorScheme={labelMode === 'percent' ? 'green' : 'gray'} 
+  <Button
+    colorScheme={labelMode === 'percent' ? 'green' : 'gray'}
     onClick={() => setLabelMode('percent')}
   >
     %
   </Button>
-  <Button 
+  <Button
     onClick={() => setLabelMode('none')}
     colorScheme={labelMode === 'none' ? 'purple' : 'gray'}
   >
@@ -1184,11 +1253,13 @@ const labelBefore = prevDateObj
   </HStack>
 </Flex>
 
-        
+
         <Flex mb={4} justify="center">
+      
+
           <HStack spacing={4}>
             {TIME_RANGES.map(range => (
-                
+
               <Box
                 key={range}
                 px={4}
@@ -1204,7 +1275,7 @@ const labelBefore = prevDateObj
               >
                 {range}
               </Box>
-              
+
             ))}
           </HStack>
         </Flex>
@@ -1216,7 +1287,7 @@ const labelBefore = prevDateObj
               <Input
   type="date"
   value={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
-  
+
 
                 max={compareEndDate ? compareEndDate.toISOString().split('T')[0] : selectedDate.toISOString().split('T')[0]}
               />
@@ -1230,7 +1301,7 @@ const labelBefore = prevDateObj
                     setCompareEndDate(new Date(e.target.value));
                     setTimeRange("custom"); // 👈 Add this line too
                   }}
-                  
+
                 min={compareStartDate ? compareStartDate.toISOString().split('T')[0] : ''}
                 max={selectedDate.toISOString().split('T')[0]}
               />
@@ -1247,7 +1318,7 @@ const labelBefore = prevDateObj
 
   const renderTrendChart = () => {
     // Get dates corresponding to the labels for tooltip display
-    const dateObjects = timeRange === "daily" 
+    const dateObjects = timeRange === "daily"
       ? [selectedDate]
       : timeRange === "monthly"
         ? uniqueDates.filter(d => d >= new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1) && d <= selectedDate)
@@ -1303,12 +1374,12 @@ const labelBefore = prevDateObj
             title: function(context) {
               const index = context[0].dataIndex;
               // Format the date to show exact date when available
-              return dateObjects[index] 
-                ? dateObjects[index].toLocaleDateString('en-US', { 
+              return dateObjects[index]
+                ? dateObjects[index].toLocaleDateString('en-US', {
                     weekday: 'long',
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
                   })
                 : context[0].label;
             }
@@ -1321,7 +1392,7 @@ const labelBefore = prevDateObj
             const chart = context.chart;
             const meta = context.chart.getDatasetMeta(context.datasetIndex);
             const bar = meta.data[context.dataIndex];
-        
+
             // width of the bar (bar chart) or spacing between points (line chart)
             let width = 0;
             if (bar && bar.width) {
@@ -1331,7 +1402,7 @@ const labelBefore = prevDateObj
             } else {
               width = chart.width / context.chart.data.labels.length;
             }
-        
+
             const size = Math.max(8, Math.min(0.5 * width, 16)); // Scale between 8 and 16
             return {
               weight: 'bold',
@@ -1354,8 +1425,8 @@ const labelBefore = prevDateObj
             return value; // raw value
           }
         }
-        
-          
+
+
       },
       scales: {
         x: {
@@ -1390,19 +1461,19 @@ const labelBefore = prevDateObj
     <HStack spacing={1}>
       <Text fontSize="xs" color="white"></Text>
       <ButtonGroup isAttached size="sm" variant="outline">
-  <Button 
-    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'} 
+  <Button
+    colorScheme={labelMode === 'raw' ? 'blue' : 'gray'}
     onClick={() => setLabelMode('raw')}
   >
     Raw
   </Button>
-  <Button 
-    colorScheme={labelMode === 'percent' ? 'green' : 'gray'} 
+  <Button
+    colorScheme={labelMode === 'percent' ? 'green' : 'gray'}
     onClick={() => setLabelMode('percent')}
   >
     %
   </Button>
-  <Button 
+  <Button
     onClick={() => setLabelMode('none')}
     colorScheme={labelMode === 'none' ? 'purple' : 'gray'}
   >
@@ -1424,7 +1495,7 @@ const labelBefore = prevDateObj
   </HStack>
 </Flex>
 
-        
+
         <Box height="300px">
           <Line data={chartData} options={chartOptions} />
         </Box>
@@ -1434,7 +1505,7 @@ const labelBefore = prevDateObj
 
   const renderAnalyticsPanel = () => {
     const insights = calculateTrendAnalysis;
-    
+
     return (
       <Box className="anb-chart-container" mt={8} mb={8} maxW="1200px" mx="auto">
         <Text className="anb-chart-title" mb={4}>Advanced Analytics</Text>
@@ -1479,7 +1550,6 @@ const labelBefore = prevDateObj
 </Flex>
 
 
-        
         <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)", lg: "repeat(4, 1fr)" }} gap={6}>
           {/* Growth Rates */}
           <GridItem>
@@ -1509,7 +1579,7 @@ const labelBefore = prevDateObj
               </Flex>
             </Box>
           </GridItem>
-          
+
           {/* Rate of Change */}
           <GridItem>
             <Box p={4} bg="rgba(255,255,255,0.05)" borderRadius="md">
@@ -1538,7 +1608,7 @@ const labelBefore = prevDateObj
               </Flex>
             </Box>
           </GridItem>
-          
+
           {/* Projections */}
           <GridItem>
             <Box p={4} bg="rgba(255,255,255,0.05)" borderRadius="md">
@@ -1567,7 +1637,7 @@ const labelBefore = prevDateObj
               </Flex>
             </Box>
           </GridItem>
-          
+
           {/* Comparison */}
           <GridItem>
             <Box p={4} bg="rgba(255,255,255,0.05)" borderRadius="md">
@@ -1582,10 +1652,10 @@ const labelBefore = prevDateObj
                 </StatHelpText>
               </Stat>
               <Text fontSize="xs" color="white" mt={2}>
-                {calculateTrendAnalysis.allHistoricalData?.azteca.length > 0 && calculateTrendAnalysis.allHistoricalData?.competition.length > 0 ? 
-                  `At current rate, ${parseFloat(calculateTrendAnalysis.azteca.slope) > parseFloat(calculateTrendAnalysis.competition.slope) ? 
-                  'will increase lead by' : 'gap will widen by'} 
-                  ${Math.abs(parseFloat(calculateTrendAnalysis.azteca.slope) - parseFloat(calculateTrendAnalysis.competition.slope)).toFixed(1)} 
+                {calculateTrendAnalysis.allHistoricalData?.azteca.length > 0 && calculateTrendAnalysis.allHistoricalData?.competition.length > 0 ?
+                  `At current rate, ${parseFloat(calculateTrendAnalysis.azteca.slope) > parseFloat(calculateTrendAnalysis.competition.slope) ?
+                  'will increase lead by' : 'gap will widen by'}
+                  ${Math.abs(parseFloat(calculateTrendAnalysis.azteca.slope) - parseFloat(calculateTrendAnalysis.competition.slope)).toFixed(1)}
                   per period` : ''}
               </Text>
             </Box>
@@ -1595,10 +1665,37 @@ const labelBefore = prevDateObj
     );
   };
 
+  // Memoize data context for AI Chat to prevent unnecessary re-renders
+  // Removed aiChatDataContext as AiChat component is removed
+  // const aiChatDataContext = useMemo(() => ({
+  //   selectedDate,
+  //   timeRange,
+  //   selectedType,
+  //   generateChartData,
+  //   competitionScore,
+  //   aztecaScore,
+  //   calculateTrendAnalysis,
+  //   uniqueDates,
+  //   compareStartDate,
+  //   compareEndDate
+  // }), [
+  //   selectedDate,
+  //   timeRange,
+  //   selectedType,
+  //   generateChartData,
+  //   competitionScore,
+  //   aztecaScore,
+  //   calculateTrendAnalysis,
+  //   uniqueDates,
+  //   compareStartDate,
+  //   compareEndDate
+  // ]);
+
+
   return (
     <Box pt="50px" px={6} className="glass-bg">
       <Text className="title" mb={4}>General Overview</Text>
-      
+
       {/* Date Navigation */}
       <Flex justify="center" align="center" mt={6} mb={4}>
         <IconButton
@@ -1609,9 +1706,9 @@ const labelBefore = prevDateObj
           color="white"
           isDisabled={!selectedDate || uniqueDates.findIndex(d => d.getTime() === selectedDate.getTime()) === 0}
         />
-        
+
         <Box textAlign="center" mx={4}>
-          
+
   <Text fontSize="sm" color="rgba(255,255,255,0.7)" mb={1}>Viewing data for</Text>
   <Input
     type="date"
@@ -1642,7 +1739,7 @@ const labelBefore = prevDateObj
   </datalist>
 </Box>
 
-        
+
         <IconButton
           icon={<FaChevronRight />}
           onClick={goToNextDate}
@@ -1652,9 +1749,9 @@ const labelBefore = prevDateObj
           isDisabled={!selectedDate || uniqueDates.findIndex(d => d.getTime() === selectedDate.getTime()) === uniqueDates.length - 1}
         />
 
-<Button 
-  ml={4} 
-  leftIcon={<FaExchangeAlt />} 
+<Button
+  ml={4}
+  leftIcon={<FaExchangeAlt />}
   onClick={toggleCompareMode}
   colorScheme={compareMode ? "blue" : "gray"}
   size="sm"
@@ -1663,14 +1760,27 @@ const labelBefore = prevDateObj
   Compare Mode
 </Button>
 
+{/* Removed AI Chat Button as per user request
+<Button
+  ml={4}
+  leftIcon={<FaRobot />}
+  onClick={() => setAiChatModalOpen(true)}
+  colorScheme="purple"
+  size="sm"
+  color="white"
+>
+  Ask AI
+</Button>
+*/}
+
       </Flex>
 
       {/* Content Type Selector */}
       <Flex justify="center" align="center" mt={4} mb={6}>
-        <Select 
-          width="200px" 
-          value={selectedType} 
-          onChange={e => setSelectedType(e.target.value)} 
+        <Select
+          width="200px"
+          value={selectedType}
+          onChange={e => setSelectedType(e.target.value)}
           className="anb-select"
           icon={<FaChevronDown />}
           bg="rgba(255,255,255,0.1)"
@@ -1696,16 +1806,16 @@ const labelBefore = prevDateObj
             {renderGauge("Competition", competitionScore)}
             {renderGauge("TV Azteca", aztecaScore)}
           </Flex>
-          
+
           {/* Performance Charts */}
           <Flex direction={{ base: 'column', md: 'row' }} gap={8} mt={8} mb={8} maxW="1200px" mx="auto">
             {renderPerformanceChart("Competition", true)}
             {renderPerformanceChart("TV Azteca", false)}
           </Flex>
-          
+
           {/* Advanced Analytics Panel */}
           {renderAnalyticsPanel()}
-          
+
           {/* Trend Chart */}
           {renderTrendChart()}
 
@@ -1799,6 +1909,24 @@ const labelBefore = prevDateObj
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* AI Chat Modal removed as per user request
+      <Modal isOpen={aiChatModalOpen} onClose={() => setAiChatModalOpen(false)} size="2xl">
+        <ModalOverlay />
+        <ModalContent bg="#1A202C" color="white">
+          <ModalHeader>AI Assistant for Performance Insights</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <AiChat dataContext={aiChatDataContext} />
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" onClick={() => setAiChatModalOpen(false)}>
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+      */}
     </Box>
   );
 };

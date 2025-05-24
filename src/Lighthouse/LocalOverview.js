@@ -396,25 +396,68 @@ const LocalScoresOverview = () => {
     if (!company || !data.length || !filteredDates.length) return null;
   
     const formatDate = (d) => d.toISOString().split("T")[0];
-  
     const dateObjects = filteredDates.filter(d => d <= selectedDate);
     const labels = dateObjects.map(formatDate);
     const values = dateObjects.map(d => computeScore(company, contentType, formatDate(d)));
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    const averageArray = values.map(() => parseFloat(avg.toFixed(2)));
+  
+    const { regressionLine, slope } = linearRegression(values);
   
     return {
       labels,
-      datasets: [{
-        label: `${company} Trend`,
-        data: values,
-        borderColor: companyColors[company] || "cyan",
-        backgroundColor: "rgba(255,255,255,0.1)",
-        fill: true,
-        tension: 0.3,
-        pointRadius: 3,
-        borderWidth: 2
-      }]
+      datasets: [
+        {
+          label: `${company} Trend`,
+          data: values,
+          borderColor: companyColors[company] || "#00f7ff",
+          backgroundColor: "transparent",
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 3,
+          fill: false
+        },
+        {
+          label: `${company} Average`,
+          data: averageArray,
+          borderColor: "white",
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false
+        },
+        {
+          label: `${company} Regression`,
+          data: regressionLine,
+          borderColor: "#ffdc00",
+          borderDash: [4, 3],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          slopeValue: slope, // 🔥 Custom field
+          fill: false
+        }
+      ]
     };
   };
+  
+  
+
+  const linearRegression = (yValues) => {
+    const n = yValues.length;
+    const xValues = [...Array(n).keys()];
+    const sumX = xValues.reduce((a, b) => a + b, 0);
+    const sumY = yValues.reduce((a, b) => a + b, 0);
+    const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+    const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+  
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+  
+    const yRegression = xValues.map(x => slope * x + intercept);
+    return { regressionLine: yRegression, slope: parseFloat(slope.toFixed(2)) };
+  };
+  
+  
   
   
   
@@ -1226,12 +1269,32 @@ const LocalScoresOverview = () => {
   options={{
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: 'nearest',
+      intersect: false
+    },
     plugins: {
-      legend: { display: true },
+      legend: { labels: { color: "#ffffff" } },
       tooltip: {
         callbacks: {
-          label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+          label: (context) => {
+            const dataset = context.dataset;
+            if (dataset.label?.includes("Regression") && dataset.slopeValue !== undefined) {
+              return `${dataset.label} (Slope): ${dataset.slopeValue}`;
+            }
+            return `${dataset.label}: ${context.parsed.y.toFixed(1)}`;
+          }
         }
+      },
+      datalabels: {
+        display: false // ✅ Esto apaga los números encima de los puntos
+      }
+      
+    },
+    elements: {
+      point: {
+        radius: 3,
+        hoverRadius: 6
       }
     },
     scales: {
@@ -1248,6 +1311,9 @@ const LocalScoresOverview = () => {
     }
   }}
 />
+
+
+
 
   </Box>
 )}

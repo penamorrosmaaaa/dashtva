@@ -53,7 +53,7 @@ const VerticalOverview = () => {
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [expandedCompanies, setExpandedCompanies] = useState([]);
   const [labelMode, setLabelMode] = useState('raw'); // 'raw', 'percent', 'none'
-  const [trendCompany, setTrendCompany] = useState(null); // Add this line
+const [trendCompany, setTrendCompany] = useState(null); // Add this line
   // Constants
   const TIME_RANGES = ['daily', 'monthly', 'yearly', 'all', 'custom'];
   const competitionCompanies = [
@@ -317,25 +317,72 @@ const VerticalOverview = () => {
     if (!company || !data.length || !filteredDates.length) return null;
   
     const formatDate = (d) => d.toISOString().split("T")[0];
-  
     const dateObjects = filteredDates.filter(d => d <= selectedDate);
     const labels = dateObjects.map(formatDate);
-    const values = dateObjects.map(d => computeScore(company, selectedType, formatDate(d)));
+  
+    const scores = dateObjects.map(d =>
+      computeScore(company, selectedType, formatDate(d))
+    );
+  
+    const validScores = scores.filter(s => !isNaN(s));
+    const avg = validScores.length
+      ? validScores.reduce((a, b) => a + b, 0) / validScores.length
+      : 0;
+    const avgLine = new Array(validScores.length).fill(avg);
+  
+    // 🧠 Compute linear regression (y = mx + b)
+    const n = validScores.length;
+    const x = [...Array(n).keys()];
+    const y = validScores;
+  
+    const sumX = x.reduce((a, b) => a + b, 0);
+    const sumY = y.reduce((a, b) => a + b, 0);
+    const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
+    const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
+  
+    const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+    const b = (sumY - m * sumX) / n;
+    const trendLine = x.map(xi => m * xi + b);
   
     return {
       labels,
-      datasets: [{
-        label: `${company} Trend`,
-        data: values,
-        borderColor: companyColors[company] || "cyan",
-        backgroundColor: "rgba(255,255,255,0.1)",
-        fill: true,
-        tension: 0.3,
-        pointRadius: 3,
-        borderWidth: 2
-      }]
+      datasets: [
+        {
+          label: `${company} Trend`,
+          data: y,
+          borderColor: "#00ff99",
+          backgroundColor: "transparent",
+          pointRadius: 4,
+          borderWidth: 2,
+          fill: false,
+          tension: 0
+        },
+        {
+          label: "Average Score",
+          data: avgLine,
+          borderColor: "#FFD700",
+          borderDash: [5, 5],
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: false,
+          tension: 0,
+          datalabels: { display: false }
+        },
+        {
+          label: "Trend Line",
+          data: trendLine,
+          borderColor: "#9D00FF",
+          borderWidth: 2,
+          pointRadius: 0,
+          borderDash: [],
+          tension: 0,
+          fill: false
+        }
+      ]
     };
   };
+  
+  
 
   // Calculate average scores for each group
   const getGroupScores = useMemo(() => {
@@ -560,6 +607,7 @@ const VerticalOverview = () => {
         }
       };
     }).filter(Boolean);
+    
   
     const chartData = { labels: orderedCompanies, datasets };
     chartData.companyPerformance = companyPerformance;
@@ -1033,32 +1081,46 @@ const VerticalOverview = () => {
                   <Button size="sm" colorScheme="red" onClick={() => setTrendCompany(null)}>Close</Button>
                 </Flex>
                 <Line
-                  data={getTrendData(trendCompany)}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: { display: true },
-                      tooltip: {
-                        callbacks: {
-                          label: (context) => `${context.dataset.label}: ${context.parsed.y}`
-                        }
-                      }
-                    },
-                    scales: {
-                      x: {
-                        ticks: { color: "#ffffff", maxRotation: 45 },
-                        grid: { display: false }
-                      },
-                      y: {
-                        min: 0,
-                        max: 100,
-                        ticks: { color: "#ffffff" },
-                        grid: { color: "rgba(255,255,255,0.1)" }
-                      }
-                    }
-                  }}
-                />
+  data={getTrendData(trendCompany)}
+  options={{
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: "#ffffff",
+          font: { weight: "bold" }
+        }
+      },
+      tooltip: {
+        enabled: true,
+        callbacks: {
+          label: (context) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: ${value.toFixed(1)}`;
+          }
+        }
+      },
+      datalabels: {
+        display: false // no numbers on chart
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: "#ffffff", maxRotation: 45 },
+        grid: { display: false }
+      },
+      y: {
+        min: 0,
+        max: 100,
+        ticks: { color: "#ffffff" },
+        grid: { color: "rgba(255,255,255,0.1)" }
+      }
+    }
+  }}
+/>
+
               </Box>
             )}
 

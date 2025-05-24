@@ -20,8 +20,6 @@ import { motion, AnimatePresence, useMotionValue, useTransform } from "framer-mo
 import "./AiChatWhoop.css";
 import { Checkbox, CheckboxGroup, Stack } from "@chakra-ui/react";
 import Plot from "react-plotly.js";
-import ReactMarkdown from 'react-markdown';
-import { startOfISOWeek, addDays, format } from "date-fns";
 
 const MotionBox = motion(Box);
 const MotionFlex = motion(Flex);
@@ -94,13 +92,10 @@ Each URL is tested using Lighthouse in headless Chrome, and the following metric
 - FCP: First Contentful Paint
 
 🏢 COMPANIES — Organized in 3 groups
-1. 🟣 TV Azteca Main Brands: Azteca 7","Azteca UNO","ADN40","Deportes","A+","Noticias"
-2. 🟡 TV Azteca Local Brands: Quintana Roo","Bajío","Ciudad Juárez","Yúcatan","Jalisco","Puebla",
-  "Veracruz","Baja California","Morelos","Guerrero","Chiapas","Sinaloa",
-  "Aguascalientes","Queretaro","Chihuahua","Laguna",
-3. 🔴 Competition Companies: "Heraldo","Televisa","Milenio","Universal","As",
-  "Infobae","NyTimes","Terra",
-4. 🖼️ Image Brands: IMG.AZTECA7","IMG.AZTECAUNO","IMG.AZTECANOTICIAS"
+1. 🟣 TV Azteca Main Brands
+2. 🟡 TV Azteca Local Brands
+3. 🔴 Competition Companies
+4. 🖼️ Image Brands
 
 📈 DATA VISUALIZATION REQUIREMENTS
 - ALWAYS include a visualization when showing comparisons
@@ -312,21 +307,29 @@ const AiChat = ({ visibleData, inline = false }) => {
   ### QUESTION
   ${input}
   
- ### RESPONSE INSTRUCTIONS
-- Answer the user's question directly using the provided metrics.
-- Be concise. Do not write a long analysis unless clearly asked for.
-- If the question involves comparison, improvement, or trend detection, and there is enough data, include a chart using the format below.
-- Only include a chart if it adds value to the answer.
-- After that, include 2–3 suggested follow-up questions
-- Always be specific if what you are providing is the average sum of the weeks/months or simply an individual week and be sure to acknowledge if the scores you ar eproviding are from nota, video, img or.
-- Do not include a chart if data is missing or all values are nearly zero.
-- Use these types:
-  - "bar" → compare brands
-  - "line" → trends over time
-  - "radar" → multi-metric summary per brand
-  - "pie" → distribution or share
-- Do not include markdown, links, or explanations around the JSON block.
-
+  ### RESPONSE INSTRUCTIONS
+  You are required to provide:
+  1. A full analysis and insightful performance analysis using the provided metrics tryign to answer the users quesiton or even more.
+  2. A JSON block formatted exactly as below — no markdown image links, no external URLs.
+  3. Start with a rich, structured performance analysis (300+ words).
+- Compare ALL brands explicitly, including:
+  - 🟣 TV Azteca Main (Azteca UNO, Azteca 7, etc.)
+  - 🟡 Local Brands (e.g. Puebla, Veracruz, etc.)
+  - 🔴 Competition (Televisa, Heraldo, etc.)
+  - 🖼️ Image Brands (e.g. IMG.AZTECAUNO)
+  3. Highlight:
+  - Best and worst in each metric (Score, LCP, CLS, etc.)
+  - Gaps between brand groups
+  - Changes over time (if applicable)
+  - Surprising or standout performance
+- Use expressive, analytical language (e.g. “Azteca UNO excels in CLS with minimal layout shifts of 0.02, outperforming competitors like Heraldo at 0.15.”)
+  3. The JSON must be wrapped in triple backticks and labeled with \`\`\`json.
+  4. Do **NOT** include explanations before or after the JSON. Just include the JSON block.
+  5. Use the best chart type:
+     - "bar" → for comparing companies
+     - "line" → for trends over time
+     - "radar" → for multi-metric comparison per company
+     - "pie" → for market share
   
   ### JSON FORMAT EXAMPLE
   \`\`\`json
@@ -357,7 +360,7 @@ const AiChat = ({ visibleData, inline = false }) => {
       setShowQuickActions(false);
 
       const payload = {
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         temperature: 0.3,
         messages: [
           buildSystemContext(),
@@ -388,10 +391,10 @@ const AiChat = ({ visibleData, inline = false }) => {
         try {
           const rawJson = match[1] || match[0];
           const parsed = JSON.parse(rawJson);
-          if (parsed.chart && parsed.chart.labels?.length && parsed.chart.values?.length) {
+          if (parsed.chart) {
             chartData = parsed.chart;
+            content = content.replace(match[0], "").replace(/```json|```/g, "").trim();
           }
-          
         } catch (err) {
           console.warn("Chart JSON not valid:", err);
         }
@@ -538,76 +541,72 @@ const AiChat = ({ visibleData, inline = false }) => {
   };
 
   const handleWeekly = () => {
-    const dataByOutlet = {};
+    const combined = {};
     const weekLabels = [];
-  
-    selectedWeeks.forEach((weekKey) => {
-      const [year, weekNum] = weekKey.split("-W");
-      const weekLabel = `Week ${weekNum}`;
+    
+    selectedWeeks.forEach(weekKey => {
+      const [year, weekNum] = weekKey.split('-W');
+      const getWeekDateRange = (year, weekNum) => {
+        const simple = new Date(year, 0, 1 + (weekNum - 1) * 7);
+        const dow = simple.getDay();
+        const ISOweekStart = new Date(simple);
+        if (dow <= 4) ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+        else ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+      
+        const ISOweekEnd = new Date(ISOweekStart);
+        ISOweekEnd.setDate(ISOweekStart.getDate() + 6);
+      
+        const format = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `${format(ISOweekStart)} – ${format(ISOweekEnd)}`;
+      };
+      
+      const weekLabel = getWeekDateRange(parseInt(year), parseInt(weekNum));
+      
       weekLabels.push(weekLabel);
-  
+      
       const weekDates = visibleData
         .map(r => r.Date)
         .filter(date => {
           const d = new Date(date);
-          return d.getFullYear() === parseInt(year) && getWeekNumber(date) === parseInt(weekNum);
+          const weekYear = d.getFullYear();
+          const week = getWeekNumber(date);
+          return weekYear === parseInt(year) && week === parseInt(weekNum);
         });
-  
-      MEDIA_OUTLETS.forEach((outlet, outletIndex) => {
-        const suffix = outletIndex === 0 ? "" : `_${outletIndex}`;
-        let sum = 0, count = 0;
-  
+      
+      weekDates.forEach(date => {
         visibleData.forEach(r => {
-          if (!weekDates.includes(r.Date)) return;
-          const type = r[`Type${suffix}`];
-          if (type !== selectedType) return;
-  
-          const score = safeParse(r[`Score${suffix}`]);
-          if (score !== null) {
-            sum += score;
-            count += 1;
+          if (r.Date === date) {
+            MEDIA_OUTLETS.forEach((outlet, i) => {
+              const suf = i === 0 ? "" : `_${i}`;
+              const type = r[`Type${suf}`];
+              if (type !== selectedType) return;
+              
+              if (!combined[outlet]) combined[outlet] = {};
+              METRICS.forEach(metric => {
+                const val = safeParse(r[`${metric}${suf}`]);
+                if (val !== null) {
+                  if (!combined[outlet][metric]) {
+                    combined[outlet][metric] = { sum: 0, count: 0 };
+                  }
+                  combined[outlet][metric].sum += val;
+                  combined[outlet][metric].count += 1;
+                }
+              });
+            });
           }
         });
-  
-        if (!dataByOutlet[outlet]) {
-          dataByOutlet[outlet] = {};
-          METRICS.forEach(metric => {
-            dataByOutlet[outlet][metric] = [];
-          });
-        }
-        METRICS.forEach(metric => {
-          let sum = 0, count = 0;
-          visibleData.forEach(r => {
-            if (!weekDates.includes(r.Date)) return;
-            const type = r[`Type${suffix}`];
-            if (type !== selectedType) return;
-        
-            const value = safeParse(r[`${metric}${suffix}`]);
-            if (value !== null) {
-              sum += value;
-              count += 1;
-            }
-          });
-          dataByOutlet[outlet][metric].push(count > 0 ? +(sum / count).toFixed(2) : null);
-        });
-        
       });
     });
-  
-    // Clean up: remove outlets with nulls
-    const cleaned = Object.fromEntries(
-      Object.entries(dataByOutlet).filter(([_, val]) => val.Score.every(s => s !== null))
-    );
-    console.log("🧠 Prompt data being sent to AI:", cleaned);
-console.log("🗓 Weeks:", weekLabels.join(", "));
-console.log("📄 Prompt preview:\n", buildPrompt(cleaned, weekLabels.join(", ")));
-
-  
-    askOpenAI(buildPrompt(cleaned, weekLabels.join(", ")));
+    
+    Object.keys(combined).forEach(outlet => {
+      METRICS.forEach(metric => {
+        const { sum, count } = combined[outlet][metric] || {};
+        combined[outlet][metric] = count ? +(sum / count).toFixed(2) : null;
+      });
+    });
+    
+    askOpenAI(buildPrompt(combined, weekLabels.join(", ")));
   };
-  
-  
-  
 
   const handleMonthly = () => {
     const combined = {};
@@ -678,15 +677,10 @@ console.log("📄 Prompt preview:\n", buildPrompt(cleaned, weekLabels.join(", ")
     setShowQuickActions(true);
   };
 
-const formatWeekLabel = (weekKey) => {
-  const [year, weekNum] = weekKey.split('-W').map(v => parseInt(v));
-  const firstDayOfYear = new Date(year, 0, 1);
-  const firstWeekDate = startOfISOWeek(firstDayOfYear);
-  const weekStart = addDays(firstWeekDate, (weekNum - 1) * 7);
-  const weekEnd = addDays(weekStart, 6);
-  return `${format(weekStart, 'MMM d')}–${format(weekEnd, 'd, yyyy')}`;
-};
-
+  const formatWeekLabel = (weekKey) => {
+    const [year, weekNum] = weekKey.split('-W');
+    return `Week ${weekNum}, ${year}`;
+  };
 
   const formatMonthLabel = (monthKey) => {
     const [year, month] = monthKey.split('-');
@@ -1207,21 +1201,9 @@ const formatWeekLabel = (weekKey) => {
                               bg="radial-gradient(circle, rgba(0,255,136,0.1) 0%, transparent 70%)"
                               filter="blur(30px)"
                             />
-                            <ReactMarkdown
-  children={msg.content}
-  components={{
-    h1: ({node, ...props}) => <Text fontSize="2xl" fontWeight="bold" mt={4} {...props} />,
-    h2: ({node, ...props}) => <Text fontSize="xl" fontWeight="semibold" mt={3} {...props} />,
-    h3: ({node, ...props}) => <Text fontSize="lg" fontWeight="semibold" mt={2} {...props} />,
-    p: ({node, ...props}) => <Text mt={2} {...props} />,
-    ul: ({node, ...props}) => <Box as="ul" pl={4} mt={2} {...props} />,
-    li: ({node, ...props}) => <Box as="li" fontSize="sm" ml={2} mb={1} listStyleType="disc" {...props} />,
-    strong: ({node, ...props}) => <Text as="strong" fontWeight="bold" {...props} />,
-    em: ({node, ...props}) => <Text as="em" fontStyle="italic" {...props} />,
-    code: ({node, ...props}) => <Box as="code" bg="gray.800" px={1} py={0.5} borderRadius="md" fontSize="xs" {...props} />
-  }}
-/>
-
+                            <Text fontSize="sm" whiteSpace="pre-wrap" lineHeight="tall" position="relative">
+                              {msg.content}
+                            </Text>
                             
                             {/* Enhanced Chart Visualization */}
                             {msg.chartData && (
@@ -1399,14 +1381,11 @@ const formatWeekLabel = (weekKey) => {
                                       dragmode: false,
                                       selectdirection: 'diagonal'
                                     }}
-                                    config={{
+                                    config={{ 
                                       responsive: true,
-                                      displayModeBar: "hover",
-                                      scrollZoom: true,           // allows zooming with scroll wheel
-                                      doubleClick: "reset",       // double-click resets the view
-                                      displaylogo: false,         // hides the "Produced with Plotly" logo
+                                      displayModeBar: false,
+                                      staticPlot: false
                                     }}
-                                    
                                   />
                                 </Box>
                               </ScaleFade>

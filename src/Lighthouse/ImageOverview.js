@@ -238,25 +238,68 @@ const ImageScoresOverview = () => {
     if (!company || !data.length || !filteredDates.length) return null;
   
     const formatDate = (d) => d.toISOString().split("T")[0];
-  
     const dateObjects = filteredDates.filter(d => d <= selectedDate);
     const labels = dateObjects.map(formatDate);
     const values = dateObjects.map(d => computeScore(company, formatDate(d), contentType, [d]));
+    
+    // Average line
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    const averageArray = values.map(() => parseFloat(avg.toFixed(2)));
+  
+    // Regression line
+    const linearRegression = (yValues) => {
+      const n = yValues.length;
+      const xValues = [...Array(n).keys()];
+      const sumX = xValues.reduce((a, b) => a + b, 0);
+      const sumY = yValues.reduce((a, b) => a + b, 0);
+      const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
+      const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
+  
+      const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+      const intercept = (sumY - slope * sumX) / n;
+  
+      const yRegression = xValues.map(x => slope * x + intercept);
+      return { regressionLine: yRegression, slope: parseFloat(slope.toFixed(2)) };
+    };
+  
+    const { regressionLine, slope } = linearRegression(values);
   
     return {
       labels,
-      datasets: [{
-        label: `${company} Trend`,
-        data: values,
-        borderColor: companyColors[company] || "cyan",
-        backgroundColor: "rgba(255,255,255,0.1)",
-        fill: true,
-        tension: 0.3,
-        pointRadius: 3,
-        borderWidth: 2
-      }]
+      datasets: [
+        {
+          label: `${company} Trend`,
+          data: values,
+          borderColor: companyColors[company] || "#00f7ff",
+          backgroundColor: "transparent",
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 3, // Keep this as is for the main trend line
+          fill: false
+        },
+        {
+          label: `${company} Average`,
+          data: averageArray,
+          borderColor: "white",
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 1, // Set a small radius to make it hoverable
+          fill: false
+        },
+        {
+          label: `${company} Regression`,
+          data: regressionLine,
+          borderColor: "#ffdc00",
+          borderDash: [4, 3],
+          borderWidth: 1.5,
+          pointRadius: 1, // Set a small radius to make it hoverable
+          slopeValue: slope,
+          fill: false
+        }
+      ]
     };
   };
+  
 
   const getMetricsForCompany = (company, type = contentType, date = dateStr) => {
     if (!data.length || !date || !metricKeys[company]) return {};
@@ -936,12 +979,10 @@ const ImageScoresOverview = () => {
                   barPercentage: 0.6,
                   categoryPercentage: 0.8
                 }}
-                plugins={[ChartDataLabels]}
                 key={labelMode}
               />
             </Box>
 
-            {/* Trend Chart */}
             {trendCompany && (
               <Box className="anb-chart-container" width="100%" maxW="1200px" height="300px" mt={4}>
                 <Flex justify="space-between" align="center" mb={2}>
@@ -954,11 +995,26 @@ const ImageScoresOverview = () => {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                      legend: { display: true },
-                      tooltip: {
+                      legend: { labels: { color: "#ffffff" } },
+                      tooltip: { // Keep tooltip enabled for hovering
                         callbacks: {
-                          label: (context) => `${context.dataset.label}: ${context.parsed.y}`
+                          label: (context) => {
+                            const dataset = context.dataset;
+                            if (dataset.label?.includes("Regression") && dataset.slopeValue !== undefined) {
+                              return `${dataset.label} (Slope): ${dataset.slopeValue}`;
+                            }
+                            return `${dataset.label}: ${context.parsed.y.toFixed(1)}`;
+                          }
                         }
+                      },
+                      datalabels: { // This is the plugin for the numbers on top of points
+                        display: false // Set display to false to remove these labels
+                      }
+                    },
+                    elements: {
+                      point: {
+                        radius: 3,
+                        hoverRadius: 6
                       }
                     },
                     scales: {

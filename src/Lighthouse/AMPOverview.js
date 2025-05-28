@@ -25,6 +25,7 @@ import {
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./Lighthouse.css";
 import { Wrap } from "@chakra-ui/react";
+import MatrixRain from "./MatrixRain";
 
 
 
@@ -644,8 +645,10 @@ const [labelMode, setLabelMode] = useState("raw");
   
 
   return (
-    <Box pt="80px" px={6} className="glass-bg">
+    <Box pt="50px" px={6} className="glass-bg" position="relative">
+      <MatrixRain /> {/* 👈 Añadido aquí */}
       <Text className="title">AMP Overview</Text>
+  
 
       {!selectedDate ? (
         <Flex justify="center" align="center" height="30vh">

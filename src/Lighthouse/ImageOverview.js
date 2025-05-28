@@ -24,6 +24,7 @@ import {
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import "./Lighthouse.css"; // Assuming you have the same CSS file
 import CountUp from 'react-countup';
+import MatrixRain from "./MatrixRain";
 
 ChartJS.register(
   RadialLinearScale, CategoryScale, LinearScale,
@@ -583,8 +584,10 @@ const ImageScoresOverview = () => {
   }, [imageCompanies, dateStr, timeRange]);
 
   return (
-    <Box pt="80px" px={6} className="glass-bg">
-      <Text className="title">Image Scores Overview</Text>
+    <Box pt="50px" px={6} className="glass-bg" position="relative">
+      <MatrixRain /> {/* 👈 Añadido aquí */}
+      <Text className="title">Image Overview</Text>
+  
   
       {!selectedDate ? (
         <>

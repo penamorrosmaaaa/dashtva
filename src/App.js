@@ -1,5 +1,3 @@
-// FILE: src/App.js
-
 import React, { useState, useEffect } from 'react';
 import { ChakraProvider, Box } from '@chakra-ui/react';
 import {
@@ -26,7 +24,9 @@ import MainLayout from './layouts/MainLayout';
 import LoginPage from './LoginPage';
 import TimeBox from './time-box/timebox';
 import TimeBoxAdmin from './time-box/timeboxadmin';
-import Lighthouse from './Lighthouse/Lighthouse'; // ✅ NEW
+import Lighthouse from './Lighthouse/Lighthouse';
+import TarjetasQA from './TarjetasQA/TarjetasQA'; // ✅ NEW
+import AdminQA from './TarjetasQA/AdminQA'; // ✅ NEW
 
 const App = () => {
   return (
@@ -114,6 +114,7 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
       <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
       <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
       <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} />
+      <Route path="/ADMIN-TarjetasQA" element={<AdminQA />} />  // ✅ This now renders your form
 
       {/* Regular user routes */}
       <Route
@@ -140,6 +141,14 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
           </Box>
         }
       />
+      <Route
+        path="/TarjetasQA"
+        element={
+          <Box pt="200px">
+            <TarjetasQA />
+          </Box>
+        }
+      /> {/* ✅ NEW */}
 
       <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
 

@@ -32,7 +32,7 @@ import { Wrap } from "@chakra-ui/react"; // ✅ Correcto
 import MatrixRain from "./MatrixRain";
 
 // NEW IMPORT for R-squared calculation
-import { sampleCorrelation, rSquared } from 'simple-statistics'; // Import specific functions
+import { sampleCorrelation } from 'simple-statistics'; // Import specific functions
 
 ChartJS.register(
   RadialLinearScale, CategoryScale, LinearScale,
@@ -81,7 +81,7 @@ const VerticalOverview = () => {
   ];
 
   const aztecaCompanies = [
-    "Azteca 7", "Azteca UNO", "ADN40", "Deportes", "A+", "Noticias"
+    "Azteca 7", "Azteca UNO", "ADN40", "Azteca Deportes", "A+", "Azteca Noticias"
   ];
 
   const allCompanies = [...competitionCompanies, ...aztecaCompanies];
@@ -246,19 +246,19 @@ const VerticalOverview = () => {
     const blockSize = 9;
     const index = allCompanies.indexOf(company);
     if (index === -1) return 0;
-
+  
     const base = index * blockSize;
     const dateKey = keys[base];
     const typeKey = keys[base + 1];
     const scoreKey = keys[base + 3];
-
+  
     if (type === "both") {
       const notaScore = computeScore(company, "nota", date);
       const videoScore = computeScore(company, "video", date);
       const valid = [notaScore, videoScore].filter(s => typeof s === "number" && s > 0);
       return valid.length ? parseFloat((valid.reduce((a, b) => a + b, 0) / valid.length).toFixed(1)) : 0;
     }
-
+  
     let total = 0, count = 0;
     data.forEach(row => {
       if (row[dateKey] === date && row[typeKey] === type) {
@@ -269,9 +269,48 @@ const VerticalOverview = () => {
         }
       }
     });
-
+  
+    // Predict using linear regression if no data
+    if (!count) {
+      // Use historical data to predict
+      const dateList = uniqueDates.map(d => d.toISOString().split("T")[0]);
+      const x = [], y = [];
+  
+      dateList.forEach((d, i) => {
+        let sum = 0, ct = 0;
+        data.forEach(row => {
+          if (row[dateKey] === d && row[typeKey] === type) {
+            const val = parseFloat(row[scoreKey]);
+            if (!isNaN(val) && val > 0) {
+              sum += val;
+              ct++;
+            }
+          }
+        });
+        if (ct) {
+          x.push(i);
+          y.push(sum / ct);
+        }
+      });
+  
+      if (x.length >= 2) {
+        const targetIndex = dateList.indexOf(date);
+        const n = x.length;
+        const sumX = x.reduce((a, b) => a + b, 0);
+        const sumY = y.reduce((a, b) => a + b, 0);
+        const sumXY = x.reduce((acc, xi, i) => acc + xi * y[i], 0);
+        const sumX2 = x.reduce((acc, xi) => acc + xi * xi, 0);
+        const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        const b = (sumY - m * sumX) / n;
+        const predicted = m * targetIndex + b;
+  
+        return Math.max(0, Math.min(100, parseFloat(predicted.toFixed(1)))); // bound 0-100
+      }
+    }
+  
     return count ? parseFloat((total / count).toFixed(1)) : 0;
   };
+  
 
   const getMetricsForCompany = (company, type = selectedType, date = dateStr) => {
     if (!data.length || !date) return {};
@@ -799,7 +838,7 @@ const VerticalOverview = () => {
   // Calculate metric score (0-100) based on Lighthouse scoring
   const calculateMetricScore = (metric, value) => {
     if (value === null || isNaN(value)) return 0;
-  
+    
     const LOG_NORMAL_PARAMS = {
       fcp: { median: 1800, podr: 1000 },
       si: { median: 3400, podr: 1700 },
@@ -807,10 +846,10 @@ const VerticalOverview = () => {
       tbt: { median: 300, podr: 100 },
       cls: { median: 0.1, podr: 0.01 } // special case: lower = better
     };
-  
+    
     const { median, podr } = LOG_NORMAL_PARAMS[metric] || {};
     if (!median || !podr) return 0;
-  
+    
     // Lighthouse scoring function approximation
     const logNormalScore = (value) => {
       const ln = Math.log;
@@ -819,7 +858,7 @@ const VerticalOverview = () => {
       const score = 1 / (1 + Math.exp((ln(value) - location) / shape));
       return Math.max(0, Math.min(1, score));
     };
-  
+    
     const score = logNormalScore(value);
     return Math.round(score * 100);
   };
@@ -869,29 +908,30 @@ const VerticalOverview = () => {
           const r = sampleCorrelation(adjustedMetricValues, normalizedScores);
           const r2 = r * r;
 
-          // Calculate confidence based on sample size
-          const n = metricValuesForR.length;
-          const standardError = Math.sqrt((1 - r2) / (n - 2));
-          const confidence = 1.96 * standardError; // 95% confidence interval
+          // Calculate confidence based on sample size (simplified, actual stats are more complex)
+          // const n = metricValuesForR.length;
+          // const standardError = Math.sqrt((1 - r2) / (n - 2));
+          // const confidence = 1.96 * standardError; // 95% confidence interval (approx)
 
           // Calculate current metric score and potential improvement
-          const avgValue = metricValuesForR.reduce((a, b) => a + b, 0) / n;
+          const avgValue = metricValuesForR.reduce((a, b) => a + b, 0) / metricValuesForR.length;
           const currentMetricScore = calculateMetricScore(metric, avgValue);
-          const maxPossibleScore = 100;
-          const potentialImprovement = maxPossibleScore - currentMetricScore;
+          const maxPossibleMetricScore = 100;
+          // This represents the maximum score points a metric can contribute if it reaches 100 LH score
+          const potentialImprovement = maxPossibleMetricScore - currentMetricScore;
 
           correlations[metric] = { 
             r: parseFloat(r.toFixed(3)), 
             r2: parseFloat(r2.toFixed(3)),
-            n: n,
-            confidence: parseFloat(confidence.toFixed(3)),
+            n: metricValuesForR.length,
+            // confidence: parseFloat(confidence.toFixed(3)),
             avgValue: avgValue,
             minValue: Math.min(...metricValuesForR),
             maxValue: Math.max(...metricValuesForR),
             weight: LIGHTHOUSE_WEIGHTS[metric],
             currentMetricScore: currentMetricScore,
-            potentialImprovement: potentialImprovement,
-            weightedPotentialGain: potentialImprovement * LIGHTHOUSE_WEIGHTS[metric]
+            potentialImprovement: potentialImprovement, // Raw score points from metric itself
+            weightedPotentialGain: potentialImprovement * LIGHTHOUSE_WEIGHTS[metric] // Points contributed to overall LH score
           };
         } catch (e) {
           console.warn(`Could not calculate correlation for ${metric}:`, e);
@@ -1001,7 +1041,7 @@ const VerticalOverview = () => {
       immediateScoreGain: immediateGain.toFixed(1),
       maxPossibleGain: maxPossibleGain.toFixed(1),
       weight: (LIGHTHOUSE_WEIGHTS[metric] * 100).toFixed(0),
-      confidence: correlation.confidence
+      // confidence: correlation.confidence // Removed confidence as it's not robustly calculated here
     };
   };
 
@@ -1052,7 +1092,7 @@ const VerticalOverview = () => {
   
   // Calculate required improvements to reach target score
   const calculateTargetRequirements = (targetScoreInput) => {
-    if (!r2Correlations || !heatmapCompany || !targetScoreInput) return null;
+    if (!r2Correlations || !heatmapCompany || !targetScoreInput || targetScoreInput <= 0) return null;
     
     const actualCurrentScore = computeScore(heatmapCompany, selectedType, 
       heatmapEndDate ? heatmapEndDate.toISOString().split('T')[0] : dateStr);
@@ -1067,63 +1107,88 @@ const VerticalOverview = () => {
     const metricRequirements = [];
     let cumulativeGain = 0;
     
-    // Sort metrics by efficiency (weight * potential improvement)
+    // Sort metrics by efficiency (weighted potential improvement)
     const sortedMetrics = Object.entries(r2Correlations)
-      .filter(([_, data]) => data && data.potentialImprovement > 0)
+      .filter(([_, data]) => data && data.weightedPotentialGain > 0) // Ensure potential gain exists
       .sort((a, b) => {
-        const efficiencyA = a[1].weight * a[1].potentialImprovement;
-        const efficiencyB = b[1].weight * b[1].potentialImprovement;
+        const efficiencyA = a[1].weightedPotentialGain;
+        const efficiencyB = b[1].weightedPotentialGain;
         return efficiencyB - efficiencyA;
       });
     
-    sortedMetrics.forEach(([metric, data]) => {
-      if (cumulativeGain >= scoreGapNeeded) return;
-      
+    for (let i = 0; i < sortedMetrics.length && cumulativeGain < scoreGapNeeded; i++) {
+      const [metric, data] = sortedMetrics[i];
       const currentValue = data.avgValue;
       const goodThreshold = METRIC_THRESHOLDS[metric].good;
       
-      // Calculate how much we need to improve this metric
-      let targetValue;
+      let targetValueForMetric;
       let metricScoreGain;
-      
-      if (currentValue > goodThreshold) {
-        // Need improvement
-        const remainingGap = scoreGapNeeded - cumulativeGain;
-        const maxGainFromThisMetric = data.weightedPotentialGain;
+      let percentChange;
+
+      // Determine how much of this metric's potential gain is needed
+      const remainingGap = scoreGapNeeded - cumulativeGain;
+      const maxGainFromThisMetric = data.weightedPotentialGain;
+
+      if (remainingGap <= maxGainFromThisMetric) {
+        // We only need a partial improvement from this metric to reach the target
+        metricScoreGain = remainingGap;
+        // Inverse calculation to find the target raw value for the metric
+        // This is a simplified linear approximation; actual Lighthouse scoring is log-normal.
+        const currentMetricScore = calculateMetricScore(metric, currentValue);
+        const targetMetricScoreForThisMetric = currentMetricScore + (remainingGap / data.weight);
+
+        // Approximate target raw value using inverse of calculateMetricScore
+        // This is a heuristic and might not be perfectly accurate due to log-normal scoring
+        const LOG_NORMAL_PARAMS = {
+          fcp: { median: 1800, podr: 1000 },
+          si: { median: 3400, podr: 1700 },
+          lcp: { median: 2500, podr: 1200 },
+          tbt: { median: 300, podr: 100 },
+          cls: { median: 0.1, podr: 0.01 }
+        };
+        const { median, podr } = LOG_NORMAL_PARAMS[metric] || {};
+        const scoreFraction = targetMetricScoreForThisMetric / 100;
         
-        if (remainingGap <= maxGainFromThisMetric) {
-          // Partial improvement needed
-          const percentOfMaxNeeded = remainingGap / maxGainFromThisMetric;
-          targetValue = currentValue - (currentValue - goodThreshold) * percentOfMaxNeeded;
-          metricScoreGain = remainingGap;
-        } else {
-          // Full improvement to good threshold
-          targetValue = goodThreshold;
-          metricScoreGain = maxGainFromThisMetric;
+        if (isNegativeMetric(metric)) { // Lower is better
+          // This is a simplified inverse of the sigmoid for approximation
+          targetValueForMetric = Math.exp(Math.log(podr) + Math.sqrt(2 * Math.log(median / podr)) * Math.log((1 / scoreFraction) - 1));
+          targetValueForMetric = Math.max(goodThreshold, targetValueForMetric); // Don't suggest worse than good threshold
+        } else { // Higher is better (not typically for Core Web Vitals)
+          // This case is unlikely for CWV, but for completeness
+          targetValueForMetric = Math.exp(Math.log(podr) + Math.sqrt(2 * Math.log(median / podr)) * Math.log((1 / scoreFraction) - 1));
+          targetValueForMetric = Math.min(goodThreshold, targetValueForMetric); // Don't suggest better than good threshold if not applicable
         }
+
+        percentChange = ((currentValue - targetValueForMetric) / currentValue * 100);
         
-        const percentChange = ((currentValue - targetValue) / currentValue * 100).toFixed(1);
-        
-        metricRequirements.push({
-          metric: metric.toUpperCase(),
-          currentValue: currentValue.toFixed(metric === 'cls' ? 3 : 0),
-          targetValue: targetValue.toFixed(metric === 'cls' ? 3 : 0),
-          percentChange: percentChange,
-          scoreGain: metricScoreGain.toFixed(1),
-          weight: (data.weight * 100).toFixed(0)
-        });
-        
-        cumulativeGain += metricScoreGain;
+      } else {
+        // Full improvement to good threshold is needed (and still more score needed)
+        targetValueForMetric = goodThreshold;
+        metricScoreGain = maxGainFromThisMetric;
+        percentChange = ((currentValue - goodThreshold) / currentValue * 100);
       }
-    });
+      
+      metricRequirements.push({
+        metric: metric.toUpperCase(),
+        currentValue: currentValue.toFixed(metric === 'cls' ? 3 : 0),
+        targetValue: targetValueForMetric.toFixed(metric === 'cls' ? 3 : 0),
+        percentChange: percentChange.toFixed(1),
+        scoreGain: metricScoreGain.toFixed(1),
+        weight: (data.weight * 100).toFixed(0)
+      });
+      
+      cumulativeGain += metricScoreGain;
+    }
     
+    const totalAchievableGain = sortedMetrics.reduce((sum, [_, data]) => sum + data.weightedPotentialGain, 0);
+
     return {
       currentScore: actualCurrentScore.toFixed(1),
       targetScore: targetScoreInput,
       scoreGapNeeded: scoreGapNeeded.toFixed(1),
       achievable: cumulativeGain >= scoreGapNeeded,
       requirements: metricRequirements,
-      totalGainPossible: cumulativeGain.toFixed(1)
+      totalGainPossible: totalAchievableGain.toFixed(1)
     };
   };
 
@@ -1503,8 +1568,8 @@ const VerticalOverview = () => {
                       }
                     },
                     y: {
-                      min: 0,
-                      max: 100,
+                      beginAtZero: true,
+                      suggestedMin: 0,                    
                       ticks: { color: "white" },
                       grid: { color: "rgba(255,255,255,0.1)" }
                     }
@@ -1560,15 +1625,16 @@ const VerticalOverview = () => {
                       x: {
                         ticks: { color: "#ffffff", maxRotation: 45 },
                         grid: { display: false },
-                        reverse: true // 👈 This reverses the direction from right to left
+                        reverse: true // 👈 This keeps the direction right to left
                       },
                       y: {
-                        min: 0,
-                        max: 100,
+                        beginAtZero: true,
                         ticks: { color: "#ffffff" },
-                        grid: { color: "rgba(255,255,255,0.1)" }
+                        grid: { color: "rgba(255,255,255,0.1)" },
+                        suggestedMin: 0 // Optional: starts at 0 but lets max auto-scale
                       }
                     }
+                    
                     
                   }}
                 />
@@ -1578,42 +1644,42 @@ const VerticalOverview = () => {
             {/* Date Slider */}
             <Flex mt={4} align="center" justify="center" flexDirection="column" gap={4}>
             <RangeSlider
-  min={0}
-  max={filteredDates.length - 1}
-  step={1}
-  value={[previousDateIndex ?? 0, selectedDateIndex]}
-  onChange={([start, end]) => {
-    setPreviousDateIndex(start);
-    setSelectedDateIndex(end);
-  }}
-  width="70%"
-  height="40px"
-  colorScheme="cyan"
-  isDisabled={filteredDates.length <= 1}
->
-  <RangeSliderTrack bg="rgba(255,255,255,0.2)" height="8px">
-    <RangeSliderFilledTrack bg="#00f7ff" />
-  </RangeSliderTrack>
-  <RangeSliderThumb index={0} />
-  <RangeSliderThumb index={1} />
-</RangeSlider>
+              min={0}
+              max={filteredDates.length - 1}
+              step={1}
+              value={[previousDateIndex ?? 0, selectedDateIndex]}
+              onChange={([start, end]) => {
+                setPreviousDateIndex(start);
+                setSelectedDateIndex(end);
+              }}
+              width="70%"
+              height="40px"
+              colorScheme="cyan"
+              isDisabled={filteredDates.length <= 1}
+            >
+              <RangeSliderTrack bg="rgba(255,255,255,0.2)" height="8px">
+                <RangeSliderFilledTrack bg="#00f7ff" />
+              </RangeSliderTrack>
+              <RangeSliderThumb index={0} />
+              <RangeSliderThumb index={1} />
+            </RangeSlider>
 
-<Text color="white" fontSize="sm" fontWeight="medium" textAlign="center">
-  {filteredDates.length > 0 && previousDateIndex !== null && selectedDateIndex !== null ? (
-    <>
-      Showing data from{" "}
-      <Text as="span" fontWeight="bold">
-        {filteredDates[Math.min(previousDateIndex, selectedDateIndex)].toLocaleDateString()}
-      </Text>{" "}
-      to{" "}
-      <Text as="span" fontWeight="bold">
-        {filteredDates[Math.max(previousDateIndex, selectedDateIndex)].toLocaleDateString()}
-      </Text>
-    </>
-  ) : (
-    "No dates match the current filter"
-  )}
-</Text>
+            <Text color="white" fontSize="sm" fontWeight="medium" textAlign="center">
+              {filteredDates.length > 0 && previousDateIndex !== null && selectedDateIndex !== null ? (
+                <>
+                  Showing data from{" "}
+                  <Text as="span" fontWeight="bold">
+                    {filteredDates[Math.min(previousDateIndex, selectedDateIndex)]?.toLocaleDateString()}
+                  </Text>{" "}
+                  to{" "}
+                  <Text as="span" fontWeight="bold">
+                    {filteredDates[Math.max(previousDateIndex, selectedDateIndex)]?.toLocaleDateString()}
+                  </Text>
+                </>
+              ) : (
+                "No dates match the current filter"
+              )}
+            </Text>
 
 
             </Flex>
@@ -1757,6 +1823,8 @@ const VerticalOverview = () => {
                             color="white"
                             fontSize="xs"
                             hasArrow
+                            _hover={{ transform: "scale(1.1)", zIndex: 1 }}
+                            transition="transform 0.1s ease-in-out"
                           >
                             <Flex
                               w="50px"
@@ -1766,8 +1834,6 @@ const VerticalOverview = () => {
                               justify="center"
                               align="center"
                               border="1px solid rgba(0,0,0,0.1)"
-                              _hover={{ transform: "scale(1.1)", zIndex: 1 }}
-                              transition="transform 0.1s ease-in-out"
                             >
                               <Text fontSize="xs" color="white" fontWeight="bold">
                                 {value !== null && !isNaN(value) ? (
@@ -1929,7 +1995,6 @@ const VerticalOverview = () => {
                             
                             <VStack align="start" spacing={2}>
                               {totalImprovement.breakdown.map(item => {
-                                const impact = calculateScoreImpact(item.metric.toLowerCase(), 10);
                                 return (
                                   <Box key={item.metric} width="100%">
                                     <Flex justify="space-between" align="center">
@@ -1960,7 +2025,7 @@ const VerticalOverview = () => {
                               
                               if (targetReqs.alreadyAchieved) {
                                 return (
-                                  <Box p={2} bg="rgba(34,211,76,0.1)" borderRadius="md">
+                                  <Box p={2} bg="rgba(34,211,76,0.1)" borderRadius="md" mt={3}>
                                     <Text fontSize="xs" color="green.300">
                                       ✅ Already achieving target! Current: {targetReqs.currentScore} ≥ Target: {targetScore}
                                     </Text>
@@ -1987,7 +2052,7 @@ const VerticalOverview = () => {
                                             </Text>
                                           </Flex>
                                           <Text fontSize="xs" color="gray.400" ml={4}>
-                                            {req.currentValue} → {req.targetValue} (-{req.percentChange}%)
+                                            {req.currentValue} → {req.targetValue} ({req.percentChange}%)
                                           </Text>
                                         </Box>
                                       ))}
@@ -1996,7 +2061,7 @@ const VerticalOverview = () => {
                                     <Text fontSize="xs" color="orange.300">
                                       ⚠️ Target score {targetScore} requires {targetReqs.scoreGapNeeded} points, 
                                       but maximum possible gain is {targetReqs.totalGainPossible} points.
-                                      Suggested target: {(parseFloat(targetReqs.currentScore) + parseFloat(targetReqs.totalGainPossible)).toFixed(0)}
+                                      Suggested reachable target: {(parseFloat(targetReqs.currentScore) + parseFloat(targetReqs.totalGainPossible)).toFixed(0)}
                                     </Text>
                                   )}
                                 </Box>
@@ -2009,7 +2074,7 @@ const VerticalOverview = () => {
                                 🎯 Quick Wins (10% improvement):
                               </Text>
                               {Object.entries(r2Correlations)
-                                .filter(([_, corr]) => corr && corr.r2 >= 0.3)
+                                .filter(([_, corr]) => corr && corr.r2 >= 0.3) // Only show metrics with at least moderate correlation
                                 .sort((a, b) => {
                                   const impactA = calculateScoreImpact(a[0], 10);
                                   const impactB = calculateScoreImpact(b[0], 10);

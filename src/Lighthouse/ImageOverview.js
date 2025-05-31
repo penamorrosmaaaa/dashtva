@@ -1,16 +1,16 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import {
   Box, Text, Flex, Spinner, Select, IconButton, CheckboxGroup,
   Checkbox, HStack, VStack, Slider, SliderTrack, SliderFilledTrack,
   SliderThumb, Button, Badge, Stat, StatLabel, StatNumber, StatHelpText,
-  StatArrow, Grid, GridItem, Tooltip, Divider, ButtonGroup, Input, Wrap
+  StatArrow, Grid, GridItem, Tooltip, Divider, ButtonGroup, Input, Wrap,
+  RangeSlider, RangeSliderTrack, RangeSliderFilledTrack, RangeSliderThumb // Added for heatmap date range
 } from "@chakra-ui/react";
 import { 
   FaChevronLeft, 
   FaChevronRight, 
   FaChartLine,
   FaInfoCircle,
-  FaCalendarAlt,
   FaChevronUp,
   FaChevronDown
 } from "react-icons/fa";
@@ -22,9 +22,13 @@ import {
   Legend, Filler
 } from "chart.js";
 import ChartDataLabels from "chartjs-plugin-datalabels";
-import "./Lighthouse.css"; // Assuming you have the same CSS file
 import CountUp from 'react-countup';
-import MatrixRain from "./MatrixRain";
+import { sampleCorrelation } from 'simple-statistics'; // Import for R-squared calculation
+
+// Note: These components are referenced but not included in the original code
+// You'll need to implement them separately or remove the references
+// import "./Lighthouse.css";
+// import MatrixRain from "./MatrixRain"; // Placeholder for MatrixRain
 
 ChartJS.register(
   RadialLinearScale, CategoryScale, LinearScale,
@@ -51,10 +55,19 @@ const ImageScoresOverview = () => {
   const [compareEndDate2, setCompareEndDate2] = useState(null);
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [contentType, setContentType] = useState('nota');
-  const [selectedMetric, setSelectedMetric] = useState("cls");
+  const [selectedMetric, setSelectedMetric] = useState("cls"); // Not used in this version, but kept for consistency if needed
   const [expandedCompanies, setExpandedCompanies] = useState([]);
   const [labelMode, setLabelMode] = useState("raw");
   const [trendCompany, setTrendCompany] = useState(null);
+
+  // New state for Heatmap and R-squared
+  const [heatmapCompany, setHeatmapCompany] = useState(null);
+  const [heatmapStartDate, setHeatmapStartDate] = useState(null);
+  const [heatmapEndDate, setHeatmapEndDate] = useState(null);
+  const [r2Correlations, setR2Correlations] = useState(null);
+  const [showR2Mode, setShowR2Mode] = useState(false); // Toggle between r and r²
+  const [targetScore, setTargetScore] = useState(80); // Target score for calculator
+
 
   // Constants
   const TIME_RANGES = ['daily', 'monthly', 'yearly', 'all', 'custom'];
@@ -88,6 +101,32 @@ const ImageScoresOverview = () => {
     "July", "August", "September", "October", "November", "December"
   ];
 
+  // Metric colors from VerticalOverview
+  const getMetricColor = useCallback((metric, value) => {
+    if (metric === "cls") {
+      if (value <= 0.1) return "lime";
+      if (value <= 0.25) return "orange";
+      return "red";
+    } else if (metric === "lcp") {
+      if (value <= 2500) return "lime";
+      if (value <= 4000) return "orange";
+      return "red";
+    } else if (metric === "si") {
+      if (value <= 3400) return "lime";
+      if (value <= 5800) return "orange";
+      return "red";
+    } else if (metric === "tbt") {
+      if (value <= 200) return "lime";
+      if (value <= 600) return "orange";
+      return "red";
+    } else if (metric === "fcp") {
+      if (value <= 1800) return "lime";
+      if (value <= 3000) return "orange";
+      return "red";
+    }
+    return "white";
+  }, []);
+
   // Data Fetching
   useEffect(() => {
     Papa.parse(
@@ -117,6 +156,13 @@ const ImageScoresOverview = () => {
           }
           
           setSelectedCompanies(allCompanies);
+
+          // Initialize heatmap dates and company
+          if (dates.length > 0) {
+            setHeatmapStartDate(dates[0]);
+            setHeatmapEndDate(dates[dates.length - 1]);
+            setHeatmapCompany(allCompanies[0]); // Select first company by default
+          }
         },
         error: (error) => {
           console.error("Error parsing CSV:", error);
@@ -217,31 +263,114 @@ const ImageScoresOverview = () => {
     }
   }, [timeRange]);
 
-  // Score computation
-  const computeScore = (company, date = dateStr, type = "nota", dateList = [new Date(date)]) => {
-    if (!data.length || !dateList.length) return 0;
+  // Linear regression calculation helper
+  const calculateLinearRegression = useCallback((points) => {
+    const n = points.length;
+    if (n < 2) return null;
+    
+    const sumX = points.reduce((sum, p) => sum + p.x, 0);
+    const sumY = points.reduce((sum, p) => sum + p.y, 0);
+    const sumXY = points.reduce((sum, p) => sum + p.x * p.y, 0);
+    const sumXX = points.reduce((sum, p) => sum + p.x * p.x, 0);
+    
+    const denominator = (n * sumXX - sumX * sumX);
+    if (denominator === 0) return null; // Avoid division by zero
+    
+    const slope = (n * sumXY - sumX * sumY) / denominator;
+    const intercept = (sumY - slope * sumX) / n;
+    
+    return { slope, intercept };
+  }, []);
+
+  // Predict score based on historical data (now a helper for getScoreForDateAndCompany)
+  const predictScore = useCallback((company, targetDate, type) => {
+    if (!data.length) return 0; // Just return value, no metadata
+    
     const scoreKey = imageCompanyScoreKeys[company];
-    if (!scoreKey) return 0;
+    if (!scoreKey) return 0; // Just return value, no metadata
+    
     const dateKey = Object.keys(data[0])[0];
-  
-    const scores = dateList.flatMap(d => {
-      const dateString = d.toISOString().split("T")[0];
-      const rows = data.filter(row => row[dateKey] === dateString && row.Type === type);
-      return rows.map(row => parseFloat(row[scoreKey])).filter(n => !isNaN(n));
+    const targetTime = new Date(targetDate).getTime();
+    
+    // Collect all historical non-zero data points
+    const historicalPoints = [];
+    const allRows = data.filter(row => row.Type === type);
+    
+    allRows.forEach(row => {
+      const rowDate = new Date(row[dateKey]);
+      const score = parseFloat(row[scoreKey]);
+      
+      if (!isNaN(score) && score > 0 && rowDate.getTime() <= targetTime) { // Only use data up to target date
+        historicalPoints.push({
+          x: rowDate.getTime(),
+          y: score
+        });
+      }
     });
-  
+    
+    if (historicalPoints.length < 2) {
+      return 0; // Not enough data to predict, return 0
+    }
+    
+    // Calculate regression
+    const regression = calculateLinearRegression(historicalPoints);
+    if (!regression) return 0; // If regression fails, return 0
+    
+    // Predict value
+    const predictedValue = regression.slope * targetTime + regression.intercept;
+    
+    // Bound between 0 and 100
+    const boundedValue = Math.max(0, Math.min(100, predictedValue));
+    
+    return parseFloat(boundedValue.toFixed(1)); // Return value
+  }, [data, calculateLinearRegression]);
+
+  // Primary function to get a single score for a company and date, with prediction logic
+  const getScoreForDateAndCompany = useCallback((company, date, type) => {
+    if (!data.length || !date) return 0; // Just return value
+    
+    const scoreKey = imageCompanyScoreKeys[company];
+    if (!scoreKey) return 0; // Just return value
+    const dateKey = Object.keys(data[0])[0];
+    const dateString = date.toISOString().split("T")[0];
+
+    // Try to find the actual score for the given date
+    const rows = data.filter(row => row[dateKey] === dateString && row.Type === type);
+    const rawScores = rows.map(row => parseFloat(row[scoreKey])).filter(n => !isNaN(n));
+
+    // If actual non-zero scores exist, return their average
+    const nonZeroScores = rawScores.filter(s => s > 0);
+    if (nonZeroScores.length > 0) {
+      const avg = nonZeroScores.reduce((a, b) => a + b, 0) / nonZeroScores.length;
+      return parseFloat(avg.toFixed(1)); // Return value
+    }
+
+    // If no non-zero scores or no data for this date, predict
+    const prediction = predictScore(company, date, type);
+    return prediction; // This is already a value, not an object
+  }, [data, predictScore]);
+
+
+  // Score computation (now averages over a list of dates using getScoreForDateAndCompany)
+  const computeScore = useCallback((company, type = "nota", dateList = [selectedDate]) => {
+    if (!data.length || !dateList.length) return 0;
+    
+    const scores = dateList.map(d => getScoreForDateAndCompany(company, d, type)); // getScoreForDateAndCompany now returns just the value
     const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     return parseFloat(avg.toFixed(1));
-  };
+  }, [data, selectedDate, getScoreForDateAndCompany]);
+
 
   // Added trend data function
-  const getTrendData = (company) => {
+  const getTrendData = useCallback((company) => {
     if (!company || !data.length || !filteredDates.length) return null;
   
-    const formatDate = (d) => d.toISOString().split("T")[0];
     const dateObjects = filteredDates.filter(d => d <= selectedDate);
-    const labels = dateObjects.map(formatDate);
-    const values = dateObjects.map(d => computeScore(company, formatDate(d), contentType, [d]));
+    const labels = dateObjects.map(d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    
+    const values = dateObjects.map(d => 
+      getScoreForDateAndCompany(company, d, contentType) // getScoreForDateAndCompany now returns just the value
+    );
     
     // Average line
     const avg = values.reduce((a, b) => a + b, 0) / values.length;
@@ -250,13 +379,17 @@ const ImageScoresOverview = () => {
     // Regression line
     const linearRegression = (yValues) => {
       const n = yValues.length;
+      if (n < 2) return { regressionLine: [], slope: 0 };
       const xValues = [...Array(n).keys()];
       const sumX = xValues.reduce((a, b) => a + b, 0);
       const sumY = yValues.reduce((a, b) => a + b, 0);
       const sumXY = xValues.reduce((sum, x, i) => sum + x * yValues[i], 0);
       const sumXX = xValues.reduce((sum, x) => sum + x * x, 0);
   
-      const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+      const denominator = (n * sumXX - sumX * sumX);
+      if (denominator === 0) return { regressionLine: [], slope: 0 };
+      
+      const slope = (n * sumXY - sumX * sumY) / denominator;
       const intercept = (sumY - slope * sumX) / n;
   
       const yRegression = xValues.map(x => slope * x + intercept);
@@ -275,7 +408,10 @@ const ImageScoresOverview = () => {
           backgroundColor: "transparent",
           borderWidth: 2,
           tension: 0.3,
-          pointRadius: 3, // Keep this as is for the main trend line
+          pointRadius: 3,
+          pointBackgroundColor: companyColors[company] || "#00f7ff", // No conditional color for predicted points
+          pointBorderColor: companyColors[company] || "#00f7ff", // No conditional color for predicted points
+          pointBorderWidth: 1, // No conditional border width for predicted points
           fill: false
         },
         {
@@ -284,7 +420,7 @@ const ImageScoresOverview = () => {
           borderColor: "white",
           borderDash: [6, 4],
           borderWidth: 1.5,
-          pointRadius: 1, // Set a small radius to make it hoverable
+          pointRadius: 1,
           fill: false
         },
         {
@@ -293,16 +429,16 @@ const ImageScoresOverview = () => {
           borderColor: "#ffdc00",
           borderDash: [4, 3],
           borderWidth: 1.5,
-          pointRadius: 1, // Set a small radius to make it hoverable
+          pointRadius: 1,
           slopeValue: slope,
           fill: false
         }
       ]
     };
-  };
+  }, [data, filteredDates, selectedDate, getScoreForDateAndCompany, contentType, companyColors]);
   
 
-  const getMetricsForCompany = (company, type = contentType, date = dateStr) => {
+  const getMetricsForCompany = useCallback((company, type = contentType, date = dateStr) => {
     if (!data.length || !date || !metricKeys[company]) return {};
   
     const dateKey = Object.keys(data[0])[0];
@@ -323,24 +459,28 @@ const ImageScoresOverview = () => {
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     };
   
+    // Include overallScore for R2 correlation calculation
+    const overallScore = getScoreForDateAndCompany(company, new Date(date), type);
+
     return {
+      overallScore: overallScore, // Added overallScore
       cls: average("cls"),
       lcp: average("lcp"),
       si: average("si"),
       tbt: average("tbt"),
       fcp: average("fcp")
     };
-  };
+  }, [data, contentType, dateStr, getScoreForDateAndCompany]);
 
   // Calculate average scores for each group
   const getGroupScores = useMemo(() => {
     if (!selectedDate) return { azteca: 0, competition: 0 };
     
-    const calculateAverage = (companies) => {
+    const calculateAverage = (companies, dateList) => {
       let total = 0, count = 0;
       companies.forEach(company => {
-        const score = computeScore(company);
-        if (score > 0) {
+        const score = computeScore(company, contentType, dateList);
+        if (!isNaN(score)) { // Predicted scores are always numbers
           total += score;
           count++;
         }
@@ -348,23 +488,11 @@ const ImageScoresOverview = () => {
       return count ? parseFloat((total / count).toFixed(1)) : 0;
     };
     
-    const getPreviousAverage = (companies) => {
-      if (!previousDateStr) return 0;
-      let total = 0, count = 0;
-      companies.forEach(company => {
-        const score = computeScore(company, previousDateStr);
-        if (score > 0) {
-          total += score;
-          count++;
-        }
-      });
-      return count ? parseFloat((total / count).toFixed(1)) : 0;
-    };
+    const aztecaScore = calculateAverage(imageCompanies, dateRangeForCurrentView);
+    const competitionScore = calculateAverage(competitionCompanies, dateRangeForCurrentView); // Will be 0 as no competition companies
     
-    const aztecaScore = calculateAverage(imageCompanies);
-    const competitionScore = calculateAverage(competitionCompanies);
-    const prevAztecaScore = getPreviousAverage(imageCompanies);
-    const prevCompetitionScore = getPreviousAverage(competitionCompanies);
+    const prevAztecaScore = calculateAverage(imageCompanies, previousDate ? [previousDate] : []);
+    const prevCompetitionScore = calculateAverage(competitionCompanies, previousDate ? [previousDate] : []);
     
     const aztecaChange = prevAztecaScore ? ((aztecaScore - prevAztecaScore) / prevAztecaScore * 100).toFixed(1) : 0;
     const competitionChange = prevCompetitionScore ? ((competitionScore - prevCompetitionScore) / prevCompetitionScore * 100).toFixed(1) : 0;
@@ -376,13 +504,13 @@ const ImageScoresOverview = () => {
       competitionChange: parseFloat(competitionChange),
       difference: (aztecaScore - competitionScore).toFixed(1)
     };
-  }, [selectedDate, previousDateStr, imageCompanies, competitionCompanies, timeRange]);
+  }, [selectedDate, previousDate, imageCompanies, competitionCompanies, contentType, dateRangeForCurrentView, computeScore]);
 
   const companyPerformance = useMemo(() => {
     return selectedCompanies.map(company => {
-      const currentScore = computeScore(company, dateStr, contentType, dateRangeForCurrentView);
-      const previousScore = previousDateStr
-        ? computeScore(company, previousDateStr, contentType, [new Date(previousDateStr)])
+      const currentScore = getScoreForDateAndCompany(company, selectedDate, contentType); // Get just the value
+      const previousScore = previousDate
+        ? getScoreForDateAndCompany(company, previousDate, contentType) // Get just the value
         : 0;
   
       const change = previousScore > 0
@@ -395,10 +523,11 @@ const ImageScoresOverview = () => {
         previousScore,
         change: parseFloat(change),
         isAzteca: imageCompanies.includes(company),
-        color: companyColors[company]
+        color: companyColors[company],
+        // isPredicted removed as per request
       };
     }).sort((a, b) => b.score - a.score);
-  }, [selectedCompanies, dateStr, previousDateStr, timeRange, contentType, dateRangeForCurrentView]);
+  }, [selectedCompanies, selectedDate, previousDate, contentType, getScoreForDateAndCompany, imageCompanies, companyColors]);
 
   // Top and bottom performers
   const topPerformers = useMemo(() => {
@@ -418,13 +547,13 @@ const ImageScoresOverview = () => {
   }, [companyPerformance]);
 
   // Chart data with responsive bar sizing
-  const getBarChartData = () => {
+  const getBarChartData = useCallback(() => {
     const formatDate = (d) => d.toISOString().split("T")[0];
   
     const getAvgScoreForCompany = (company, startDate, endDate) => {
-      const scores = uniqueDates
-        .filter(d => d >= startDate && d <= endDate)
-        .map(d => computeScore(company, formatDate(d)))
+      const datesInPeriod = uniqueDates.filter(d => d >= startDate && d <= endDate);
+      const scores = datesInPeriod
+        .map(d => getScoreForDateAndCompany(company, d, contentType)) // Get just the value
         .filter(score => !isNaN(score));
       const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
       return parseFloat(avg.toFixed(1));
@@ -510,14 +639,18 @@ const ImageScoresOverview = () => {
   
     const datasets = displayDates.map(date => {
       if (!date) return null;
+      
+      // Get scores (no metadata needed here)
+      const scores = orderedCompanies.map(c => {
+        return getScoreForDateAndCompany(c, date, contentType);
+      });
+      
       return {
         label: formatDateLabel(date),
-        data: orderedCompanies.map(c =>
-          computeScore(c, date.toISOString().split('T')[0]) || 0
-        ),
-        backgroundColor: orderedCompanies.map(c =>
-          (companyColors && companyColors[c]) || "#00f7ff"
-        ),
+        data: scores,
+        backgroundColor: orderedCompanies.map((c) => companyColors[c] || "#00f7ff"), // No transparency for predicted
+        borderColor: "transparent", // No border for predicted
+        borderWidth: 0, // No border for predicted
         barThickness: dynamicBarThickness,
         maxBarThickness: 20,
         categoryPercentage: 1.0,
@@ -531,10 +664,10 @@ const ImageScoresOverview = () => {
     }).filter(Boolean);
   
     return { labels: orderedCompanies, datasets };
-  };
+  }, [allCompanies, compareEndDate, compareEndDate2, compareStartDate, compareStartDate2, companyColors, contentType, filteredDates, getScoreForDateAndCompany, labelMode, selectedCompanies, selectedDate, timeRange, uniqueDates]);
 
   // Radar chart data
-  const getRadarData = (companySet, isAzteca = true) => {
+  const getRadarData = useCallback((companySet, isAzteca = true) => {
     const orderedCompanies = companySet.slice().sort((a, b) => {
       return allCompanies.indexOf(a) - allCompanies.indexOf(b);
     });
@@ -544,7 +677,7 @@ const ImageScoresOverview = () => {
 
     datasets.push({
       label: "Image Scores",
-      data: orderedCompanies.map(c => computeScore(c, dateStr, contentType, dateRangeForCurrentView)),
+      data: orderedCompanies.map(c => computeScore(c, contentType, dateRangeForCurrentView)),
       borderColor: "#00FFFF",
       pointBackgroundColor: "#00FFFF",
       backgroundColor: "#00FFFF22",
@@ -563,7 +696,7 @@ const ImageScoresOverview = () => {
     });
 
     return { labels, datasets };
-  };
+  }, [allCompanies, computeScore, contentType, dateRangeForCurrentView]);
 
   const formatDisplayDate = (date) => {
     if (!date) return "";
@@ -581,12 +714,430 @@ const ImageScoresOverview = () => {
     const variance = scores.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / scores.length;
     const stdDev = Math.sqrt(variance);
     return Math.max(0, 100 - stdDev * 2).toFixed(1);
-  }, [imageCompanies, dateStr, timeRange]);
+  }, [imageCompanies, computeScore]);
+
+  // Heatmap data generation
+  const getHeatmapData = useMemo(() => {
+    if (!heatmapCompany || !heatmapStartDate || !heatmapEndDate || !data.length) {
+      return { dates: [], metrics: [] };
+    }
+
+    const relevantDates = uniqueDates.filter(
+      d => d >= heatmapStartDate && d <= heatmapEndDate
+    ).sort((a, b) => a - b);
+
+    const metrics = ["cls", "lcp", "si", "tbt", "fcp"];
+    const heatmapScores = {};
+
+    relevantDates.forEach(date => {
+      const dateString = date.toISOString().split('T')[0];
+      const companyMetrics = getMetricsForCompany(heatmapCompany, contentType, dateString);
+      heatmapScores[dateString] = companyMetrics;
+    });
+
+    return {
+      dates: relevantDates.map(d => d.toISOString().split('T')[0]),
+      metrics: metrics,
+      data: heatmapScores
+    };
+  }, [heatmapCompany, heatmapStartDate, heatmapEndDate, contentType, data, uniqueDates, getMetricsForCompany]);
+
+  // Function to get color for a heatmap cell based on metric value
+  const getHeatmapCellColor = useCallback((metric, value) => {
+    if (value === null || isNaN(value)) {
+      return "gray.700"; // No data color
+    }
+    const color = getMetricColor(metric, value);
+    switch (color) {
+      case "lime": return "green.500";
+      case "orange": return "orange.500";
+      case "red": return "red.500";
+      default: return "gray.600";
+    }
+  }, [getMetricColor]);
+
+  // Helper functions for correlation analysis
+  const normalize = (arr) => {
+    const min = Math.min(...arr);
+    const max = Math.max(...arr);
+    if (max === min) return arr.map(() => 0);
+    return arr.map(v => (v - min) / (max - min));
+  };
+
+  const isNegativeMetric = (metric) => ["lcp", "tbt", "si", "fcp", "cls"].includes(metric);
+
+  // Lighthouse 10 weights
+  const LIGHTHOUSE_WEIGHTS = {
+    fcp: 0.10,  // First Contentful Paint - 10%
+    si: 0.10,   // Speed Index - 10%
+    lcp: 0.25,  // Largest Contentful Paint - 25%
+    tbt: 0.30,  // Total Blocking Time - 30%
+    cls: 0.25   // Cumulative Layout Shift - 25%
+  };
+
+  // Metric thresholds for scoring (good/needs improvement/poor)
+  const METRIC_THRESHOLDS = {
+    fcp: { good: 1800, poor: 3000 },
+    si: { good: 3400, poor: 5800 },
+    lcp: { good: 2500, poor: 4000 },
+    tbt: { good: 200, poor: 600 },
+    cls: { good: 0.1, poor: 0.25 }
+  };
+
+  // Calculate metric score (0-100) based on Lighthouse scoring
+  const calculateMetricScore = useCallback((metric, value) => {
+    if (value === null || isNaN(value)) return 0;
+    
+    const LOG_NORMAL_PARAMS = {
+      fcp: { median: 1800, podr: 1000 },
+      si: { median: 3400, podr: 1700 },
+      lcp: { median: 2500, podr: 1200 },
+      tbt: { median: 300, podr: 100 },
+      cls: { median: 0.1, podr: 0.01 } // special case: lower = better
+    };
+    
+    const { median, podr } = LOG_NORMAL_PARAMS[metric] || {};
+    if (!median || !podr) return 0;
+    
+    // Lighthouse scoring function approximation
+    const logNormalScore = (value) => {
+      const ln = Math.log;
+      const location = Math.log(podr);
+      const shape = Math.sqrt(2 * Math.log(median / podr));
+      const score = 1 / (1 + Math.exp((ln(value) - location) / shape));
+      return Math.max(0, Math.min(1, score));
+    };
+    
+    const score = logNormalScore(value);
+    return Math.round(score * 100);
+  }, []);
+  
+
+  // NEW: Calculate R-squared correlations for the selected heatmap company and date range
+  const calculateR2Correlations = useCallback(() => {
+    if (!heatmapCompany || !heatmapStartDate || !heatmapEndDate || !data.length) {
+      setR2Correlations(null);
+      return;
+    }
+
+    const relevantDates = uniqueDates.filter(
+      d => d >= heatmapStartDate && d <= heatmapEndDate
+    ).sort((a, b) => a - b);
+
+    const correlations = {};
+    const metricsToAnalyze = ["cls", "lcp", "si", "tbt", "fcp"];
+
+    metricsToAnalyze.forEach(metric => {
+      const metricValuesForR = [];
+      const overallScoresForR = [];
+
+      for (let i = 0; i < relevantDates.length; i++) {
+        const dateString = relevantDates[i].toISOString().split('T')[0];
+        const currentMetrics = getMetricsForCompany(heatmapCompany, contentType, dateString);
+
+        if (currentMetrics.overallScore && !isNaN(currentMetrics.overallScore) &&
+            currentMetrics[metric] !== null && !isNaN(currentMetrics[metric])) {
+          metricValuesForR.push(currentMetrics[metric]);
+          overallScoresForR.push(currentMetrics.overallScore);
+        }
+      }
+
+      if (metricValuesForR.length >= 3) { // Need at least 3 points for meaningful correlation
+        try {
+          // Normalize both arrays to handle scale differences
+          const normalizedMetrics = normalize(metricValuesForR);
+          const normalizedScores = normalize(overallScoresForR);
+          
+          // Invert negative metrics so positive correlation = good performance
+          const adjustedMetricValues = isNegativeMetric(metric) 
+            ? normalizedMetrics.map(v => 1 - v) 
+            : normalizedMetrics;
+
+          // Calculate Pearson correlation coefficient 
+          const r = sampleCorrelation(adjustedMetricValues, normalizedScores);
+          const r2 = r * r;
+
+          // Calculate current metric score and potential improvement
+          const avgValue = metricValuesForR.reduce((a, b) => a + b, 0) / metricValuesForR.length;
+          const currentMetricScore = calculateMetricScore(metric, avgValue);
+          const maxPossibleMetricScore = 100;
+          const potentialImprovement = maxPossibleMetricScore - currentMetricScore;
+
+          correlations[metric] = { 
+            r: parseFloat(r.toFixed(3)), 
+            r2: parseFloat(r2.toFixed(3)),
+            n: metricValuesForR.length,
+            avgValue: avgValue,
+            minValue: Math.min(...metricValuesForR),
+            maxValue: Math.max(...metricValuesForR),
+            weight: LIGHTHOUSE_WEIGHTS[metric],
+            currentMetricScore: currentMetricScore,
+            potentialImprovement: potentialImprovement, // Raw score points from metric itself
+            weightedPotentialGain: potentialImprovement * LIGHTHOUSE_WEIGHTS[metric] // Points contributed to overall LH score
+          };
+        } catch (e) {
+          console.warn(`Could not calculate correlation for ${metric}:`, e);
+          correlations[metric] = null;
+        }
+      } else {
+        correlations[metric] = null;
+      }
+    });
+
+    setR2Correlations(correlations);
+  }, [heatmapCompany, heatmapStartDate, heatmapEndDate, contentType, data, uniqueDates, getMetricsForCompany, calculateMetricScore]);
+
+  // Effect to re-calculate R2 when heatmap selections change
+  useEffect(() => {
+    calculateR2Correlations();
+  }, [heatmapCompany, heatmapStartDate, heatmapEndDate, contentType, calculateR2Correlations]);
+
+  // NEW: R-squared Chart Data
+  const getR2ChartData = useMemo(() => {
+    if (!r2Correlations) {
+      return { labels: [], datasets: [] };
+    }
+
+    const labels = ["CLS", "LCP", "SI", "TBT", "FCP"];
+    const values = showR2Mode 
+      ? [ // Show R²
+          r2Correlations.cls?.r2,
+          r2Correlations.lcp?.r2,
+          r2Correlations.si?.r2,
+          r2Correlations.tbt?.r2,
+          r2Correlations.fcp?.r2
+        ]
+      : [ // Show R
+          r2Correlations.cls?.r,
+          r2Correlations.lcp?.r,
+          r2Correlations.si?.r,
+          r2Correlations.tbt?.r,
+          r2Correlations.fcp?.r
+        ];
+
+    // Add weight indicators to labels
+    const labelsWithWeights = labels.map((label, idx) => {
+      const metric = label.toLowerCase();
+      const weight = LIGHTHOUSE_WEIGHTS[metric] * 100;
+      return `${label}\n(${weight}%)`;
+    });
+
+    const backgroundColors = values.map((value, idx) => {
+      if (value === null || value === undefined) return "rgba(128, 128, 128, 0.5)";
+      
+      const absValue = showR2Mode ? value : Math.abs(value);
+      const metric = labels[idx].toLowerCase();
+      const weight = LIGHTHOUSE_WEIGHTS[metric];
+      
+      // Enhanced colors based on both correlation and weight
+      if (absValue >= 0.7 && weight >= 0.25) return "rgba(34, 211, 76, 1)"; // Strong + High weight (bright green)
+      if (absValue >= 0.7) return "rgba(34, 211, 76, 0.8)"; // Strong correlation (green)
+      if (absValue >= 0.4) return "rgba(255, 167, 61, 0.8)"; // Moderate correlation (orange)
+      return "rgba(255, 41, 101, 0.8)"; // Weak correlation (red)
+    });
+
+    return {
+      labels: labels,
+      datasets: [{
+        label: showR2Mode ? "R² (Variance Explained)" : "Correlation Strength (r)",
+        data: values.map(v => v !== null && v !== undefined ? v : 0),
+        backgroundColor: backgroundColors,
+        borderColor: backgroundColors.map(c => c.replace('0.8', '1')),
+        borderWidth: 2,
+      }]
+    };
+  }, [r2Correlations, showR2Mode]);
+
+  // Calculate expected score improvement
+  const calculateScoreImpact = useCallback((metric, percentImprovement = 10) => {
+    if (!r2Correlations || !r2Correlations[metric]) return null;
+    
+    const correlation = r2Correlations[metric];
+    const currentAvg = correlation.avgValue;
+    const thresholds = METRIC_THRESHOLDS[metric];
+    
+    // Calculate target value based on percentage improvement
+    const targetValue = isNegativeMetric(metric) 
+      ? currentAvg * (1 - percentImprovement / 100)
+      : currentAvg * (1 + percentImprovement / 100);
+    
+    // Calculate optimal target (good threshold)
+    const optimalTarget = thresholds.good;
+    
+    // Calculate current and target metric scores
+    const currentMetricScore = calculateMetricScore(metric, currentAvg);
+    const targetMetricScore = calculateMetricScore(metric, targetValue);
+    const optimalMetricScore = 100;
+    
+    // Calculate weighted score improvements
+    const immediateGain = (targetMetricScore - currentMetricScore) * LIGHTHOUSE_WEIGHTS[metric];
+    const maxPossibleGain = (optimalMetricScore - currentMetricScore) * LIGHTHOUSE_WEIGHTS[metric];
+    
+    return {
+      metric,
+      currentAvg: currentAvg.toFixed(metric === 'cls' ? 3 : 0),
+      targetValue: targetValue.toFixed(metric === 'cls' ? 3 : 0),
+      optimalTarget: optimalTarget.toFixed(metric === 'cls' ? 3 : 0),
+      currentMetricScore: currentMetricScore,
+      targetMetricScore: targetMetricScore,
+      immediateScoreGain: immediateGain.toFixed(1),
+      maxPossibleGain: maxPossibleGain.toFixed(1),
+      weight: (LIGHTHOUSE_WEIGHTS[metric] * 100).toFixed(0),
+    };
+  }, [r2Correlations, calculateMetricScore]);
+
+  // Calculate total possible score improvement
+  const calculateTotalPossibleImprovement = useCallback(() => {
+    if (!r2Correlations || !heatmapCompany) return null;
+    
+    // Get the actual current score using the same method as the bar chart
+    const actualCurrentScore = computeScore(heatmapCompany, contentType, 
+      heatmapEndDate ? [heatmapEndDate] : [selectedDate]);
+    
+    let totalCurrentWeightedScore = 0;
+    let totalMaxWeightedScore = 0;
+    let breakdownByMetric = [];
+    
+    Object.entries(r2Correlations).forEach(([metric, data]) => {
+      if (data && data.currentMetricScore !== undefined) {
+        const currentWeighted = data.currentMetricScore * LIGHTHOUSE_WEIGHTS[metric];
+        const maxWeighted = 100 * LIGHTHOUSE_WEIGHTS[metric];
+        
+        totalCurrentWeightedScore += currentWeighted;
+        totalMaxWeightedScore += maxWeighted;
+        
+        breakdownByMetric.push({
+          metric: metric.toUpperCase(),
+          currentScore: data.currentMetricScore,
+          currentWeighted: currentWeighted.toFixed(1),
+          maxPossible: maxWeighted.toFixed(1),
+          improvement: (maxWeighted - currentWeighted).toFixed(1),
+          avgValue: data.avgValue.toFixed(metric === 'cls' ? 3 : 0),
+          targetValue: METRIC_THRESHOLDS[metric].good.toFixed(metric === 'cls' ? 3 : 0),
+          weight: LIGHTHOUSE_WEIGHTS[metric]
+        });
+      }
+    });
+    
+    // Sort by improvement potential
+    breakdownByMetric.sort((a, b) => parseFloat(b.improvement) - parseFloat(a.improvement));
+    
+    return {
+      actualCurrentScore: actualCurrentScore.toFixed(1), // Use the actual score from computeScore
+      currentTotal: totalCurrentWeightedScore.toFixed(1),
+      maxTotal: totalMaxWeightedScore.toFixed(1),
+      totalPossibleGain: (100 - actualCurrentScore).toFixed(1),
+      breakdown: breakdownByMetric
+    };
+  }, [r2Correlations, heatmapCompany, computeScore, contentType, heatmapEndDate, selectedDate]);
+  
+  // Calculate required improvements to reach target score
+  const calculateTargetRequirements = useCallback((targetScoreInput) => {
+    if (!r2Correlations || !heatmapCompany || !targetScoreInput || targetScoreInput <= 0) return null;
+    
+    const actualCurrentScore = computeScore(heatmapCompany, contentType, 
+      heatmapEndDate ? [heatmapEndDate] : [selectedDate]);
+    
+    const scoreGapNeeded = targetScoreInput - actualCurrentScore;
+    
+    if (scoreGapNeeded <= 0) {
+      return { alreadyAchieved: true, currentScore: actualCurrentScore };
+    }
+    
+    // Calculate improvement needed for each metric
+    const metricRequirements = [];
+    let cumulativeGain = 0;
+    
+    // Sort metrics by efficiency (weighted potential improvement)
+    const sortedMetrics = Object.entries(r2Correlations)
+      .filter(([_, data]) => data && data.weightedPotentialGain > 0) // Ensure potential gain exists
+      .sort((a, b) => {
+        const efficiencyA = a[1].weightedPotentialGain;
+        const efficiencyB = b[1].weightedPotentialGain;
+        return efficiencyB - efficiencyA;
+      });
+    
+    for (let i = 0; i < sortedMetrics.length && cumulativeGain < scoreGapNeeded; i++) {
+      const [metric, data] = sortedMetrics[i];
+      const currentValue = data.avgValue;
+      const goodThreshold = METRIC_THRESHOLDS[metric].good;
+      
+      let targetValueForMetric;
+      let metricScoreGain;
+      let percentChange;
+
+      // Determine how much of this metric's potential gain is needed
+      const remainingGap = scoreGapNeeded - cumulativeGain;
+      const maxGainFromThisMetric = data.weightedPotentialGain;
+
+      if (remainingGap <= maxGainFromThisMetric) {
+        // We only need a partial improvement from this metric to reach the target
+        metricScoreGain = remainingGap;
+        // Inverse calculation to find the target raw value for the metric
+        // This is a simplified linear approximation; actual Lighthouse scoring is log-normal.
+        const currentMetricScore = calculateMetricScore(metric, currentValue);
+        const targetMetricScoreForThisMetric = currentMetricScore + (remainingGap / data.weight);
+
+        // Approximate target raw value using inverse of calculateMetricScore
+        const LOG_NORMAL_PARAMS = {
+          fcp: { median: 1800, podr: 1000 },
+          si: { median: 3400, podr: 1700 },
+          lcp: { median: 2500, podr: 1200 },
+          tbt: { median: 300, podr: 100 },
+          cls: { median: 0.1, podr: 0.01 }
+        };
+        const { median, podr } = LOG_NORMAL_PARAMS[metric] || {};
+        const scoreFraction = targetMetricScoreForThisMetric / 100;
+        
+        if (isNegativeMetric(metric)) { // Lower is better
+          targetValueForMetric = Math.exp(Math.log(podr) + Math.sqrt(2 * Math.log(median / podr)) * Math.log((1 / scoreFraction) - 1));
+          targetValueForMetric = Math.max(goodThreshold, targetValueForMetric); // Don't suggest worse than good threshold
+        } else { // Higher is better (not typically for Core Web Vitals)
+          targetValueForMetric = Math.exp(Math.log(podr) + Math.sqrt(2 * Math.log(median / podr)) * Math.log((1 / scoreFraction) - 1));
+          targetValueForMetric = Math.min(goodThreshold, targetValueForMetric); // Don't suggest better than good threshold if not applicable
+        }
+
+        percentChange = ((currentValue - targetValueForMetric) / currentValue * 100);
+        
+      } else {
+        // Full improvement to good threshold is needed (and still more score needed)
+        targetValueForMetric = goodThreshold;
+        metricScoreGain = maxGainFromThisMetric;
+        percentChange = ((currentValue - goodThreshold) / currentValue * 100);
+      }
+      
+      metricRequirements.push({
+        metric: metric.toUpperCase(),
+        currentValue: currentValue.toFixed(metric === 'cls' ? 3 : 0),
+        targetValue: targetValueForMetric.toFixed(metric === 'cls' ? 3 : 0),
+        percentChange: percentChange.toFixed(1),
+        scoreGain: metricScoreGain.toFixed(1),
+        weight: (data.weight * 100).toFixed(0)
+      });
+      
+      cumulativeGain += metricScoreGain;
+    }
+    
+    const totalAchievableGain = sortedMetrics.reduce((sum, [_, data]) => sum + data.weightedPotentialGain, 0);
+
+    return {
+      currentScore: actualCurrentScore.toFixed(1),
+      targetScore: targetScoreInput,
+      scoreGapNeeded: scoreGapNeeded.toFixed(1),
+      achievable: cumulativeGain >= scoreGapNeeded,
+      requirements: metricRequirements,
+      totalGainPossible: totalAchievableGain.toFixed(1)
+    };
+  }, [r2Correlations, heatmapCompany, computeScore, contentType, heatmapEndDate, selectedDate, calculateMetricScore]);
+
+
+  // MatrixRain placeholder component
+  const MatrixRain = () => <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none' }} />;
 
   return (
     <Box pt="50px" px={6} className="glass-bg" position="relative">
-      <MatrixRain /> {/* 👈 Añadido aquí */}
-      <Text className="title">Image Overview</Text>
+      <MatrixRain />
+      <Text className="title">Gallery Overview</Text>
   
   
       {!selectedDate ? (
@@ -682,6 +1233,7 @@ const ImageScoresOverview = () => {
 
           {/* Performance Summary */}
           <Flex justify="flex-end" mb={2} mr={2}>
+            {/* Removed the "Predictions Active" Tooltip and Badge */}
           </Flex>
 
           <Box width="100%" maxW="1200px" mx="auto">
@@ -696,9 +1248,12 @@ const ImageScoresOverview = () => {
                     p={3} 
                     borderRadius="md"
                     minH="120px"
+                    position="relative"
+                    // Removed conditional border styling
                   >
                     <Text fontWeight="bold" fontSize="sm" mb={1} color="white">
                       {company.name}
+                      {/* Removed conditional badge for predicted values */}
                     </Text>
                     <Stat>
                       <StatLabel fontSize="xs" color="rgba(255,255,255,0.5)">Average</StatLabel>
@@ -909,6 +1464,18 @@ const ImageScoresOverview = () => {
                     if (element) {
                       const companyName = chart.data.labels[element.index];
                       setTrendCompany(companyName);
+                      setHeatmapCompany(companyName); // Set heatmap company when clicking bar chart
+                      // Adjust heatmap dates to match the range of the bar chart if needed
+                      if (timeRange === "custom") {
+                        setHeatmapStartDate(compareStartDate);
+                        setHeatmapEndDate(compareEndDate);
+                      } else {
+                        // Default to a reasonable range or all dates for heatmap
+                        if (uniqueDates.length > 0) {
+                          setHeatmapStartDate(uniqueDates[0]);
+                          setHeatmapEndDate(uniqueDates[uniqueDates.length - 1]);
+                        }
+                      }
                     }
                   },
                   plugins: {
@@ -999,7 +1566,7 @@ const ImageScoresOverview = () => {
                     maintainAspectRatio: false,
                     plugins: {
                       legend: { labels: { color: "#ffffff" } },
-                      tooltip: { // Keep tooltip enabled for hovering
+                      tooltip: {
                         callbacks: {
                           label: (context) => {
                             const dataset = context.dataset;
@@ -1010,8 +1577,8 @@ const ImageScoresOverview = () => {
                           }
                         }
                       },
-                      datalabels: { // This is the plugin for the numbers on top of points
-                        display: false // Set display to false to remove these labels
+                      datalabels: {
+                        display: false
                       }
                     },
                     elements: {
@@ -1103,6 +1670,393 @@ const ImageScoresOverview = () => {
                 </Box>
               )}
             </Box>
+          </Box>
+
+          {/* Heatmap Section */}
+          <Box className="anb-chart-container" width="100%" maxW="1200px" pb={6}>
+            <Text className="anb-chart-title" mb={4}>Individual Company Performance Details</Text>
+
+            <Flex justify="center" mb={4} wrap="wrap" gap={4}>
+              <Box>
+                <Text fontSize="sm" color="white" mb={1}>Select Company</Text>
+                <Select
+                  value={heatmapCompany || ''}
+                  onChange={(e) => setHeatmapCompany(e.target.value)}
+                  bg="rgba(255,255,255,0.1)"
+                  color="white"
+                  borderColor="rgba(255,255,255,0.2)"
+                  width={{ base: "100%", md: "200px" }}
+                >
+                  {allCompanies.map(company => (
+                    <option key={company} value={company}>{company}</option>
+                  ))}
+                </Select>
+              </Box>
+              <Box>
+                <Text fontSize="sm" color="white" mb={1}>Start Date</Text>
+                <Input
+                  type="date"
+                  value={heatmapStartDate ? heatmapStartDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => setHeatmapStartDate(new Date(e.target.value))}
+                  max={heatmapEndDate ? heatmapEndDate.toISOString().split('T')[0] : uniqueDates[uniqueDates.length - 1]?.toISOString().split('T')[0]}
+                  color="white"
+                  bg="rgba(255,255,255,0.1)"
+                  borderColor="rgba(255,255,255,0.2)"
+                  sx={{ '::-webkit-calendar-picker-indicator': { filter: 'invert(1)' } }}
+                />
+              </Box>
+              <Box>
+                <Text fontSize="sm" color="white" mb={1}>End Date</Text>
+                <Input
+                  type="date"
+                  value={heatmapEndDate ? heatmapEndDate.toISOString().split('T')[0] : ''}
+                  onChange={(e) => setHeatmapEndDate(new Date(e.target.value))}
+                  min={heatmapStartDate ? heatmapStartDate.toISOString().split('T')[0] : uniqueDates[0]?.toISOString().split('T')[0]}
+                  max={uniqueDates[uniqueDates.length - 1]?.toISOString().split('T')[0]}
+                  color="white"
+                  bg="rgba(255,255,255,0.1)"
+                  borderColor="rgba(255,255,255,0.2)"
+                  sx={{ '::-webkit-calendar-picker-indicator': { filter: 'invert(1)' } }}
+                />
+              </Box>
+            </Flex>
+
+            <Flex direction={{ base: "column", lg: "row" }} gap={6} justify="center" align="flex-start">
+              {heatmapCompany && heatmapStartDate && heatmapEndDate && getHeatmapData.dates.length > 0 ? (
+                <Box overflowX="auto" pb={4} flex="1">
+                  <Text className="anb-chart-subtitle" mb={2}>Metric Values Over Time</Text>
+                  <Flex>
+                    {/* Empty corner for alignment */}
+                    <Box w="80px" flexShrink={0}></Box>
+                    {/* Date Labels */}
+                    {getHeatmapData.dates.map(date => (
+                      <Box
+                        key={date}
+                        w="50px"
+                        flexShrink={0}
+                        textAlign="center"
+                        color="white"
+                        fontSize="xs"
+                        fontWeight="bold"
+                        p={1}
+                        borderBottom="1px solid rgba(255,255,255,0.1)"
+                      >
+                        {new Date(date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+                      </Box>
+                    ))}
+                  </Flex>
+
+                  {/* Metric Rows */}
+                  {getHeatmapData.metrics.map(metric => (
+                    <Flex key={metric}>
+                      <Box
+                        w="80px"
+                        flexShrink={0}
+                        textAlign="right"
+                        color="white"
+                        fontSize="sm"
+                        fontWeight="bold"
+                        p={2}
+                        borderRight="1px solid rgba(255,255,255,0.1)"
+                        textTransform="uppercase"
+                      >
+                        {metric}
+                      </Box>
+                      {getHeatmapData.dates.map(date => {
+                        const value = getHeatmapData.data[date]?.[metric];
+                        return (
+                          <Tooltip
+                            key={`${metric}-${date}`}
+                            label={`${metric.toUpperCase()}: ${value !== null && !isNaN(value) ? value.toFixed(metric === "cls" ? 3 : 1) : 'N/A'}`}
+                            placement="top"
+                            bg="gray.700"
+                            color="white"
+                            fontSize="xs"
+                            hasArrow
+                            _hover={{ transform: "scale(1.1)", zIndex: 1 }}
+                            transition="transform 0.1s ease-in-out"
+                          >
+                            <Flex
+                              w="50px"
+                              h="40px"
+                              flexShrink={0}
+                              bg={getHeatmapCellColor(metric, value)}
+                              justify="center"
+                              align="center"
+                              border="1px solid rgba(0,0,0,0.1)"
+                            >
+                              <Text fontSize="xs" color="white" fontWeight="bold">
+                                {value !== null && !isNaN(value) ? (
+                                  metric === "cls" ? value.toFixed(3) : value.toFixed(1)
+                                ) : '-'}
+                              </Text>
+                            </Flex>
+                          </Tooltip>
+                        );
+                      })}
+                    </Flex>
+                  ))}
+                </Box>
+              ) : (
+                <Text color="gray.400" textAlign="center" mt={4} flex="1">
+                  Please select a company and a date range to view the heatmap.
+                </Text>
+              )}
+
+              {/* NEW: R-squared Correlation Graph */}
+              {heatmapCompany && r2Correlations && Object.values(r2Correlations).some(r => r !== null) ? (
+                <Box
+                  flex="1"
+                  minW="400px"
+                  maxW="550px"
+                  height="auto"
+                  bg="rgba(255,255,255,0.05)"
+                  p={4}
+                  borderRadius="md"
+                  boxShadow="0 0 12px rgba(0,255,255,0.2)"
+                >
+                  <Flex direction="column" height="100%">
+                    {/* Title with Toggle */}
+                    <Flex justify="space-between" align="center" mb={2}>
+                      <Text fontSize="md" color="cyan.300" fontWeight="bold">
+                        Metric Impact Analysis
+                      </Text>
+                      <HStack spacing={2}>
+                        <Button
+                          size="xs"
+                          onClick={() => setShowR2Mode(!showR2Mode)}
+                          colorScheme="cyan"
+                          variant="outline"
+                        >
+                          Show {showR2Mode ? 'r' : 'r²'}
+                        </Button>
+                      </HStack>
+                    </Flex>
+
+                    {/* Target Score Calculator */}
+                    <Box mb={3} p={2} bg="rgba(255,255,255,0.05)" borderRadius="md">
+                      <Flex align="center" gap={2}>
+                        <Text fontSize="xs" color="white">Target Score:</Text>
+                        <Input
+                          type="number"
+                          value={targetScore}
+                          onChange={(e) => setTargetScore(parseInt(e.target.value) || 0)}
+                          size="xs"
+                          width="60px"
+                          min="0"
+                          max="100"
+                          bg="rgba(255,255,255,0.1)"
+                          color="white"
+                          borderColor="cyan.500"
+                        />
+                        <Text fontSize="xs" color="gray.400">/ 100</Text>
+                      </Flex>
+                    </Box>
+
+                    {/* Chart */}
+                    <Box flex="1" maxH="250px">
+                      <Bar
+                        data={getR2ChartData}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                              callbacks: {
+                                label: (context) => {
+                                  const metric = context.label.toLowerCase();
+                                  const corr = r2Correlations[metric];
+                                  if (!corr) return `${context.label}: N/A`;
+                                  
+                                  const lines = [
+                                    `${context.label}:`,
+                                    `Weight: ${(LIGHTHOUSE_WEIGHTS[metric] * 100)}%`,
+                                    `r = ${corr.r.toFixed(3)}`,
+                                    `r² = ${corr.r2.toFixed(3)} (${(corr.r2 * 100).toFixed(1)}% variance)`,
+                                    `n = ${corr.n} data points`,
+                                    `Current: ${corr.avgValue.toFixed(metric === 'cls' ? 3 : 0)}`,
+                                    `Score: ${corr.currentMetricScore}/100`,
+                                    `Potential: +${corr.weightedPotentialGain.toFixed(1)} pts`
+                                  ];
+                                  return lines;
+                                }
+                              }
+                            },
+                            datalabels: {
+                              display: true,
+                              color: 'white',
+                              font: { weight: 'bold', size: 11 },
+                              formatter: (value) => {
+                                if (showR2Mode) {
+                                  return (value * 100).toFixed(0) + '%';
+                                } else {
+                                  return value.toFixed(2);
+                                }
+                              }
+                            }
+                          },
+                          scales: {
+                            x: {
+                              ticks: { color: "white" },
+                              grid: { display: false }
+                            },
+                            y: {
+                              min: showR2Mode ? 0 : -1,
+                              max: 1,
+                              ticks: { 
+                                color: "white",
+                                callback: function(value) {
+                                  if (showR2Mode) {
+                                    return (value * 100).toFixed(0) + '%';
+                                  }
+                                  return value.toFixed(1);
+                                }
+                              },
+                              grid: { color: "rgba(255,255,255,0.1)" }
+                            }
+                          }
+                        }}
+                        plugins={[ChartDataLabels]}
+                      />
+                    </Box>
+
+                    {/* Improvement Recommendations */}
+                    <Box mt={4} p={3} bg="rgba(0,255,255,0.1)" borderRadius="md">
+                      <Text fontSize="sm" fontWeight="bold" color="white" mb={2}>
+                        📊 Actionable Insights (Lighthouse 10 Weights):
+                      </Text>
+                      
+                      {/* Total Possible Improvement */}
+                      {(() => {
+                        const totalImprovement = calculateTotalPossibleImprovement();
+                        if (!totalImprovement) return null;
+                        
+                        return (
+                          <>
+                            <Box mb={3} p={2} bg="rgba(255,255,255,0.05)" borderRadius="md">
+                              <Text fontSize="xs" color="cyan.300" fontWeight="bold">
+                                Total Score Potential: +{totalImprovement.totalPossibleGain} points
+                              </Text>
+                              <Text fontSize="xs" color="gray.300">
+                                Current: {totalImprovement.actualCurrentScore} → Max: 100.0
+                              </Text>
+                            </Box>
+                            
+                            <VStack align="start" spacing={2}>
+                              {totalImprovement.breakdown.map(item => {
+                                return (
+                                  <Box key={item.metric} width="100%">
+                                    <Flex justify="space-between" align="center">
+                                      <Text fontSize="xs" color="white">
+                                        <Text as="span" fontWeight="bold" color="cyan.300">
+                                          {item.metric}
+                                        </Text> ({LIGHTHOUSE_WEIGHTS[item.metric.toLowerCase()] * 100}%):
+                                      </Text>
+                                      <Text fontSize="xs" color="green.300" fontWeight="bold">
+                                        +{item.improvement} pts
+                                      </Text>
+                                    </Flex>
+                                    <Text fontSize="xs" color="gray.400" ml={2}>
+                                      {item.avgValue} → {item.targetValue}
+                                      {item.currentScore < 50 && (
+                                        <Badge ml={1} colorScheme="red" fontSize="xs">Priority</Badge>
+                                      )}
+                                    </Text>
+                                  </Box>
+                                );
+                              })}
+                            </VStack>
+                            
+                            {/* Target Score Requirements */}
+                            {(() => {
+                              const targetReqs = calculateTargetRequirements(targetScore);
+                              if (!targetReqs) return null;
+                              
+                              if (targetReqs.alreadyAchieved) {
+                                return (
+                                  <Box p={2} bg="rgba(34,211,76,0.1)" borderRadius="md" mt={3}>
+                                    <Text fontSize="xs" color="green.300">
+                                      ✅ Already achieving target! Current: {targetReqs.currentScore} ≥ Target: {targetScore}
+                                    </Text>
+                                  </Box>
+                                );
+                              }
+                              
+                              return (
+                                <Box mt={3} p={2} bg="rgba(148,82,209,0.1)" borderRadius="md">
+                                  <Text fontSize="xs" fontWeight="bold" color="purple.300" mb={2}>
+                                    🎯 To reach score {targetScore} (+{targetReqs.scoreGapNeeded} pts):
+                                  </Text>
+                                  
+                                  {targetReqs.achievable ? (
+                                    <VStack align="start" spacing={1}>
+                                      {targetReqs.requirements.map((req, idx) => (
+                                        <Box key={req.metric} width="100%">
+                                          <Flex justify="space-between" align="center">
+                                            <Text fontSize="xs" color="white">
+                                              {idx + 1}. <Text as="span" fontWeight="bold">{req.metric}</Text> ({req.weight}%):
+                                            </Text>
+                                            <Text fontSize="xs" color="green.300">
+                                              +{req.scoreGain} pts
+                                            </Text>
+                                          </Flex>
+                                          <Text fontSize="xs" color="gray.400" ml={4}>
+                                            {req.currentValue} → {req.targetValue} ({req.percentChange}%)
+                                          </Text>
+                                        </Box>
+                                      ))}
+                                    </VStack>
+                                  ) : (
+                                    <Text fontSize="xs" color="orange.300">
+                                      ⚠️ Target score {targetScore} requires {targetReqs.scoreGapNeeded} points, 
+                                      but maximum possible gain is {targetReqs.totalGainPossible} points.
+                                      Suggested reachable target: {(parseFloat(targetReqs.currentScore) + parseFloat(targetReqs.totalGainPossible)).toFixed(0)}
+                                    </Text>
+                                  )}
+                                </Box>
+                              );
+                            })()}
+                            
+                            {/* Quick wins */}
+                            <Box mt={3} p={2} bg="rgba(255,167,61,0.1)" borderRadius="md">
+                              <Text fontSize="xs" fontWeight="bold" color="orange.300" mb={1}>
+                                🎯 Quick Wins (10% improvement):
+                              </Text>
+                              {Object.entries(r2Correlations)
+                                .filter(([_, corr]) => corr && corr.r2 >= 0.3) // Only show metrics with at least moderate correlation
+                                .sort((a, b) => {
+                                  const impactA = calculateScoreImpact(a[0], 10);
+                                  const impactB = calculateScoreImpact(b[0], 10);
+                                  return parseFloat(impactB?.immediateScoreGain || 0) - parseFloat(impactA?.immediateScoreGain || 0);
+                                })
+                                .slice(0, 2)
+                                .map(([metric, corr]) => {
+                                  const impact = calculateScoreImpact(metric, 10);
+                                  return (
+                                    <Text key={metric} fontSize="xs" color="white">
+                                      • {metric.toUpperCase()}: {impact?.currentAvg} → {impact?.targetValue} 
+                                      = <Text as="span" color="green.300">+{impact?.immediateScoreGain} pts</Text>
+                                    </Text>
+                                  );
+                                })}
+                            </Box>
+                          </>
+                        );
+                      })()}
+                      
+                      <Text fontSize="xs" color="gray.300" mt={3}>
+                        * Based on {r2Correlations[Object.keys(r2Correlations)[0]]?.n || 0} samples
+                      </Text>
+                    </Box>
+                  </Flex>
+                </Box>
+              ) : (
+                <Text color="gray.400" textAlign="center" mt={4} flex="1">
+                  Select a company and date range in the heatmap to see correlation analysis.
+                </Text>
+              )}
+            </Flex>
           </Box>
 
           {/* Analytics Section */}

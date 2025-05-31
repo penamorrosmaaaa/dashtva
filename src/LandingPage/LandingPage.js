@@ -1,7 +1,3 @@
-/*  FILE:  src/LandingPage/LandingPage.js
-    ROUTE:  /src/LandingPage/LandingPage.js
-*/
-
 import React, { useState, useEffect, useRef, forwardRef } from 'react';
 import {
   Box, Flex, Text, Button, useBreakpointValue, Image,
@@ -13,7 +9,8 @@ import {
 } from 'react-icons/ai';
 import nasaVideo from '../assets/150253-798222949.mp4';
 import logoImage from '../assets/Diseño sin título (1).png';
-import { GiLighthouse } from 'react-icons/gi'; // ✅ NEW
+import { GiLighthouse } from 'react-icons/gi';
+import { FaCreditCard } from 'react-icons/fa'; // ✅ NEW: Import the icon for Tarjetas QA
 
 
 /**
@@ -367,8 +364,16 @@ const LandingPage = ({ handleLogout }) => {
       adminRoute: '/ADMIN-Lighthouse',
       delay: '1.2s',
     },
+    {
+      id: 'tarjetasqa', // ✅ NEW
+      label: 'Tarjetas QA', // ✅ NEW
+      icon: FaCreditCard, // ✅ NEW: Use the imported FaCreditCard icon
+      route: '/TarjetasQA', // ✅ NEW
+      adminRoute: '/ADMIN-TarjetasQA', // ✅ NEW
+      delay: '1.6s', // ✅ NEW: Adjust delay for new card
+    },
   ];
-  
+
 
   /* Random stars: ~420. */
   const starElements = Array.from({ length: 1020 }).map((_, i) => {

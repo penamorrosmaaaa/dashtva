@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   Box,
   Text,
@@ -10,7 +10,6 @@ import {
   IconButton,
   useToast,
   Button,
-  ScatterController,
   ButtonGroup,
   Modal,
   ModalOverlay,
@@ -48,13 +47,11 @@ import {
   FaChevronDown,
   FaChevronLeft,
   FaChevronRight,
-  FaChartLine,
-  FaChartBar,
   FaInfoCircle,
   FaExchangeAlt,
 } from "react-icons/fa";
 import Papa from "papaparse";
-import { Line, Bar, Scatter } from "react-chartjs-2";
+import { Line, Bar } from "react-chartjs-2"; // Removed Scatter import
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -72,8 +69,6 @@ import ChartDataLabels from "chartjs-plugin-datalabels";
 import CountUp from "react-countup";
 import { saveAs } from "file-saver";
 import MatrixRain from "./MatrixRain";
-import DatePicker from "react-datepicker"; // Import react-datepicker
-import "react-datepicker/dist/react-datepicker.css"; // Import datepicker styles
 
 // Register ChartJS components
 ChartJS.register(
@@ -100,16 +95,36 @@ const COMPETITION_COMPANIES = [
   "NyTimes",
   "Terra",
 ];
-const AZTECA_COMPANIES = ["Azteca 7", "Azteca UNO", "ADN40", "Deportes", "A+", "Noticias"];
+const AZTECA_COMPANIES = ["Azteca 7", "Azteca UNO", "ADN40", "Azteca Deportes", "A+", "Azteca Noticias"];
+const ALL_COMPANIES = [...COMPETITION_COMPANIES, ...AZTECA_COMPANIES]; // Combined list
 const TIME_RANGES = ["daily", "weekly", "monthly", "yearly", "all", "custom", "select"];
-const BLOCK_SIZE = 9;
+const BLOCK_SIZE = 9; // Number of columns per company in the CSV
 const COLORS = {
   poor: "#FF2965",
   medium: "#FFA73D",
   good: "#2BFFB9",
   azteca: ["#4A6CF7", "#6A8BFF", "#8CABFF", "#AEC6FF", "#D0E0FF", "#F0F5FF"],
-  competition: "#FF5F6D",
+  competition: "#763EBC",
 };
+
+// Consistent company colors from VerticalOverview
+const companyColors = {
+  "Azteca UNO": "#FF3B3B",
+  "Azteca 7": "#22D34C",
+  "Deportes": "#2255FF",
+  "ADN40": "#F2C744",
+  "A+": "#A452D1",
+  "Noticias": "#E46B17",
+  "Milenio": "#21C285",
+  "Heraldo": "#3B9EFF",
+  "Universal": "#EE5253",
+  "Televisa": "#20C997",
+  "Terra": "#FFA726",
+  "As": "#F44336",
+  "Infobae": "#66E34F",
+  "NyTimes": "#4285F4"
+};
+
 
 const GeneralOverview = () => {
   // State
@@ -131,8 +146,107 @@ const GeneralOverview = () => {
   const [selectedMonthlyGroups, setSelectedMonthlyGroups] = useState([]);
   const [selectedYearlyGroups, setSelectedYearlyGroups] = useState([]);
 
-
   const toast = useToast();
+
+  // Helper to get column keys for a specific company
+  const getCompanyKeys = useCallback((company) => {
+    const allKeys = Object.keys(data[0] || {});
+    const companyIndex = ALL_COMPANIES.indexOf(company);
+    if (companyIndex === -1) return null;
+
+    const base = companyIndex * BLOCK_SIZE;
+    return {
+      dateKey: allKeys[base],
+      typeKey: allKeys[base + 1],
+      scoreKey: allKeys[base + 3],
+      // Add other metric keys if needed for future extensions
+      // clsKey: allKeys[base + 4],
+      // lcpKey: allKeys[base + 5],
+      // siKey: allKeys[base + 6],
+      // tbtKey: allKeys[base + 7],
+      // fcpKey: allKeys[base + 8],
+    };
+  }, [data]);
+
+  // NEW: Function to compute a single score for a company, type, and date,
+  // including linear regression for zero values.
+  const getIndividualScore = useCallback((company, type, date) => {
+    if (!data.length || !date) return 0;
+
+    const keys = getCompanyKeys(company);
+    if (!keys) return 0;
+
+    const { dateKey, typeKey, scoreKey } = keys;
+    const dateStr = date.toISOString().split("T")[0];
+
+    let score = 0;
+    let found = false;
+
+    // Try to find the actual score for the given date
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      if (row[dateKey] === dateStr && (type === "both" || row[typeKey] === type)) {
+        const val = parseFloat(row[scoreKey]);
+        if (!isNaN(val) && val !== 0) { // Only consider non-zero real values
+          score = val;
+          found = true;
+          break;
+        }
+      }
+    }
+
+    // If score is 0 or not found, try to predict using linear regression
+    if (!found || score === 0) {
+      const historicalX = []; // Indices of dates with non-zero scores
+      const historicalY = []; // Non-zero scores
+
+      const sortedUniqueDates = uniqueDates.map(d => d.toISOString().split("T")[0]).sort();
+      const targetDateIndex = sortedUniqueDates.indexOf(dateStr);
+
+      if (targetDateIndex === -1) return 0; // Date not found in unique dates
+
+      // Collect historical non-zero data points for this company/type
+      sortedUniqueDates.forEach((dStr, index) => {
+        let sum = 0;
+        let count = 0;
+        data.forEach(row => {
+          if (row[dateKey] === dStr && (type === "both" || row[typeKey] === type)) {
+            const val = parseFloat(row[scoreKey]);
+            if (!isNaN(val) && val !== 0) {
+              sum += val;
+              count++;
+            }
+          }
+        });
+        if (count > 0) {
+          historicalX.push(index);
+          historicalY.push(sum / count);
+        }
+      });
+
+      // Perform linear regression if enough historical data points exist
+      if (historicalX.length >= 2) {
+        const n = historicalX.length;
+        const sumX = historicalX.reduce((a, b) => a + b, 0);
+        const sumY = historicalY.reduce((a, b) => a + b, 0);
+        const sumXY = historicalX.reduce((acc, xi, i) => acc + xi * historicalY[i], 0);
+        const sumX2 = historicalX.reduce((acc, xi) => acc + xi * xi, 0);
+
+        const denominator = (n * sumX2 - sumX * sumX);
+        if (denominator === 0) return 0; // Avoid division by zero if all x values are the same
+
+        const m = (n * sumXY - sumX * sumY) / denominator;
+        const b = (sumY - m * sumX) / n;
+
+        const predicted = m * targetDateIndex + b;
+        // Bound predicted values between 0-100
+        return Math.max(0, Math.min(100, parseFloat(predicted.toFixed(1))));
+      }
+    }
+
+    return parseFloat(score.toFixed(1)); // Return actual score if found and non-zero
+  }, [data, uniqueDates, getCompanyKeys]);
+
 
   const exportWeeklyCSV = () => {
     if (!data.length || !generateChartData.dateRange?.length) return;
@@ -149,11 +263,9 @@ const GeneralOverview = () => {
 
     const rows = [];
 
-    const companies = [...COMPETITION_COMPANIES, ...AZTECA_COMPANIES];
-
-    companies.forEach((company) => {
-      const { score, change, status } = getCompanyScore(company);
+    ALL_COMPANIES.forEach((company) => {
       generateChartData.dateRange.forEach((date) => {
+        const { score, change, status } = getCompanyScore(company, date); // Pass date to getCompanyScore
         rows.push([
           date.toISOString().split("T")[0],
           company,
@@ -254,44 +366,24 @@ const GeneralOverview = () => {
 
     if (!previousDate) return {};
 
-    const keys = Object.keys(data[0] || {});
-    const calculatePreviousAverage = (companies, offset) => {
-      let total = 0,
-        count = 0;
-      const dateStr = previousDate.toISOString().split("T")[0];
-
-      companies.forEach((_, i) => {
-        const base = (offset + i) * BLOCK_SIZE;
-        const dateKey = keys[base];
-        const typeKey = keys[base + 1];
-        const scoreKey = keys[base + 3];
-
-        data.forEach((row) => {
-          if (
-            row[dateKey] === dateStr &&
-            (selectedType === "both" || row[typeKey] === selectedType)
-          ) {
-            const sc = parseFloat(row[scoreKey]);
-            if (!isNaN(sc) && sc !== 0) {
-              total += sc;
-              count++;
-            }
-          }
-        });
+    const calculatePreviousAverage = (companies) => {
+      let total = 0, count = 0;
+      companies.forEach(company => {
+        const score = getIndividualScore(company, selectedType, previousDate);
+        if (!isNaN(score) && score !== 0) { // Consider predicted scores as valid
+          total += score;
+          count++;
+        }
       });
-
       return count ? parseFloat((total / count).toFixed(1)) : 0;
     };
 
     return {
-      previousCompetitionScore: calculatePreviousAverage(COMPETITION_COMPANIES, 0),
-      previousAztecaScore: calculatePreviousAverage(
-        AZTECA_COMPANIES,
-        COMPETITION_COMPANIES.length
-      ),
+      previousCompetitionScore: calculatePreviousAverage(COMPETITION_COMPANIES),
+      previousAztecaScore: calculatePreviousAverage(AZTECA_COMPANIES),
       previousPeriodLabel,
     };
-  }, [data, selectedDate, selectedType, timeRange, uniqueDates]);
+  }, [data, selectedDate, selectedType, timeRange, uniqueDates, getIndividualScore]);
 
   // Generate chart data based on time range
   const generateChartData = useMemo(() => {
@@ -300,6 +392,7 @@ const GeneralOverview = () => {
         competition: [],
         azteca: [],
         labels: [],
+        dateRange: [],
       };
 
     let dateRange = [];
@@ -345,8 +438,7 @@ const GeneralOverview = () => {
       labels = dateRange.map((d) =>
         d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
       );
-    }
-    else if (timeRange === "weeklyGroup") {
+    } else if (timeRange === "weeklyGroup") {
       const selected = weeklyGroups.filter((g) => selectedWeeklyGroups.includes(g.key));
       selected.forEach((group) => {
         dateRange.push(...group.dates);
@@ -366,46 +458,27 @@ const GeneralOverview = () => {
       });
     }
     
-
-    const keys = Object.keys(data[0] || {});
-    const calculateAverages = (companies, offset) => {
+    const calculateAverages = (companies) => {
       return dateRange.map((date) => {
-        const dateStr = date.toISOString().split("T")[0];
-        let total = 0,
-          count = 0;
-
-        companies.forEach((_, i) => {
-          const base = (offset + i) * BLOCK_SIZE;
-          const dateKey = keys[base];
-          const typeKey = keys[base + 1];
-          const scoreKey = keys[base + 3];
-
-          data.forEach((row) => {
-            if (
-              row[dateKey] === dateStr &&
-              (selectedType === "both" || row[typeKey] === selectedType)
-            ) {
-              const sc = parseFloat(row[scoreKey]);
-              if (!isNaN(sc) && sc !== 0) {
-                total += sc;
-                count++;
-              }
-            }
-          });
+        let total = 0, count = 0;
+        companies.forEach(company => {
+          const score = getIndividualScore(company, selectedType, date);
+          if (!isNaN(score)) { // Predicted scores are always numbers
+            total += score;
+            count++;
+          }
         });
-
         return count ? parseFloat((total / count).toFixed(1)) : 0;
       });
     };
 
     return {
-      competition: calculateAverages(COMPETITION_COMPANIES, 0),
-      azteca: calculateAverages(AZTECA_COMPANIES, COMPETITION_COMPANIES.length),
+      competition: calculateAverages(COMPETITION_COMPANIES),
+      azteca: calculateAverages(AZTECA_COMPANIES),
       labels,
       dateRange, // Include the actual date objects for tooltips
     };
   }, [
-    data,
     selectedDate,
     selectedType,
     timeRange,
@@ -413,49 +486,35 @@ const GeneralOverview = () => {
     compareStartDate,
     compareEndDate,
     selectedDatesForSelect,
+    weeklyGroups,
+    monthlyGroups,
+    yearlyGroups,
+    getIndividualScore
   ]);
 
   const { competitionScore, aztecaScore } = useMemo(() => {
     if (!data.length || !generateChartData.dateRange?.length)
       return { competitionScore: "N/A", aztecaScore: "N/A" };
 
-    const keys = Object.keys(data[0]);
-
-    const calculateAverageOverDates = (companies, offset) => {
-      let total = 0,
-        count = 0;
+    const calculateAverageOverDates = (companies) => {
+      let total = 0, count = 0;
       generateChartData.dateRange.forEach((date) => {
-        const dateStr = date.toISOString().split("T")[0];
-
-        companies.forEach((_, i) => {
-          const base = (offset + i) * BLOCK_SIZE;
-          const dateKey = keys[base];
-          const typeKey = keys[base + 1];
-          const scoreKey = keys[base + 3];
-
-          data.forEach((row) => {
-            if (
-              row[dateKey] === dateStr &&
-              (selectedType === "both" || row[typeKey] === selectedType)
-            ) {
-              const sc = parseFloat(row[scoreKey]);
-              if (!isNaN(sc) && sc !== 0) {
-                total += sc;
-                count++;
-              }
-            }
-          });
+        companies.forEach(company => {
+          const score = getIndividualScore(company, selectedType, date);
+          if (!isNaN(score)) { // Predicted scores are always numbers
+            total += score;
+            count++;
+          }
         });
       });
-
       return count ? (total / count).toFixed(1) : "N/A";
     };
 
     return {
-      competitionScore: calculateAverageOverDates(COMPETITION_COMPANIES, 0),
-      aztecaScore: calculateAverageOverDates(AZTECA_COMPANIES, COMPETITION_COMPANIES.length),
+      competitionScore: calculateAverageOverDates(COMPETITION_COMPANIES),
+      aztecaScore: calculateAverageOverDates(AZTECA_COMPANIES),
     };
-  }, [data, selectedType, generateChartData.dateRange]);
+  }, [data, selectedType, generateChartData.dateRange, getIndividualScore]);
 
   // Calculate trend analysis and projections
   const calculateTrendAnalysis = useMemo(() => {
@@ -471,19 +530,6 @@ const GeneralOverview = () => {
         azteca: { growth: 0, slope: 0, projection: 0 },
         comparison: { current: 0, trend: "" },
       };
-    }
-
-    const keys = Object.keys(data[0] || {});
-    const dateKeyMap = {};
-    const scoreKeyMap = {};
-    const typeKeyMap = {};
-
-    let companyIndex = 0;
-    for (let i = 0; i < keys.length; i += BLOCK_SIZE) {
-      dateKeyMap[companyIndex] = keys[i];
-      typeKeyMap[companyIndex] = keys[i + 1];
-      scoreKeyMap[companyIndex] = keys[i + 3];
-      companyIndex++;
     }
 
     let filteredDates = uniqueDates;
@@ -506,57 +552,42 @@ const GeneralOverview = () => {
       filteredDates = selectedDatesForSelect.sort((a, b) => a - b);
     } else if (timeRange === "daily") {
       filteredDates = [selectedDate];
+    } else if (timeRange === "weeklyGroup") {
+      const selected = weeklyGroups.filter((g) => selectedWeeklyGroups.includes(g.key));
+      selected.forEach((group) => {
+        filteredDates.push(...group.dates);
+      });
+    } else if (timeRange === "monthlyGroup") {
+      const selected = monthlyGroups.filter((g) => selectedMonthlyGroups.includes(g.key));
+      selected.forEach((group) => {
+        filteredDates.push(...group.dates);
+      });
+    } else if (timeRange === "yearlyGroup") {
+      const selected = yearlyGroups.filter((g) => selectedYearlyGroups.includes(g.key));
+      selected.forEach((group) => {
+        filteredDates.push(...group.dates);
+      });
     }
 
+
     filteredDates.forEach((date) => {
-      const dateStr = date.toISOString().split("T")[0];
+      let compTotal = 0, compCount = 0;
+      COMPETITION_COMPANIES.forEach(company => {
+        const score = getIndividualScore(company, selectedType, date);
+        if (!isNaN(score)) {
+          compTotal += score;
+          compCount++;
+        }
+      });
 
-      let compTotal = 0,
-        compCount = 0;
-      for (let i = 0; i < COMPETITION_COMPANIES.length; i++) {
-        const dateKey = dateKeyMap[i];
-        const typeKey = typeKeyMap[i];
-        const scoreKey = scoreKeyMap[i];
-
-        if (!dateKey || !typeKey || !scoreKey) continue;
-
-        data.forEach((row) => {
-          if (
-            row[dateKey] === dateStr &&
-            (selectedType === "both" || row[typeKey] === selectedType)
-          ) {
-            const sc = parseFloat(row[scoreKey]);
-            if (!isNaN(sc) && sc !== 0) {
-              compTotal += sc;
-              compCount++;
-            }
-          }
-        });
-      }
-
-      let aztecaTotal = 0,
-        aztecaCount = 0;
-      for (let i = 0; i < AZTECA_COMPANIES.length; i++) {
-        const companyIdx = COMPETITION_COMPANIES.length + i;
-        const dateKey = dateKeyMap[companyIdx];
-        const typeKey = typeKeyMap[companyIdx];
-        const scoreKey = scoreKeyMap[companyIdx];
-
-        if (!dateKey || !typeKey || !scoreKey) continue;
-
-        data.forEach((row) => {
-          if (
-            row[dateKey] === dateStr &&
-            (selectedType === "both" || row[typeKey] === selectedType)
-          ) {
-            const sc = parseFloat(row[scoreKey]);
-            if (!isNaN(sc) && sc !== 0) {
-              aztecaTotal += sc;
-              aztecaCount++;
-            }
-          }
-        });
-      }
+      let aztecaTotal = 0, aztecaCount = 0;
+      AZTECA_COMPANIES.forEach(company => {
+        const score = getIndividualScore(company, selectedType, date);
+        if (!isNaN(score)) {
+          aztecaTotal += score;
+          aztecaCount++;
+        }
+      });
 
       if (compCount > 0 && aztecaCount > 0) {
         const compAvg = parseFloat((compTotal / compCount).toFixed(1));
@@ -631,6 +662,10 @@ const GeneralOverview = () => {
     compareEndDate,
     timeRange,
     selectedDatesForSelect,
+    weeklyGroups,
+    monthlyGroups,
+    yearlyGroups,
+    getIndividualScore
   ]);
 
   // Effects
@@ -718,41 +753,13 @@ const GeneralOverview = () => {
     });
   };
 
-  const getCompanyScore = (company) => {
-    if (!data.length || !generateChartData.dateRange?.length)
+  const getCompanyScore = (company, date = selectedDate) => { // Added date parameter
+    if (!data.length || !date)
       return { score: "N/A", status: "N/A", change: null };
 
-    const allCompanies = [...COMPETITION_COMPANIES, ...AZTECA_COMPANIES];
-    const companyIndex = allCompanies.indexOf(company);
-    if (companyIndex === -1) return { score: "N/A", status: "N/A", change: null };
-
-    const keys = Object.keys(data[0]);
-    const base = companyIndex * BLOCK_SIZE;
-    const dateKey = keys[base];
-    const typeKey = keys[base + 1];
-    const scoreKey = keys[base + 3];
-
-    let total = 0,
-      count = 0;
-
-    generateChartData.dateRange.forEach((date) => {
-      const dateStr = date.toISOString().split("T")[0];
-      data.forEach((row) => {
-        if (
-          row[dateKey] === dateStr &&
-          (selectedType === "both" || row[typeKey] === selectedType)
-        ) {
-          const sc = parseFloat(row[scoreKey]);
-          if (!isNaN(sc)) {
-            total += sc;
-            count++;
-          }
-        }
-      });
-    });
-
-    const score = count ? (total / count).toFixed(1) : "N/A";
+    const score = getIndividualScore(company, selectedType, date);
     const num = parseFloat(score);
+
     const status = isNaN(num)
       ? "N/A"
       : num < 50
@@ -761,35 +768,21 @@ const GeneralOverview = () => {
       ? "NEEDS IMPROVEMENT"
       : "GOOD";
 
-    // Calculate previous period score
+    // Calculate previous period score for change
     let previousScore = null;
     let percentChange = null;
 
-    const previousDates = [...generateChartData.dateRange];
-    if (previousDates.length >= 2) {
-      const prevDate = previousDates[previousDates.length - 2];
-      const prevDateStr = prevDate.toISOString().split("T")[0];
-
-      let prevTotal = 0,
-        prevCount = 0;
-      data.forEach((row) => {
-        if (
-          row[dateKey] === prevDateStr &&
-          (selectedType === "both" || row[typeKey] === selectedType)
-        ) {
-          const sc = parseFloat(row[scoreKey]);
-          if (!isNaN(sc)) {
-            prevTotal += sc;
-            prevCount++;
+    if (date && uniqueDates.length > 1) {
+      const currentIndex = uniqueDates.findIndex(d => d.getTime() === date.getTime());
+      if (currentIndex > 0) {
+        const prevDate = uniqueDates[currentIndex - 1];
+        const prevScore = getIndividualScore(company, selectedType, prevDate);
+        if (!isNaN(prevScore) && prevScore !== 0) {
+          previousScore = prevScore;
+          if (!isNaN(num)) {
+            percentChange = (((num - prevScore) / prevScore) * 100).toFixed(1);
           }
         }
-      });
-
-      previousScore = prevCount ? (prevTotal / prevCount).toFixed(1) : null;
-
-      if (previousScore && !isNaN(num)) {
-        const prevNum = parseFloat(previousScore);
-        percentChange = (((num - prevNum) / prevNum) * 100).toFixed(1);
       }
     }
 
@@ -1208,21 +1201,21 @@ const GeneralOverview = () => {
           order: 2, // Render bars first
         },
         {
-  type: "line",
-  label: "Trend Line",
-  data: trendData,
-  borderColor:
-    slope > 0
-      ? "green"
-      : slope < 0
-      ? "red"
-      : "yellow", // Color based on slope
-  borderWidth: 4,
-  pointRadius: 0,
-  fill: false,
-  tension: 0.1,
-  order: 1,
-},
+          type: "line",
+          label: "Trend Line",
+          data: trendData,
+          borderColor:
+            slope > 0
+              ? "green"
+              : slope < 0
+              ? "red"
+              : "yellow", // Color based on slope
+          borderWidth: 4,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.1,
+          order: 1,
+        },
 
         {
           type: "line",
@@ -1560,172 +1553,8 @@ const GeneralOverview = () => {
     );
   };
 
-  const renderCorrelationScatter = () => {
-    const competition = generateChartData.competition;
-    const azteca = generateChartData.azteca;
-  
-    if (competition.length !== azteca.length || competition.length < 2) return null;
-  
-    const n = competition.length;
-    const avgX = competition.reduce((a, b) => a + b, 0) / n;
-    const avgY = azteca.reduce((a, b) => a + b, 0) / n;
-  
-    const covariance = competition.reduce((sum, x, i) => sum + (x - avgX) * (azteca[i] - avgY), 0);
-    const varianceX = competition.reduce((sum, x) => sum + Math.pow(x - avgX, 2), 0);
-    const varianceY = azteca.reduce((sum, y) => sum + Math.pow(y - avgY, 2), 0);
-  
-    const slope = covariance / varianceX;
-    const intercept = avgY - slope * avgX;
-  
-    const regressionLine = competition.map((x) => slope * x + intercept);
-    const rSquared = Math.pow(covariance, 2) / (varianceX * varianceY);
-  
-    const data = {
-      labels: competition,
-      datasets: [
-        {
-          label: "Actual Data",
-          data: competition.map((x, i) => ({ x, y: azteca[i] })),
-          backgroundColor: "rgba(255, 255, 255, 0.7)",
-          borderWidth: 0,
-          pointRadius: 5,
-        },
-        {
-          label: "Regression Line",
-          data: competition.map((x, i) => ({ x, y: regressionLine[i] })),
-          type: "line",
-          borderColor: "cyan",
-          borderWidth: 4, // más gruesa
-          pointRadius: 0,
-          fill: false,
-        }
-        
-      ],
-    };
-  
-    const options = {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: {
-            color: "white",
-            font: {
-              weight: "bold"
-            }
-          }
-        },
-        tooltip: {
-  callbacks: {
-    label: function (context) {
-      return [
-        `Competition: ${context.raw.x.toFixed(2)}`,
-        `TV Azteca: ${context.raw.y.toFixed(2)}`
-      ];
-    }
-  },
-  backgroundColor: 'rgba(0,0,0,0.8)',
-  titleColor: '#ffffff',
-  bodyColor: '#ffffff',
-  borderColor: 'rgba(255,255,255,0.2)',
-  borderWidth: 1
-}
-
-      },
-      scales: {
-        x: {
-          title: {
-            display: true,
-            text: "Competition Score",
-            color: "white",
-            font: { weight: "bold" }
-          },
-          ticks: {
-            color: "white",
-            font: { weight: "bold" }
-          },
-          grid: { color: "rgba(255,255,255,0.1)" }
-        },
-        y: {
-          title: {
-            display: true,
-            text: "TV Azteca Score",
-            color: "white",
-            font: { weight: "bold" }
-          },
-          ticks: {
-            color: "white",
-            font: { weight: "bold" }
-          },
-          grid: { color: "rgba(255,255,255,0.1)" }
-        }
-      }
-    };
-    
-  
-    return (
-      <Box className="anb-chart-container" mt={8} mb={8} maxW="1200px" mx="auto">
-        <Text className="anb-chart-title" mb={4}>
-          Correlation Trend: TV Azteca vs Competition
-        </Text>
-        <Text fontSize="sm" color="white" mb={4}>
-          R² = {rSquared.toFixed(3)} –{" "}
-          {rSquared > 0.7 ? "strong" : rSquared > 0.4 ? "moderate" : "weak"} correlation
-        </Text>
-        <Box>
-  <Box height="400px">
-    <Scatter data={data} options={options} />
-  </Box>
-  
-  <Box mt={4} p={4} borderRadius="md" bg="rgba(255,255,255,0.05)">
-    <Text fontWeight="bold" fontSize="md" color="cyan.400" mb={2}>
-      🧠 AI Insight: Correlation Between TV Azteca and Competition
-    </Text>
-
-    <Text fontSize="sm" color="white" mb={2}>
-      R² = {rSquared.toFixed(3)} —{" "}
-      {rSquared > 0.7
-        ? "this is a strong correlation, indicating consistent movement together."
-        : rSquared > 0.4
-        ? "this is a moderate correlation, showing some shared performance patterns."
-        : "this is a weak correlation, implying inconsistent or minimal relationship."}
-    </Text>
-
-    <Text fontSize="sm" color="white" mb={2}>
-      The slope of the regression line is {slope.toFixed(2)}, which means that{" "}
-      {slope < 0
-        ? "when competition scores rise, TV Azteca scores slightly decrease."
-        : slope > 0
-        ? "both scores tend to increase together."
-        : "there is no noticeable directional trend."}
-    </Text>
-
-    <Text fontSize="sm" color="white" mb={2}>
-      This chart shows{" "}
-      {rSquared < 0.2
-        ? "minimal predictive value between the two."
-        : rSquared < 0.4
-        ? "some correlation worth monitoring, but not reliable for forecasts."
-        : "a pattern strong enough to support simple prediction models."}
-    </Text>
-
-    <Text fontSize="sm" color="white">
-      📉 <strong>Trend:</strong>{" "}
-      {slope < 0 ? "Negative" : slope > 0 ? "Positive" : "Flat"} &nbsp; | &nbsp;
-      📊 <strong>R²:</strong> {rSquared.toFixed(3)} &nbsp; | &nbsp;
-      🔍 <strong>Implication:</strong>{" "}
-      {rSquared > 0.4
-        ? "Use this correlation to identify performance clusters."
-        : "Segment by brand or day to reveal stronger patterns."}
-    </Text>
-  </Box>
-</Box>
-
-      </Box>
-    );
-    
-  };
-  
+  // Removed renderCorrelationScatter function entirely
+  // const renderCorrelationScatter = () => { ... };
 
   const renderTrendChart = () => {
     // Get dates corresponding to the labels for tooltip display
@@ -2007,7 +1836,7 @@ const GeneralOverview = () => {
           <GridItem>
             <Box p={4} bg="rgba(255,255,255,0.05)" borderRadius="md">
               <Text fontWeight="bold" color="white" mb={2}>
-                Rate of Change (per period)
+                Rate of Change (per day)
               </Text>
               <Flex justify="space-between" align="center">
                 <VStack align="flex-start" spacing={1}>
@@ -2049,7 +1878,7 @@ const GeneralOverview = () => {
           <GridItem>
             <Box p={4} bg="rgba(255,255,255,0.05)" borderRadius="md">
               <Text fontWeight="bold" color="white" mb={2}>
-                3-Period Projection
+                3-Day Projection
               </Text>
               <Flex justify="space-between" align="center">
                 <VStack align="flex-start" spacing={1}>
@@ -2091,7 +1920,7 @@ const GeneralOverview = () => {
           <GridItem>
             <Box p={4} bg="rgba(255,255,255,0.05)" borderRadius="md">
               <Text fontWeight="bold" color="white" mb={2}>
-                Current Comparison
+                Current Daily Comparison
               </Text>
               <Stat>
                 <StatLabel color="rgba(255,255,255,0.7)">Gap vs Competition</StatLabel>
@@ -2319,7 +2148,8 @@ const GeneralOverview = () => {
           {renderAnalyticsPanel()}
           {/* Trend Chart */}
           {renderTrendChart()}
-          {renderCorrelationScatter()}
+          {/* Removed Correlation Scatter Plot */}
+          {/* {renderCorrelationScatter()} */}
         </>
       )}
       {/* Insights Modal */}

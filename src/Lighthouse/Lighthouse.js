@@ -168,7 +168,7 @@ const Lighthouse = () => {
             <Button className="cyber-nav-btn" onClick={() => setActiveSection("general")} data-section="general">General</Button>
             <Button className="cyber-nav-btn" onClick={() => setActiveSection("vertical")} data-section="vertical">Vertical</Button>
             <Button className="cyber-nav-btn" onClick={() => setActiveSection("local")} data-section="local">Local</Button>
-            <Button className="cyber-nav-btn" onClick={() => setActiveSection("image")} data-section="image">Image</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("image")} data-section="image">Gallery</Button>
             <Button className="cyber-nav-btn" onClick={() => setActiveSection("amp")} data-section="amp">AMP</Button>
             <Button className="cyber-nav-btn" onClick={() => setActiveSection("crux")} data-section="crux">CrUX</Button>
 

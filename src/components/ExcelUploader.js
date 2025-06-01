@@ -1,53 +1,59 @@
-import { Box, Button, Input, useToast } from '@chakra-ui/react';
-import { ref, uploadBytesResumable } from 'firebase/storage';
-import { storage } from '../firebaseConfig';
-import { useState } from 'react';
+import { useState } from "react";
+import { Button, Box, Input, useToast } from "@chakra-ui/react";
+import { supabase } from "../supabaseClient";
 
-const ExcelUploader = () => {
-  const toast = useToast();
+const ExcelUploader = ({ onUploadComplete }) => {
   const [file, setFile] = useState(null);
+  const toast = useToast();
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!file) return;
 
-    const uniqueName = `reporte_tarjetas_${Date.now()}.xlsx`;
-    const storageRef = ref(storage, uniqueName);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const fileName = `reporte_tarjetas_${Date.now()}.xlsx`;
 
-    uploadTask.on(
-      'state_changed',
-      null,
-      (error) => {
-        console.error('Firebase Upload Error:', error);
-        toast({
-          title: '❌ Error al subir',
-          description: error.message,
-          status: 'error',
-          duration: 4000,
-          isClosable: true,
-        });
-      },
-      () => {
-        toast({
-          title: '✅ Subida exitosa',
-          description: 'El archivo fue subido a Firebase Storage',
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        });
-      }
-    );
+    const { data, error } = await supabase.storage
+      .from("files")
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type,
+      });
+
+    if (error) {
+      toast({
+        title: "❌ Error al subir",
+        description: error.message,
+        status: "error",
+        duration: 4000,
+        isClosable: true,
+      });
+    } else {
+      const { data: publicUrlData } = supabase.storage.from("files").getPublicUrl(fileName);
+      const publicUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`; // evita caché
+
+      toast({
+        title: "✅ Subido con éxito",
+        description: "Generando dashboard...",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+
+      // Llamar al backend
+      await fetch("https://xlsx-backend.onrender.com/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: publicUrl }),
+      });
+
+      if (onUploadComplete) onUploadComplete();
+    }
   };
 
   return (
     <Box>
-      <Input
-        type="file"
-        accept=".xlsx"
-        onChange={(e) => setFile(e.target.files[0])}
-        mb={4}
-      />
-      <Button onClick={handleUpload} colorScheme="purple">
+      <Input type="file" onChange={(e) => setFile(e.target.files[0])} />
+      <Button mt={2} onClick={handleUpload}>
         Subir archivo Excel
       </Button>
     </Box>

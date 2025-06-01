@@ -8,11 +8,12 @@ const firebaseConfig = {
   apiKey: "AIzaSyCR...tu_api",
   authDomain: "my-timebox-project.firebaseapp.com",
   projectId: "my-timebox-project",
-  storageBucket: "my-timebox-project.appspot.com", // ✅ CORRECTO
+  storageBucket: "my-timebox-project.appspot.com", // ✅ solo este
   messagingSenderId: "338798659890",
   appId: "1:338798659890:web:7681a1e4fdb7e86425af2b",
   measurementId: "G-E4DJTTLEWE"
 };
+
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 

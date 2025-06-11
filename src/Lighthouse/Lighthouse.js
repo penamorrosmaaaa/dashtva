@@ -17,6 +17,8 @@ import ImageOverview from "./ImageOverview";
 import AMPOverview from "./AMPOverview";
 import AiChat from "./AiChat";
 import CombinedPerformanceMaps from "./CrUXPage.js";
+import TestLighthousePage from "./TestLighthousePage";
+import Live from "./Live"; // ✅ New import
 
 import "./Lighthouse.css";
 
@@ -30,14 +32,13 @@ const Lighthouse = () => {
   const [showIntro, setShowIntro] = useState(true);
   const [introPhase, setIntroPhase] = useState(0);
 
-  // Simple 3-phase intro
   useEffect(() => {
     const timer = setTimeout(() => {
-      setIntroPhase(1); // Show logo
+      setIntroPhase(1);
       setTimeout(() => {
-        setIntroPhase(2); // Fade out
+        setIntroPhase(2);
         setTimeout(() => {
-          setShowIntro(false); // Remove intro
+          setShowIntro(false);
         }, 500);
       }, 1500);
     }, 100);
@@ -45,7 +46,6 @@ const Lighthouse = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Load CSV data
   useEffect(() => {
     Papa.parse(SHEET_URL, {
       download: true,
@@ -55,23 +55,33 @@ const Lighthouse = () => {
         setCsvData(data);
         setCsvReady(true);
       },
-      error: err => console.error("Error CSV:", err),
+      error: (err) => console.error("Error CSV:", err),
     });
   }, []);
 
   const renderSection = () => {
     switch (activeSection) {
-      case "general": return <GeneralOverview />;
-      case "vertical": return <VerticalOverview />;
-      case "local": return <LocalOverview />;
-      case "image": return <ImageOverview />;
-      case "amp": return <AMPOverview />;
-      case "crux": return <CombinedPerformanceMaps />;
-      default: return null;
+      case "general":
+        return <GeneralOverview />;
+      case "vertical":
+        return <VerticalOverview />;
+      case "local":
+        return <LocalOverview />;
+      case "image":
+        return <ImageOverview />;
+      case "amp":
+        return <AMPOverview />;
+      case "crux":
+        return <CombinedPerformanceMaps />;
+      case "test":
+        return <TestLighthousePage />;
+      case "live":
+        return <Live />; // ✅ Added new case
+      default:
+        return null;
     }
   };
 
-  // Simplified intro screen
   const IntroScreen = () => (
     <Box
       position="fixed"
@@ -89,7 +99,6 @@ const Lighthouse = () => {
       pointerEvents={showIntro ? "all" : "none"}
     >
       <VStack spacing={8}>
-        {/* Simple animated logo/text */}
         <Box
           opacity={introPhase >= 1 ? 1 : 0}
           transform={`scale(${introPhase >= 1 ? 1 : 0.8})`}
@@ -117,7 +126,6 @@ const Lighthouse = () => {
           </Text>
         </Box>
 
-        {/* Simple loading indicator */}
         <Box
           width="200px"
           opacity={introPhase >= 1 ? 0.8 : 0}
@@ -129,16 +137,15 @@ const Lighthouse = () => {
             colorScheme="cyan"
             bg="rgba(0, 247, 255, 0.1)"
             sx={{
-              '& > div': {
-                background: 'linear-gradient(90deg, #00f7ff, #0080ff)',
-                boxShadow: '0 0 10px #00f7ff',
-              }
+              "& > div": {
+                background: "linear-gradient(90deg, #00f7ff, #0080ff)",
+                boxShadow: "0 0 10px #00f7ff",
+              },
             }}
           />
         </Box>
       </VStack>
 
-      {/* Optional: Keep subtle background effect */}
       <Box className="matrix-rain-boot" opacity="0.3" />
     </Box>
   );
@@ -155,7 +162,6 @@ const Lighthouse = () => {
         opacity={!showIntro ? 1 : 0}
         transition="opacity 0.5s ease-in"
       >
-        {/* Keep your existing background effects */}
         <div className="tv-glitch-overlay" />
         <div className="grid-overlay" />
         <div className="binary-rain" />
@@ -163,14 +169,23 @@ const Lighthouse = () => {
         <div className="corner-accent top-left" />
         <div className="corner-accent top-right" />
 
-        <Box textAlign="center" pt={{ base: 6, md: 10 }} mb={0} className="nav-container" pos="relative" zIndex="10">
+        <Box
+          textAlign="center"
+          pt={{ base: 6, md: 10 }}
+          mb={0}
+          className="nav-container"
+          pos="relative"
+          zIndex="10"
+        >
           <HStack spacing={{ base: 2, md: 4 }} justify="center" className="cyber-nav">
-            <Button className="cyber-nav-btn" onClick={() => setActiveSection("general")} data-section="general">General</Button>
-            <Button className="cyber-nav-btn" onClick={() => setActiveSection("vertical")} data-section="vertical">Vertical</Button>
-            <Button className="cyber-nav-btn" onClick={() => setActiveSection("local")} data-section="local">Local</Button>
-            <Button className="cyber-nav-btn" onClick={() => setActiveSection("image")} data-section="image">Gallery</Button>
-            <Button className="cyber-nav-btn" onClick={() => setActiveSection("amp")} data-section="amp">AMP</Button>
-            <Button className="cyber-nav-btn" onClick={() => setActiveSection("crux")} data-section="crux">CrUX</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("general")}>General</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("vertical")}>Vertical</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("local")}>Local</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("image")}>Gallery</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("amp")}>AMP</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("crux")}>CrUX</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("test")}>Audit</Button>
+            <Button className="cyber-nav-btn" onClick={() => setActiveSection("live")}>Live</Button> {/* ✅ New Button */}
 
             {csvReady && (
               <Box className="ai-chat-wrapper">

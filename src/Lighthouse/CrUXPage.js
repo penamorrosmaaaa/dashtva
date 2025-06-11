@@ -18,15 +18,18 @@ import {
   useDisclosure,
   Heading,
   Divider,
+  Badge,
+  VStack,
+  HStack,
 } from "@chakra-ui/react";
 import Papa from "papaparse";
-import { FaExpand } from "react-icons/fa";
+import { FaExpand, FaArrowDown, FaArrowUp, FaMinus } from "react-icons/fa";
 import Plot from "react-plotly.js";
-import "./Lighthouse.css"; // Ensure this CSS file is imported
+import "./Lighthouse.css";
 import MatrixRain from "./MatrixRain";
 
 // ---
-// Common Helper Functions (can be moved to a separate file if many components use them)
+// Common Helper Functions
 // ---
 
 // Parse "YYYY-MM-DD" -> Date
@@ -52,6 +55,60 @@ const formatNumber = (val) => {
   return Number.isInteger(num) ? num.toString() : num.toFixed(1);
 };
 
+// Calculate linear regression and trend
+function calculateTrend(data) {
+  if (!data || data.length < 2) return { slope: 0, intercept: 0, trend: 'neutral' };
+  
+  // Convert dates to numeric values (days since first date)
+  const firstDate = parseDate(data[0].date).getTime();
+  const points = data.map(d => ({
+    x: (parseDate(d.date).getTime() - firstDate) / (1000 * 60 * 60 * 24), // days
+    y: d.value
+  }));
+  
+  // Calculate means
+  const n = points.length;
+  const meanX = points.reduce((sum, p) => sum + p.x, 0) / n;
+  const meanY = points.reduce((sum, p) => sum + p.y, 0) / n;
+  
+  // Calculate slope and intercept
+  let numerator = 0;
+  let denominator = 0;
+  
+  points.forEach(p => {
+    numerator += (p.x - meanX) * (p.y - meanY);
+    denominator += (p.x - meanX) * (p.x - meanX);
+  });
+  
+  const slope = denominator !== 0 ? numerator / denominator : 0;
+  const intercept = meanY - slope * meanX;
+  
+  // Determine trend based on slope magnitude relative to mean
+  const slopePercentage = Math.abs(slope) / meanY * 100;
+  let trend = 'neutral';
+  
+  if (slopePercentage > 1) { // More than 1% change per day is significant
+    trend = slope > 0 ? 'negative' : 'positive'; // For web metrics, higher is worse
+  }
+  
+  return { slope, intercept, trend };
+}
+
+// Get trend color based on metric type
+function getTrendColor(trend, metric) {
+  // For web performance metrics, lower is better
+  if (trend === 'positive') return '#10B981'; // Green
+  if (trend === 'negative') return '#EF4444'; // Red
+  return '#6B7280'; // Gray for neutral
+}
+
+// Get trend icon
+function getTrendIcon(trend) {
+  if (trend === 'positive') return <FaArrowDown color="#10B981" />;
+  if (trend === 'negative') return <FaArrowUp color="#EF4444" />;
+  return <FaMinus color="#6B7280" />;
+}
+
 // Identify the most recent date for marking with a vertical line
 function getMostRecentDate(dataArray) {
   let maxTime = 0;
@@ -65,7 +122,7 @@ function getMostRecentDate(dataArray) {
 // Mark current date line and annotation
 function getCurrentDateLineAndAnnotation(date) {
   if (!date) return {};
-  const isoString = date.toISOString().split("T")[0]; // 'YYYY-MM-DD'
+  const isoString = date.toISOString().split("T")[0];
   return {
     shapes: [
       {
@@ -77,7 +134,7 @@ function getCurrentDateLineAndAnnotation(date) {
         y0: 0,
         y1: 1,
         line: {
-          color: "white", // Changed to white for dark background
+          color: "rgba(255, 255, 255, 0.3)",
           width: 2,
           dash: "dot",
         },
@@ -89,12 +146,12 @@ function getCurrentDateLineAndAnnotation(date) {
         y: 1,
         xref: "x",
         yref: "paper",
-        text: "",
+        text: "Latest",
         showarrow: true,
         arrowhead: 2,
         ax: 0,
         ay: -40,
-        font: { color: "white" }, // Changed to white for dark background
+        font: { color: "rgba(255, 255, 255, 0.7)", size: 10 },
       },
     ],
   };
@@ -108,6 +165,211 @@ function getPerformanceCategory(metric, avgValue, thresholds) {
   if (val <= thresholds[metric].needsImprovement) return "Needs Improvement";
   return "Poor";
 }
+
+// Enhanced metric card component
+const MetricCard = ({ metric, data, averages, thresholds, units, definitions, onExpand }) => {
+  const { slope, intercept, trend } = calculateTrend(data);
+  const trendColor = getTrendColor(trend, metric);
+  const trendIcon = getTrendIcon(trend);
+  
+  const avgVal = parseFloat(averages[metric]);
+  const performance = getPerformanceCategory(metric, avgVal, thresholds);
+  const performanceColor =
+    performance === "Good"
+      ? "#10B981"
+      : performance === "Needs Improvement"
+      ? "#F59E0B"
+      : "#EF4444";
+
+  const mostRecentDate = getMostRecentDate(data);
+  const { shapes, annotations } = getCurrentDateLineAndAnnotation(mostRecentDate);
+
+  const trace = {
+    x: data.map((p) => p.date),
+    y: data.map((p) => p.value),
+    type: "scatter",
+    mode: "lines+markers",
+    line: {
+      color: trendColor,
+      width: 3,
+      shape: "spline",
+    },
+    marker: {
+      size: 8,
+      color: trendColor,
+      line: {
+        color: "rgba(255, 255, 255, 0.8)",
+        width: 2
+      }
+    },
+    name: metric,
+    hovertemplate: `
+      <b>${metric}</b><br>
+      <b>Date:</b> %{x|%b %d, %Y}<br>
+      <b>Value:</b> %{y} ${units[metric]}<extra></extra>
+    `,
+    connectgaps: true,
+  };
+
+  // Add trend line
+  const trendLine = {
+    x: data.map((p) => p.date),
+    y: data.map((p, i) => {
+      const daysSinceStart = i * (data.length > 1 ? (parseDate(data[data.length - 1].date).getTime() - parseDate(data[0].date).getTime()) / (1000 * 60 * 60 * 24) / (data.length - 1) : 0);
+      return intercept + slope * daysSinceStart;
+    }),
+    type: "scatter",
+    mode: "lines",
+    line: {
+      color: trendColor,
+      width: 1,
+      dash: "dot",
+    },
+    showlegend: false,
+    hoverinfo: "skip",
+  };
+
+  return (
+    <Tooltip
+      label={
+        <VStack align="start" spacing={2} p={2}>
+          <Text fontWeight="bold" fontSize="md">{metric}</Text>
+          <Text fontSize="sm">{definitions[metric]}</Text>
+          <Divider borderColor="rgba(255,255,255,0.2)" />
+          <HStack spacing={4}>
+            <VStack align="start" spacing={1}>
+              <Text fontSize="xs" color="#10B981">Good: ≤ {formatNumber(thresholds[metric].good)}{units[metric]}</Text>
+              <Text fontSize="xs" color="#F59E0B">Needs Work: ≤ {formatNumber(thresholds[metric].needsImprovement)}{units[metric]}</Text>
+              <Text fontSize="xs" color="#EF4444">Poor: &gt; {formatNumber(thresholds[metric].needsImprovement)}{units[metric]}</Text>
+            </VStack>
+          </HStack>
+        </VStack>
+      }
+      bg="rgba(26, 32, 44, 0.95)"
+      color="white"
+      fontSize="sm"
+      placement="top"
+      hasArrow
+      borderRadius="lg"
+      border="1px solid rgba(255,255,255,0.1)"
+      p={3}
+    >
+      <Box
+        bg="linear-gradient(135deg, rgba(26, 32, 44, 0.8) 0%, rgba(45, 55, 72, 0.8) 100%)"
+        backdropFilter="blur(10px)"
+        border="1px solid rgba(255,255,255,0.1)"
+        borderRadius="xl"
+        p={4}
+        h="100%"
+        transition="all 0.3s ease"
+        _hover={{
+          transform: "translateY(-2px)",
+          boxShadow: "0 10px 30px rgba(0, 247, 255, 0.2)",
+          border: "1px solid rgba(0, 247, 255, 0.3)",
+        }}
+        position="relative"
+        overflow="hidden"
+      >
+        {/* Background gradient effect */}
+        <Box
+          position="absolute"
+          top="-50%"
+          right="-50%"
+          width="200%"
+          height="200%"
+          background="radial-gradient(circle, rgba(0, 247, 255, 0.1) 0%, transparent 70%)"
+          opacity={0.5}
+          pointerEvents="none"
+        />
+
+        {/* Header */}
+        <Flex justify="space-between" align="center" mb={3}>
+          <HStack spacing={2}>
+            <Text color="white" fontSize="sm" fontWeight="bold">
+              {metric}
+            </Text>
+            <Box>{trendIcon}</Box>
+          </HStack>
+          <IconButton
+            aria-label="Expand Graph"
+            icon={<FaExpand />}
+            color="white"
+            bg="transparent"
+            _hover={{ bg: "rgba(255,255,255,0.1)" }}
+            size="sm"
+            onClick={() => onExpand([trace, trendLine], metric)}
+          />
+        </Flex>
+
+        {/* Score Display */}
+        <VStack spacing={1} align="center" mb={3}>
+          <Text 
+            fontSize="3xl" 
+            fontWeight="bold" 
+            bgGradient={`linear(to-r, ${performanceColor}, ${performanceColor}DD)`}
+            bgClip="text"
+          >
+            {formatNumber(averages[metric])}
+          </Text>
+          <Text fontSize="xs" color="gray.400">
+            {units[metric]}
+          </Text>
+          <Badge
+            colorScheme={
+              performance === "Good" ? "green" : 
+              performance === "Needs Improvement" ? "yellow" : "red"
+            }
+            variant="subtle"
+            fontSize="xs"
+            px={2}
+            py={1}
+            borderRadius="full"
+          >
+            {performance}
+          </Badge>
+        </VStack>
+
+        {/* Mini Chart */}
+        <Box width="100%" height="120px" mt={2}>
+          <Plot
+            data={[trace, trendLine]}
+            layout={{
+              autosize: true,
+              margin: { l: 30, r: 10, t: 10, b: 30 },
+              xaxis: {
+                tickfont: { size: 8, color: "rgba(255,255,255,0.5)" },
+                type: "date",
+                showgrid: false,
+                zeroline: false,
+                showline: false,
+                tickformat: "%b",
+                dtick: "M1",
+              },
+              yaxis: {
+                tickfont: { size: 8, color: "rgba(255,255,255,0.5)" },
+                showgrid: true,
+                gridcolor: "rgba(255,255,255,0.05)",
+                zeroline: false,
+                showline: false,
+              },
+              shapes: shapes,
+              annotations: annotations,
+              showlegend: false,
+              hovermode: "x unified",
+              paper_bgcolor: "transparent",
+              plot_bgcolor: "transparent",
+            }}
+            config={{
+              displayModeBar: false,
+              responsive: true,
+            }}
+            style={{ width: "100%", height: "100%" }}
+          />
+        </Box>
+      </Box>
+    </Tooltip>
+  );
+};
 
 // ---
 // PerformanceMapLocal Component
@@ -133,7 +395,7 @@ const LOCAL_COMPANY_URLS = {
   Laguna: "https://www.aztecalaguna.com",
 };
 
-// Local - Group “Local”
+// Local - Group "Local"
 const LOCAL_GROUPS = {
   Local: [
     "QuintanaRoo", "Bajio", "CiudadJuarez", "Yucatan", "Jalisco", "Puebla",
@@ -144,7 +406,7 @@ const LOCAL_GROUPS = {
 const LOCAL_GROUP_NAMES = Object.keys(LOCAL_GROUPS);
 const LOCAL_INDIVIDUAL_COMPANIES = Object.values(LOCAL_GROUPS).flat();
 
-// Local - Metrics (same as vertical, but defined here for local context)
+// Local - Metrics
 const LOCAL_METRICS = ["LCP", "CLS", "INP", "FCP", "TTFB"];
 const LOCAL_METRIC_UNITS = { LCP: "ms", CLS: "", INP: "ms", FCP: "ms", TTFB: "ms" };
 const LOCAL_THRESHOLDS = {
@@ -266,9 +528,9 @@ const PerformanceMapLocal = () => {
       <option
         key="Local"
         value="Local"
-        style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} // Dark background for options
+        style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }}
       >
-        Local
+        All Local Sites
       </option>
     );
 
@@ -277,7 +539,7 @@ const PerformanceMapLocal = () => {
         <option
           key={co}
           value={co}
-          style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} // Dark background for options
+          style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }}
         >
           {co}
         </option>
@@ -339,16 +601,6 @@ const PerformanceMapLocal = () => {
     return result;
   }, [filteredData]);
 
-  const mostRecentDate = useMemo(() => {
-    let allPoints = [];
-    Object.values(plotlySeries).forEach((arr) => {
-      allPoints = allPoints.concat(arr);
-    });
-    const dt = getMostRecentDate(allPoints);
-    return dt;
-  }, [plotlySeries]);
-
-
   const handleExpand = (plotData, metric) => {
     setModalPlotData(plotData);
     setModalMetric(metric);
@@ -365,13 +617,10 @@ const PerformanceMapLocal = () => {
       toast({
         title: "Week Selected",
         description: `Viewing data for: ${e.target.value}`,
-        status: "success",
+        status: "info",
         duration: 3000,
         isClosable: true,
-        containerStyle: {
-            backgroundColor: 'rgba(45, 55, 72, 0.9)', // Dark background for toast
-            color: 'white',
-        }
+        position: "bottom-right",
       });
     }
   };
@@ -379,8 +628,8 @@ const PerformanceMapLocal = () => {
   if (isLoading) {
     return (
       <Flex justifyContent="center" alignItems="center" height="200px" bg="transparent">
-        <Spinner size="xl" color="white" /> {/* White spinner */}
-        <Text ml={4} fontSize="lg" color="white"> {/* White text */}
+        <Spinner size="xl" color="cyan.400" thickness="4px" />
+        <Text ml={4} fontSize="lg" color="white">
           Loading Local data...
         </Text>
       </Flex>
@@ -390,7 +639,7 @@ const PerformanceMapLocal = () => {
   if (error) {
     return (
       <Flex justifyContent="center" alignItems="center" height="200px" bg="transparent">
-        <Text color="red.400" fontSize="lg" textAlign="center"> {/* Red text for error */}
+        <Text color="red.400" fontSize="lg" textAlign="center">
           {error}
         </Text>
       </Flex>
@@ -399,15 +648,14 @@ const PerformanceMapLocal = () => {
 
   return (
     <>
-      <Flex
-        direction="column"
-        gap={4}
-        width="100%"
-        maxW="1200px"
-        align="center"
-        p={4}
-        mx="auto"
-        className="anb-chart-container" // Re-using styling from LocalScoresOverview
+      <Box
+        bg="linear-gradient(135deg, rgba(26, 32, 44, 0.6) 0%, rgba(45, 55, 72, 0.6) 100%)"
+        backdropFilter="blur(20px)"
+        borderRadius="2xl"
+        border="1px solid rgba(255,255,255,0.1)"
+        p={6}
+        mb={8}
+        boxShadow="0 20px 40px rgba(0,0,0,0.3)"
       >
         {/* Controls Row */}
         <Flex
@@ -416,48 +664,50 @@ const PerformanceMapLocal = () => {
           alignItems="center"
           flexWrap="wrap"
           gap={4}
-          bg="transparent" // Transparent background for the flex container
+          mb={6}
         >
           {/* Company */}
-          <Flex alignItems="center" gap={2}>
-            <Text color="white" fontSize="md" fontWeight="semibold"> {/* White text */}
+          <HStack spacing={2}>
+            <Text color="gray.300" fontSize="sm" fontWeight="medium">
               Company:
             </Text>
             <Select
               value={selectedCompany}
               onChange={handleCompanyChange}
-              width="200px"
-              bg="rgba(255,255,255,0.1)"
+              width="220px"
+              bg="rgba(26, 32, 44, 0.8)"
               color="white"
               borderColor="rgba(255,255,255,0.2)"
-              _hover={{ bg: 'rgba(255,255,255,0.15)' }}
-              _focus={{ bg: 'rgba(255,255,255,0.15)' }}
+              _hover={{ borderColor: "cyan.400" }}
+              _focus={{ borderColor: "cyan.400", boxShadow: "0 0 0 1px var(--chakra-colors-cyan-400)" }}
               size="sm"
+              borderRadius="lg"
             >
               {companyOptions}
             </Select>
-          </Flex>
+          </HStack>
 
           {/* Week */}
-          <Flex alignItems="center" gap={2}>
-            <Text color="white" fontSize="md" fontWeight="semibold"> {/* White text */}
+          <HStack spacing={2}>
+            <Text color="gray.300" fontSize="sm" fontWeight="medium">
               Week:
             </Text>
             <Select
               value={selectedWeek}
               onChange={handleWeekChange}
               placeholder="Select Week"
-              width="200px"
-              bg="rgba(255,255,255,0.1)"
+              width="220px"
+              bg="rgba(26, 32, 44, 0.8)"
               color="white"
               borderColor="rgba(255,255,255,0.2)"
-              _hover={{ bg: 'rgba(255,255,255,0.15)' }}
-              _focus={{ bg: 'rgba(255,255,255,0.15)' }}
+              _hover={{ borderColor: "cyan.400" }}
+              _focus={{ borderColor: "cyan.400", boxShadow: "0 0 0 1px var(--chakra-colors-cyan-400)" }}
               size="sm"
+              borderRadius="lg"
             >
               <option
                 value="All Weeks"
-                style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} // Dark background for options
+                style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }}
               >
                 All Weeks
               </option>
@@ -465,13 +715,13 @@ const PerformanceMapLocal = () => {
                 <option
                   key={wk}
                   value={wk}
-                  style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} // Dark background for options
+                  style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }}
                 >
                   {wk}
                 </option>
               ))}
             </Select>
-          </Flex>
+          </HStack>
         </Flex>
 
         {/* Metrics Grid */}
@@ -484,216 +734,77 @@ const PerformanceMapLocal = () => {
           }}
           gap={4}
           width="100%"
-          overflowX="auto"
-          mt={4} // Added margin top for separation from controls
         >
-          {LOCAL_METRICS.map((metric) => {
-            const pts = plotlySeries[metric] || [];
-            const trace = {
-              x: pts.map((p) => p.date),
-              y: pts.map((p) => p.value),
-              type: "scatter",
-              mode: "lines+markers",
-              line: {
-                color: "#00f7ff", // Aqua blue color for lines
-                width: 2,
-                shape: "linear",
-              },
-              marker: {
-                size: 6,
-                color: "#00f7ff", // Aqua blue color for markers
-              },
-              name: "All",
-              hovertemplate: `
-                <b>All</b><br>
-                <b>Date:</b> %{x|%b %d}<br>
-                <b>Value:</b> %{y} ${LOCAL_METRIC_UNITS[metric]}<extra></extra>
-              `,
-              connectgaps: true,
-            };
-
-            const avgVal = parseFloat(averages[metric]);
-            const performance = getPerformanceCategory(metric, avgVal, LOCAL_THRESHOLDS);
-            const performanceColor =
-              performance === "Good"
-                ? "#2BFFB9" // Good
-                : performance === "Needs Improvement"
-                ? "#FFA73D" // Needs Improvement
-                : "#FF2965"; // Poor
-
-            const { shapes, annotations } = getCurrentDateLineAndAnnotation(mostRecentDate);
-
-            return (
-              <Tooltip
-                key={metric}
-                label={
-                  <>
-                    <Text fontWeight="bold" color="white">{metric} Performance:</Text>
-                    <Text color="white">
-                      Good: ≤ {formatNumber(LOCAL_THRESHOLDS[metric].good)}
-                      {LOCAL_METRIC_UNITS[metric]}
-                    </Text>
-                    <Text color="white">
-                      Needs Improvement: ≤ {formatNumber(LOCAL_THRESHOLDS[metric].needsImprovement)}
-                      {LOCAL_METRIC_UNITS[metric]}
-                    </Text>
-                    <Text color="white">
-                      Poor: &gt; {formatNumber(LOCAL_THRESHOLDS[metric].needsImprovement)}
-                      {LOCAL_METRIC_UNITS[metric]}
-                    </Text>
-                    <Box mt={2}>
-                      <Text fontWeight="bold" color="white">What is {metric}?</Text>
-                      <Text fontSize="sm" color="white">{LOCAL_METRIC_DEFINITIONS[metric]}</Text>
-                    </Box>
-                  </>
-                }
-                bg="rgba(45, 55, 72, 0.9)" // Dark transparent background
-                color="white" // White text
-                fontSize="sm"
-                placement="top"
-                hasArrow
-              >
-                <Box
-                  className="anb-chart-container" // Apply common chart container style
-                  p={3} // Adjust padding to match LocalScoresOverview
-                  borderRadius="md"
-                  minH="120px" // Adjust min height as needed
-                  display="flex"
-                  flexDirection="column"
-                  justifyContent="space-between"
-                  position="relative"
-                >
-                  <Flex direction="column" align="center">
-                    {/* Title & Expand */}
-                    <Flex width="100%" justifyContent="space-between" alignItems="center">
-                      <Box
-                        height="50px"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                        textAlign="center"
-                        flex="1"
-                      >
-                        <Text color="white" fontSize="sm" fontWeight="bold" isTruncated>
-                          {metric}
-                        </Text>
-                      </Box>
-                      <IconButton
-                        aria-label="Expand Graph"
-                        icon={<FaExpand />}
-                        color="white" // White icon
-                        bg="transparent"
-                        _hover={{ bg: "rgba(255,255,255,0.1)" }} // Subtle hover
-                        size="sm"
-                        onClick={() => handleExpand([trace], metric)}
-                      />
-                    </Flex>
-
-                    {/* Average & Performance */}
-                    <Flex direction="column" justify="center" align="center" mt={2}>
-                      <Text color="#00f7ff" fontSize="2xl" fontWeight="bold" textAlign="center"> {/* Aqua blue for score */}
-                        {formatNumber(averages[metric])} {LOCAL_METRIC_UNITS[metric]}
-                      </Text>
-                      <Text color={performanceColor} fontSize="sm" fontWeight="bold" mt={1}>
-                        {performance}
-                      </Text>
-                    </Flex>
-                  </Flex>
-
-                  {/* Plotly Graph */}
-                  <Box mt={4} width="100%" height="150px" position="relative">
-                    <Plot
-                      data={[trace]}
-                      layout={{
-                        autosize: true,
-                        margin: { l: 40, r: 10, t: 10, b: 30 },
-                        xaxis: {
-                          tickfont: { size: 10, color: "white" }, // White ticks
-                          type: "date",
-                          showgrid: false,
-                          zeroline: false,
-                          showline: false,
-                          ticks: "",
-                          tickformat: "%b %d",
-                          dtick: "M1",
-                          showticklabels: true,
-                        },
-                        yaxis: {
-                          tickfont: { size: 10, color: "white" }, // White ticks
-                          showgrid: false,
-                          zeroline: false,
-                          showline: false,
-                          ticks: "",
-                          showticklabels: true,
-                          title: { text: "" },
-                        },
-                        shapes: shapes,
-                        annotations: annotations,
-                        showlegend: false,
-                        hovermode: "closest",
-                        paper_bgcolor: "transparent", // Transparent
-                        plot_bgcolor: "transparent", // Transparent
-                      }}
-                      config={{
-                        displayModeBar: false,
-                        responsive: true,
-                        hovermode: "closest",
-                      }}
-                      style={{ width: "100%", height: "100%" }}
-                    />
-                  </Box>
-                </Box>
-              </Tooltip>
-            );
-          })}
+          {LOCAL_METRICS.map((metric) => (
+            <MetricCard
+              key={metric}
+              metric={metric}
+              data={plotlySeries[metric] || []}
+              averages={averages}
+              thresholds={LOCAL_THRESHOLDS}
+              units={LOCAL_METRIC_UNITS}
+              definitions={LOCAL_METRIC_DEFINITIONS}
+              onExpand={handleExpand}
+            />
+          ))}
         </Grid>
-      </Flex>
+      </Box>
 
       {/* Expanded Modal */}
-      <Modal isOpen={isOpen} onClose={onClose} size="xl" isCentered>
-        <ModalOverlay />
+      <Modal isOpen={isOpen} onClose={onClose} size="6xl" isCentered>
+        <ModalOverlay bg="rgba(0,0,0,0.8)" backdropFilter="blur(10px)" />
         <ModalContent
-          bg="rgba(45, 55, 72, 0.95)" // Dark, transparent background
-          color="white" // White text
-          border="1px solid rgba(255, 255, 255, 0.1)" // Subtle border
-          boxShadow="0 8px 16px rgba(0, 0, 0, 0.2)" // Dark shadow
+          bg="linear-gradient(135deg, rgba(26, 32, 44, 0.95) 0%, rgba(45, 55, 72, 0.95) 100%)"
+          color="white"
+          border="1px solid rgba(255, 255, 255, 0.2)"
+          boxShadow="0 30px 60px rgba(0, 0, 0, 0.5)"
+          borderRadius="2xl"
+          maxW="90vw"
         >
-          <ModalHeader color="#00f7ff">{modalMetric}</ModalHeader> {/* Aqua blue header */}
-          <ModalCloseButton color="white" /> {/* White close button */}
-          <ModalBody>
+          <ModalHeader 
+            fontSize="2xl" 
+            fontWeight="bold"
+            bgGradient="linear(to-r, cyan.400, blue.400)"
+            bgClip="text"
+          >
+            {modalMetric} Performance Trends
+          </ModalHeader>
+          <ModalCloseButton 
+            color="white" 
+            _hover={{ bg: "rgba(255,255,255,0.1)" }}
+            borderRadius="full"
+          />
+          <ModalBody pb={6}>
             {modalPlotData && (
               <Plot
                 data={modalPlotData}
                 layout={{
                   autosize: true,
-                  margin: { l: 50, r: 50, t: 50, b: 50 },
+                  margin: { l: 60, r: 50, t: 50, b: 60 },
                   xaxis: {
                     type: "date",
-                    title: "Date",
+                    title: { text: "Date", font: { color: "rgba(255,255,255,0.8)", size: 14 } },
                     tickformat: "%B %d, %Y",
-                    dtick: "M1",
-                    showticklabels: true,
-                    titlefont: { size: 14, color: "white" }, // White text
-                    tickfont: { size: 12, color: "white" }, // White text
+                    tickfont: { size: 12, color: "rgba(255,255,255,0.6)" },
+                    gridcolor: "rgba(255,255,255,0.05)",
+                    showgrid: true,
                   },
                   yaxis: {
-                    tickfont: { size: 12, color: "white" }, // White text
+                    title: { text: "Value", font: { color: "rgba(255,255,255,0.8)", size: 14 } },
+                    tickfont: { size: 12, color: "rgba(255,255,255,0.6)" },
+                    gridcolor: "rgba(255,255,255,0.05)",
                     showgrid: true,
-                    zeroline: false,
-                    showline: false,
-                    ticks: "",
-                    showticklabels: true,
-                    title: { text: "" },
                   },
                   showlegend: false,
-                  hovermode: "closest",
-                  paper_bgcolor: "transparent", // Transparent
-                  plot_bgcolor: "transparent", // Transparent
+                  hovermode: "x unified",
+                  paper_bgcolor: "transparent",
+                  plot_bgcolor: "transparent",
                 }}
                 config={{
                   displayModeBar: true,
+                  displaylogo: false,
+                  modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
                   responsive: true,
-                  hovermode: "closest",
                 }}
                 style={{ width: "100%", height: "500px" }}
               />
@@ -742,7 +853,7 @@ const VERTICAL_GROUPS = {
 const VERTICAL_GROUP_NAMES = Object.keys(VERTICAL_GROUPS);
 const VERTICAL_INDIVIDUAL_COMPANIES = ["TV Azteca", ...Object.values(VERTICAL_GROUPS).flat()];
 
-// Vertical - Metrics (same as local)
+// Vertical - Metrics
 const VERTICAL_METRICS = ["LCP", "CLS", "INP", "FCP", "TTFB"];
 const VERTICAL_METRIC_DESCRIPTIONS = {
   LCP: "Largest Contentful Paint indicates how quickly the main content is visible.",
@@ -758,16 +869,6 @@ const VERTICAL_THRESHOLDS = {
   INP: { good: 200, needsImprovement: 500 },
   TTFB: { good: 800, needsImprovement: 1800 },
   LCP: { good: 2500, needsImprovement: 4000 },
-};
-
-// Colors (originally for traces)
-const COLORS_TV_AZTECA = {
-  phone: "#00f7ff",    // Aqua Blue for phone (consistent with LocalOverview)
-  desktop: "#4A6CF7", // A slightly different blue for desktop if desired, or keep #00f7ff
-};
-const COLORS_COMPETITORS = {
-  phone: "#FF3B3B",    // Red for phone (different from TV Azteca)
-  desktop: "#F2C744", // Yellow for desktop (different from TV Azteca)
 };
 
 // Vertical - Aggregation for groups
@@ -871,14 +972,22 @@ const PerformanceMapVertical = () => {
     const options = [];
     VERTICAL_GROUP_NAMES.forEach((group) => {
       options.push(
-        <option style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} key={group} value={group}>
+        <option 
+          style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }} 
+          key={group} 
+          value={group}
+        >
           {group}
         </option>
       );
     });
     VERTICAL_INDIVIDUAL_COMPANIES.forEach((company) => {
       options.push(
-        <option style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} key={company} value={company}>
+        <option 
+          style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }} 
+          key={company} 
+          value={company}
+        >
           {company}
         </option>
       );
@@ -938,25 +1047,6 @@ const PerformanceMapVertical = () => {
     return avgs;
   }, [filteredDataAllTime, selectedFormFactor]);
 
-  const mostRecentDate = useMemo(() => {
-    if (!filteredDataAllTime.length) return null;
-    let maxDt = new Date(0);
-    filteredDataAllTime.forEach((r) => {
-      const d = parseDate(r.endDate);
-      if (d > maxDt) {
-        maxDt = d;
-      }
-    });
-    return maxDt.getTime() === 0 ? null : maxDt;
-  }, [filteredDataAllTime]);
-
-  const isAztecaSelection =
-    selectedCompany === "TV Azteca" || selectedCompany === "TV Azteca Companies";
-  const getColor = (isAzteca, formFactor) => {
-    if (isAzteca) return COLORS_TV_AZTECA[formFactor];
-    return COLORS_COMPETITORS[formFactor];
-  };
-
   const handleExpand = (plotData, metric) => {
     setModalPlotData(plotData);
     setModalMetric(metric);
@@ -966,8 +1056,8 @@ const PerformanceMapVertical = () => {
   if (isLoading) {
     return (
       <Flex justifyContent="center" alignItems="center" height="200px" bg="transparent">
-        <Spinner size="xl" color="white" /> {/* White spinner */}
-        <Text ml={4} fontSize="lg" color="white"> {/* White text */}
+        <Spinner size="xl" color="cyan.400" thickness="4px" />
+        <Text ml={4} fontSize="lg" color="white">
           Loading Vertical data...
         </Text>
       </Flex>
@@ -977,7 +1067,7 @@ const PerformanceMapVertical = () => {
   if (error) {
     return (
       <Flex justifyContent="center" alignItems="center" height="200px" bg="transparent">
-        <Text color="red.400" fontSize="lg" textAlign="center"> {/* Red text for error */}
+        <Text color="red.400" fontSize="lg" textAlign="center">
           {error}
         </Text>
       </Flex>
@@ -985,15 +1075,14 @@ const PerformanceMapVertical = () => {
   }
 
   return (
-    <Flex
-      direction="column"
-      gap={4}
-      width="100%"
-      maxW="1200px"
-      align="center"
-      p={4}
-      mx="auto"
-      className="anb-chart-container" // Re-using styling from LocalScoresOverview
+    <Box
+      bg="linear-gradient(135deg, rgba(26, 32, 44, 0.6) 0%, rgba(45, 55, 72, 0.6) 100%)"
+      backdropFilter="blur(20px)"
+      borderRadius="2xl"
+      border="1px solid rgba(255,255,255,0.1)"
+      p={6}
+      mb={8}
+      boxShadow="0 20px 40px rgba(0,0,0,0.3)"
     >
       {/* Header: Company, Week, Form Factor */}
       <Flex
@@ -1002,73 +1091,84 @@ const PerformanceMapVertical = () => {
         alignItems="center"
         flexWrap="wrap"
         gap={4}
-        bg="transparent" // Transparent background
+        mb={6}
       >
         {/* Company Selector */}
-        <Flex alignItems="center" gap={2}>
-          <Text color="white" fontSize="md" fontWeight="semibold"> {/* White text */}
+        <HStack spacing={2}>
+          <Text color="gray.300" fontSize="sm" fontWeight="medium">
             Company:
           </Text>
           <Select
             value={selectedCompany}
             onChange={(e) => setSelectedCompany(e.target.value)}
-            width="200px"
-            bg="rgba(255,255,255,0.1)"
+            width="220px"
+            bg="rgba(26, 32, 44, 0.8)"
             color="white"
             borderColor="rgba(255,255,255,0.2)"
-            _hover={{ bg: 'rgba(255,255,255,0.15)' }}
-            _focus={{ bg: 'rgba(255,255,255,0.15)' }}
+            _hover={{ borderColor: "cyan.400" }}
+            _focus={{ borderColor: "cyan.400", boxShadow: "0 0 0 1px var(--chakra-colors-cyan-400)" }}
             size="sm"
+            borderRadius="lg"
           >
             {companyOptions}
           </Select>
-        </Flex>
+        </HStack>
 
         {/* Week and Form Factor Selectors */}
-        <Flex alignItems="center" gap={2}>
-          <Text color="white" fontSize="md" fontWeight="semibold"> {/* White text */}
-            Week:
-          </Text>
-          <Select
-            value={selectedWeekRange}
-            onChange={(e) => setSelectedWeekRange(e.target.value)}
-            width="200px"
-            bg="rgba(255,255,255,0.1)"
-            color="white"
-            borderColor="rgba(255,255,255,0.2)"
-            _hover={{ bg: 'rgba(255,255,255,0.15)' }}
-            _focus={{ bg: 'rgba(255,255,255,0.15)' }}
-            size="sm"
-          >
-            {weekOptions.map((week) => (
-              <option style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} key={week} value={week}>
-                {week}
-              </option>
-            ))}
-          </Select>
+        <HStack spacing={4}>
+          <HStack spacing={2}>
+            <Text color="gray.300" fontSize="sm" fontWeight="medium">
+              Week:
+            </Text>
+            <Select
+              value={selectedWeekRange}
+              onChange={(e) => setSelectedWeekRange(e.target.value)}
+              width="220px"
+              bg="rgba(26, 32, 44, 0.8)"
+              color="white"
+              borderColor="rgba(255,255,255,0.2)"
+              _hover={{ borderColor: "cyan.400" }}
+              _focus={{ borderColor: "cyan.400", boxShadow: "0 0 0 1px var(--chakra-colors-cyan-400)" }}
+              size="sm"
+              borderRadius="lg"
+            >
+              {weekOptions.map((week) => (
+                <option 
+                  style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }} 
+                  key={week} 
+                  value={week}
+                >
+                  {week === "all" ? "All Weeks" : week}
+                </option>
+              ))}
+            </Select>
+          </HStack>
 
-          <Text color="white" fontSize="md" fontWeight="semibold"> {/* White text */}
-            Form Factor:
-          </Text>
-          <Select
-            value={selectedFormFactor}
-            onChange={(e) => setSelectedFormFactor(e.target.value)}
-            width="200px"
-            bg="rgba(255,255,255,0.1)"
-            color="white"
-            borderColor="rgba(255,255,255,0.2)"
-            _hover={{ bg: 'rgba(255,255,255,0.15)' }}
-            _focus={{ bg: 'rgba(255,255,255,0.15)' }}
-            size="sm"
-          >
-            <option style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} value="phone">
-              Mobile
-            </option>
-            <option style={{ backgroundColor: "#2d3748", color: "#e2e8f0" }} value="desktop">
-              Desktop
-            </option>
-          </Select>
-        </Flex>
+          <HStack spacing={2}>
+            <Text color="gray.300" fontSize="sm" fontWeight="medium">
+              Device:
+            </Text>
+            <Select
+              value={selectedFormFactor}
+              onChange={(e) => setSelectedFormFactor(e.target.value)}
+              width="150px"
+              bg="rgba(26, 32, 44, 0.8)"
+              color="white"
+              borderColor="rgba(255,255,255,0.2)"
+              _hover={{ borderColor: "cyan.400" }}
+              _focus={{ borderColor: "cyan.400", boxShadow: "0 0 0 1px var(--chakra-colors-cyan-400)" }}
+              size="sm"
+              borderRadius="lg"
+            >
+              <option style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }} value="phone">
+                Mobile
+              </option>
+              <option style={{ backgroundColor: "#1a202c", color: "#e2e8f0" }} value="desktop">
+                Desktop
+              </option>
+            </Select>
+          </HStack>
+        </HStack>
       </Flex>
 
       {/* Metrics Grid */}
@@ -1081,222 +1181,76 @@ const PerformanceMapVertical = () => {
         }}
         gap={4}
         width="100%"
-        overflowX="auto"
-        mt={4} // Added margin top for separation from controls
       >
-        {VERTICAL_METRICS.map((metric) => {
-          const seriesData = plotlyData[metric] || [];
-          const trace = {
-            x: seriesData.map((pt) => pt.date),
-            y: seriesData.map((pt) => pt.value),
-            type: "scatter",
-            mode: "lines+markers",
-            line: {
-              color: getColor(isAztecaSelection, selectedFormFactor),
-              width: 2,
-              shape: "linear",
-            },
-            marker: {
-              size: 6,
-              color: getColor(isAztecaSelection, selectedFormFactor),
-            },
-            name:
-              selectedFormFactor === "phone"
-                ? "Mobile"
-                : "Desktop",
-            hovertemplate: `
-                <b>${selectedFormFactor === "phone" ? "Mobile" : "Desktop"}</b><br>
-                <b>Date:</b> %{x|%b %d}<br>
-                <b>Value:</b> %{y} ${VERTICAL_METRIC_UNITS[metric]}<extra></extra>
-              `,
-            connectgaps: true,
-          };
-
-          const avgVal = parseFloat(averages[metric] || "NaN");
-          const performance = getPerformanceCategory(metric, avgVal, VERTICAL_THRESHOLDS);
-          const performanceColor =
-            performance === "Good"
-              ? "#2BFFB9" // Good
-              : performance === "Needs Improvement"
-              ? "#FFA73D" // Needs Improvement
-              : "#FF2965"; // Poor
-
-          const { shapes, annotations } = getCurrentDateLineAndAnnotation(mostRecentDate);
-
-          return (
-            <Tooltip
-              key={metric}
-              label={
-                <>
-                  <Text fontWeight="bold" color="white">
-                    {metric} Performance:
-                  </Text>
-                  <Text color="white">{VERTICAL_METRIC_DESCRIPTIONS[metric]}</Text>
-                  <Text color="white">
-                    Good: ≤ {formatNumber(VERTICAL_THRESHOLDS[metric].good)}
-                    {VERTICAL_METRIC_UNITS[metric]}
-                  </Text>
-                  <Text color="white">
-                    Needs Improvement: ≤{" "}
-                    {formatNumber(VERTICAL_THRESHOLDS[metric].needsImprovement)}
-                    {VERTICAL_METRIC_UNITS[metric]}
-                  </Text>
-                  <Text color="white">
-                    Poor: &gt; {formatNumber(VERTICAL_THRESHOLDS[metric].needsImprovement)}
-                    {VERTICAL_METRIC_UNITS[metric]}
-                  </Text>
-                </>
-              }
-              bg="rgba(45, 55, 72, 0.9)" // Dark transparent background
-              color="white" // White text
-              fontSize="sm"
-              placement="top"
-              hasArrow
-            >
-              <Box
-                className="anb-chart-container" // Apply common chart container style
-                p={3} // Adjust padding to match LocalScoresOverview
-                borderRadius="md"
-                minH="120px" // Adjust min height as needed
-                display="flex"
-                flexDirection="column"
-                justifyContent="space-between"
-                position="relative"
-              >
-                <Flex direction="column" align="center">
-                  {/* Title & Expand */}
-                  <Flex
-                    width="100%"
-                    justifyContent="space-between"
-                    alignItems="center"
-                  >
-                    <Box
-                      height="50px"
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
-                      textAlign="center"
-                      flex="1"
-                    >
-                      <Text color="white" fontSize="sm" fontWeight="bold" isTruncated>
-                        {metric}
-                      </Text>
-                    </Box>
-                    <IconButton
-                      aria-label="Expand Graph"
-                      icon={<FaExpand />}
-                      color="white" // White icon
-                      bg="transparent"
-                      _hover={{ bg: "rgba(255,255,255,0.1)" }} // Subtle hover
-                      size="sm"
-                      onClick={() => handleExpand([trace], metric)}
-                    />
-                  </Flex>
-
-                  {/* Averages + Performance */}
-                  <Flex direction="column" justify="center" align="center" mt={2}>
-                    <Text color="#00f7ff" fontSize="2xl" fontWeight="bold" textAlign="center"> {/* Aqua blue for score */}
-                      {formatNumber(averages[metric])} {VERTICAL_METRIC_UNITS[metric]}
-                    </Text>
-                    <Text color={performanceColor} fontSize="sm" fontWeight="bold" mt={1}>
-                      {performance}
-                    </Text>
-                  </Flex>
-                </Flex>
-
-                {/* Graph */}
-                <Box mt={4} width="100%" height="150px" position="relative">
-                  <Plot
-                    data={[trace]}
-                    layout={{
-                      autosize: true,
-                      margin: { l: 40, r: 10, t: 10, b: 30 },
-                      xaxis: {
-                        tickfont: { size: 10, color: "white" }, // White ticks
-                        type: "date",
-                        showgrid: false,
-                        zeroline: false,
-                        showline: false,
-                        ticks: "",
-                        tickformat: "%b %d",
-                        dtick: "M1",
-                        showticklabels: true,
-                      },
-                      yaxis: {
-                        tickfont: { size: 10, color: "white" }, // White ticks
-                        showgrid: false,
-                        zeroline: false,
-                        showline: false,
-                        ticks: "",
-                        showticklabels: true,
-                        title: { text: "" },
-                      },
-                      shapes: shapes,
-                      annotations: annotations,
-                      showlegend: false,
-                      hovermode: "closest",
-                      paper_bgcolor: "transparent", // Transparent
-                      plot_bgcolor: "transparent", // Transparent
-                    }}
-                    config={{
-                      displayModeBar: false,
-                      responsive: true,
-                      hovermode: "closest",
-                    }}
-                    style={{ width: "100%", height: "100%" }}
-                  />
-                </Box>
-              </Box>
-            </Tooltip>
-          );
-        })}
+        {VERTICAL_METRICS.map((metric) => (
+          <MetricCard
+            key={metric}
+            metric={metric}
+            data={plotlyData[metric] || []}
+            averages={averages}
+            thresholds={VERTICAL_THRESHOLDS}
+            units={VERTICAL_METRIC_UNITS}
+            definitions={VERTICAL_METRIC_DESCRIPTIONS}
+            onExpand={handleExpand}
+          />
+        ))}
       </Grid>
 
-      {/* Modal for expanded graph (shared modal for both components) */}
-      <Modal isOpen={isOpen} onClose={onClose} size="xl" isCentered>
-        <ModalOverlay />
+      {/* Modal for expanded graph */}
+      <Modal isOpen={isOpen} onClose={onClose} size="6xl" isCentered>
+        <ModalOverlay bg="rgba(0,0,0,0.8)" backdropFilter="blur(10px)" />
         <ModalContent
-          bg="rgba(45, 55, 72, 0.95)" // Dark, transparent background
-          color="white" // White text
-          border="1px solid rgba(255, 255, 255, 0.1)" // Subtle border
-          boxShadow="0 8px 16px rgba(0, 0, 0, 0.2)" // Dark shadow
+          bg="linear-gradient(135deg, rgba(26, 32, 44, 0.95) 0%, rgba(45, 55, 72, 0.95) 100%)"
+          color="white"
+          border="1px solid rgba(255, 255, 255, 0.2)"
+          boxShadow="0 30px 60px rgba(0, 0, 0, 0.5)"
+          borderRadius="2xl"
+          maxW="90vw"
         >
-          <ModalHeader color="#00f7ff">{modalMetric}</ModalHeader> {/* Aqua blue header */}
-          <ModalCloseButton color="white" /> {/* White close button */}
-          <ModalBody>
+          <ModalHeader 
+            fontSize="2xl" 
+            fontWeight="bold"
+            bgGradient="linear(to-r, cyan.400, blue.400)"
+            bgClip="text"
+          >
+            {modalMetric} Performance Trends
+          </ModalHeader>
+          <ModalCloseButton 
+            color="white" 
+            _hover={{ bg: "rgba(255,255,255,0.1)" }}
+            borderRadius="full"
+          />
+          <ModalBody pb={6}>
             {modalPlotData && (
               <Plot
                 data={modalPlotData}
                 layout={{
                   autosize: true,
-                  margin: { l: 50, r: 50, t: 50, b: 50 },
+                  margin: { l: 60, r: 50, t: 50, b: 60 },
                   xaxis: {
                     type: "date",
-                    title: "Date",
+                    title: { text: "Date", font: { color: "rgba(255,255,255,0.8)", size: 14 } },
                     tickformat: "%B %d, %Y",
-                    dtick: "M1",
-                    showticklabels: true,
-                    titlefont: { size: 14, color: "white" }, // White text
-                    tickfont: { size: 12, color: "white" }, // White text
+                    tickfont: { size: 12, color: "rgba(255,255,255,0.6)" },
+                    gridcolor: "rgba(255,255,255,0.05)",
+                    showgrid: true,
                   },
                   yaxis: {
-                    tickfont: { size: 12, color: "white" }, // White text
+                    title: { text: "Value", font: { color: "rgba(255,255,255,0.8)", size: 14 } },
+                    tickfont: { size: 12, color: "rgba(255,255,255,0.6)" },
+                    gridcolor: "rgba(255,255,255,0.05)",
                     showgrid: true,
-                    zeroline: false,
-                    showline: false,
-                    ticks: "",
-                    showticklabels: true,
-                    title: { text: "" },
                   },
                   showlegend: false,
-                  hovermode: "closest",
-                  paper_bgcolor: "transparent", // Transparent
-                  plot_bgcolor: "transparent", // Transparent
+                  hovermode: "x unified",
+                  paper_bgcolor: "transparent",
+                  plot_bgcolor: "transparent",
                 }}
                 config={{
                   displayModeBar: true,
+                  displaylogo: false,
+                  modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
                   responsive: true,
-                  hovermode: "closest",
                 }}
                 style={{ width: "100%", height: "500px" }}
               />
@@ -1304,32 +1258,120 @@ const PerformanceMapVertical = () => {
           </ModalBody>
         </ModalContent>
       </Modal>
-    </Flex>
+    </Box>
   );
 };
 
-
+// ---
+// Main Combined Component
 // ---
 const CombinedPerformanceMaps = () => {
   return (
     <>
       <MatrixRain />
-      <Box pt="100px" px={6} className="glass-bg">
-        <Heading as="h1" size="xl" mb={6} className="title">
-          CrUX Overview
-        </Heading>
+      <Box 
+        pt="100px" 
+        px={6} 
+        minH="100vh"
+        position="relative"
+      >
+        {/* Background gradient overlay */}
+        <Box
+          position="fixed"
+          top="0"
+          left="0"
+          right="0"
+          bottom="0"
+          bg="linear-gradient(180deg, rgba(26, 32, 44, 0.9) 0%, rgba(45, 55, 72, 0.8) 50%, rgba(26, 32, 44, 0.9) 100%)"
+          pointerEvents="none"
+          zIndex="0"
+        />
 
-        <Heading as="h2" size="lg" mt={10} mb={4} ml={4} className="anb-chart-title" textAlign="left">
-          LOCAL
-        </Heading>
-        <PerformanceMapLocal />
+        {/* Content container */}
+        <Box position="relative" zIndex="1">
+          <VStack spacing={8} align="stretch">
+            {/* Main Title */}
+            <Box textAlign="center" mb={8}>
+              <Heading 
+                as="h1" 
+                size="2xl" 
+                bgGradient="linear(to-r, cyan.300, blue.400, purple.500)"
+                bgClip="text"
+                fontWeight="bold"
+                mb={2}
+              >
+                Chrome UX Report Overview
+              </Heading>
+              <Text color="gray.400" fontSize="lg">
+                Real-world performance metrics from Chrome users
+              </Text>
+            </Box>
 
-        <Divider my={10} borderColor="rgba(255,255,255,0.2)" />
+            {/* Local Section */}
+            <Box>
+              <HStack mb={6} spacing={3}>
+                <Box
+                  h="1px"
+                  flex="1"
+                  bgGradient="linear(to-r, transparent, cyan.400, transparent)"
+                />
+                <Heading 
+                  as="h2" 
+                  size="lg" 
+                  color="cyan.400"
+                  textTransform="uppercase"
+                  letterSpacing="wider"
+                  fontSize="xl"
+                >
+                  Local Sites
+                </Heading>
+                <Box
+                  h="1px"
+                  flex="1"
+                  bgGradient="linear(to-r, transparent, cyan.400, transparent)"
+                />
+              </HStack>
+              <PerformanceMapLocal />
+            </Box>
 
-        <Heading as="h2" size="lg" mt={10} mb={4} ml={4} className="anb-chart-title" textAlign="left">
-          VERTICAL
-        </Heading>
-        <PerformanceMapVertical />
+            {/* Divider */}
+            <Box position="relative" py={4}>
+              <Divider 
+                borderColor="transparent"
+                borderWidth="2px"
+                borderStyle="solid"
+                borderImage="linear-gradient(to right, transparent, rgba(0, 247, 255, 0.3), transparent) 1"
+              />
+            </Box>
+
+            {/* Vertical Section */}
+            <Box>
+              <HStack mb={6} spacing={3}>
+                <Box
+                  h="1px"
+                  flex="1"
+                  bgGradient="linear(to-r, transparent, purple.400, transparent)"
+                />
+                <Heading 
+                  as="h2" 
+                  size="lg" 
+                  color="purple.400"
+                  textTransform="uppercase"
+                  letterSpacing="wider"
+                  fontSize="xl"
+                >
+                  Vertical Sites
+                </Heading>
+                <Box
+                  h="1px"
+                  flex="1"
+                  bgGradient="linear(to-r, transparent, purple.400, transparent)"
+                />
+              </HStack>
+              <PerformanceMapVertical />
+            </Box>
+          </VStack>
+        </Box>
       </Box>
     </>
   );

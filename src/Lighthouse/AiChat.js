@@ -357,7 +357,7 @@ const AiChat = ({ visibleData, inline = false }) => {
       setShowQuickActions(false);
 
       const payload = {
-        model: "gpt-4o-mini",
+        model: "gpt-4.1",
         temperature: 0.3,
         messages: [
           buildSystemContext(),

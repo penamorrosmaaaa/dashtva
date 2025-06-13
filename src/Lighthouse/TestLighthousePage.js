@@ -78,6 +78,7 @@ import {
   Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
+  Treemap,
 } from "recharts";
 
 const supabase = createClient(
@@ -106,9 +107,9 @@ const formatMs = (ms) => {
 
 // Format bytes to KB/MB
 const formatBytes = (bytes) => {
-  if (!bytes) return "0 Bytes";
+  if (bytes === undefined || bytes === null || bytes === 0) return "0 Bytes";
   const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
@@ -377,6 +378,154 @@ const AuditFilters = ({ selectedFilters, onFilterChange }) => {
   );
 };
 
+// ✅ New helper function to intelligently shorten long URLs for display
+const formatTreemapUrl = (url) => {
+    // If the URL is already short, return it as is.
+    if (url.length < 65) {
+        return url;
+    }
+    try {
+        const { hostname, pathname, search } = new URL(url);
+        const pathParts = pathname.split('/').filter(Boolean);
+        const lastPath = pathParts.pop() || '';
+        
+        // If the filename itself is too long, truncate it
+        const truncatedFile = lastPath.length > 30 ? `...${lastPath.slice(-27)}` : lastPath;
+
+        // Try to construct a 'hostname/.../file' format
+        if (pathParts.length > 0) {
+            return `${hostname}/.../${truncatedFile}${search}`;
+        }
+        
+        return `${hostname}/${truncatedFile}${search}`;
+    } catch(e) {
+        // Fallback for any parsing error
+        return `...${url.slice(-62)}`;
+    }
+}
+
+
+// START: TREEMAP ENHANCEMENTS =============================================
+
+// ✅ 1. Updated color palette for better vibrancy and contrast with white text
+const COLORS = {
+  script: "#e65a5a",       // Saturated Red/Pink for JS
+  font: "#f2c94c",        // Vibrant Yellow for Fonts
+  stylesheet: "#5a9ee6", // Vibrant Blue for CSS
+  image: "#6fbf73",      // Saturated Green for Images
+  media: "#f2994a",       // Saturated Orange for Media
+  document: "#5ac5e6",   // Vibrant Cyan for HTML
+  other: "#a0a0a0",         // Darker Grey for Other
+  xhr: "#4fcec4",        // Vibrant Teal for XHR/Fetch
+  fetch: "#4fcec4",
+};
+
+// ✅ 2. Build a flat data structure for the treemap
+const buildResourceTreemapData = (audits) => {
+  const networkRequests = audits?.['network-requests']?.details?.items;
+  if (!networkRequests) return null;
+
+  const resources = networkRequests
+    .filter(req => req.transferSize > 512 && !req.url.startsWith('data:'))
+    .map(req => ({
+      name: req.url,
+      fullName: req.url,
+      size: req.transferSize,
+      resourceType: (req.resourceType || 'other').toLowerCase(),
+    }));
+
+  return resources.length > 0 ? resources : null;
+};
+
+// ✅ 3. Create a custom component to render each cell to look exactly like Google's
+const CustomizedContent = (props) => {
+  const { root, depth, x, y, width, height, name, size, resourceType } = props;
+
+  if (depth !== 1) return null;
+  
+  const totalSize = root.value;
+  const percentage = totalSize > 0 ? (size / totalSize) * 100 : 0;
+  
+  const fillColor = COLORS[resourceType] || COLORS['other'];
+
+  const showText = width > 65 && height > 35;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{
+          fill: fillColor,
+          stroke: 'white',
+          strokeWidth: 2,
+        }}
+      />
+      {showText && (
+        <foreignObject x={x + 5} y={y + 5} width={width - 10} height={height - 10}>
+           <Box
+              color="white" // CRITICAL FIX: Use white text
+              fontSize="12px"
+              fontWeight="bold" // Use bold for better visibility
+              lineHeight="1.3"
+              height="100%"
+              width="100%"
+              overflow="hidden"
+              wordBreak="break-word" // This allows text to wrap to the next line
+              style={{pointerEvents: 'none'}}
+           >
+              {/* CRITICAL FIX: Use the new URL formatter */}
+              {formatTreemapUrl(name)} 
+              <Text 
+                as="span" 
+                fontWeight="normal" // De-emphasize the size/percent info
+                opacity={0.9} 
+                ml="6px" // Add space between URL and size
+              >
+                {`${formatBytes(size)} (${percentage.toFixed(0)}%)`}
+              </Text>
+           </Box>
+        </foreignObject>
+      )}
+    </g>
+  );
+};
+
+// ✅ 4. Create a custom tooltip for the treemap
+const CustomTooltip = ({ active, payload }) => {
+  const tooltipBg = useColorModeValue("white", "gray.700");
+  const tooltipColor = useColorModeValue("gray.800", "white");
+
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <Box
+        p={2}
+        bg={tooltipBg}
+        color={tooltipColor}
+        border="1px solid"
+        borderColor="gray.300"
+        borderRadius="md"
+        shadow="lg"
+      >
+        <Text noOfLines={3} maxW="350px" fontSize="sm" fontWeight="bold" wordBreak="break-all">
+          {data.name}
+        </Text>
+        <Text fontSize="xs" color="gray.500">
+          Size: {formatBytes(data.size)}
+        </Text>
+        <Badge mt={1} textTransform="capitalize">{data.resourceType}</Badge>
+      </Box>
+    );
+  }
+
+  return null;
+};
+// END: TREEMAP ENHANCEMENTS ===============================================
+
+
 // Lighthouse Report Viewer Component
 const LighthouseViewer = ({ data, onClose }) => {
   const bgColor = useColorModeValue("gray.50", "gray.900");
@@ -395,6 +544,8 @@ const LighthouseViewer = ({ data, onClose }) => {
 
   const categories = data.categories;
   const audits = data.audits || {};
+  
+  const resourceTreemapData = buildResourceTreemapData(audits);
 
   const getScreenshots = () => {
     const screenshots = [];
@@ -557,6 +708,30 @@ const LighthouseViewer = ({ data, onClose }) => {
           <TabPanels>
             <TabPanel>
               <VStack align="stretch" spacing={6}>
+                
+                {resourceTreemapData && resourceTreemapData.length > 0 ? (
+                   <Box width="100%" height={{ base: 400, md: 500 }} my={6}>
+                     <Heading size="md" mb={4}>Resource Usage Treemap</Heading>
+                     <ResponsiveContainer>
+                       <Treemap
+                         data={resourceTreemapData}
+                         dataKey="size"
+                         nameKey="name"
+                         content={<CustomizedContent />}
+                         aspectRatio={16 / 9}
+                         isAnimationActive={false}
+                       >
+                         <RechartsTooltip content={<CustomTooltip />} />
+                       </Treemap>
+                     </ResponsiveContainer>
+                   </Box>
+                ) : (
+                  <Alert status="info" my={4}>
+                    <AlertIcon />
+                    No detailed network request data available to build the treemap.
+                  </Alert>
+                )}
+
                 <Box>
                   <Heading size="sm" mb={4}>Metrics</Heading>
                   <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={4}>
@@ -638,41 +813,7 @@ const LighthouseViewer = ({ data, onClose }) => {
                     </VStack>
                   </Box>
                 )}
-
-                {data && (
-                  <Box p={4} bg="blue.50" borderRadius="md">
-                    <HStack>
-                      <InfoIcon color="blue.500" />
-                      <Text fontSize="sm">
-                        View Treemap data is available for this report
-                      </Text>
-                      <Button
-                        size="xs"
-                        colorScheme="blue"
-                        variant="link"
-                        onClick={() => {
-                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                          const url = URL.createObjectURL(blob);
-
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `lighthouse-report-${data.requestedUrl ? new URL(data.requestedUrl).hostname : 'report'}.json`;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                          URL.revokeObjectURL(url);
-
-                          setTimeout(() => {
-                            window.open('https://googlechrome.github.io/lighthouse/viewer/', '_blank');
-                            alert('Please use the "Choose File" button on the Lighthouse Viewer page to upload the downloaded JSON file.');
-                          }, 100);
-                        }}
-                      >
-                        View Treemap
-                      </Button>
-                    </HStack>
-                  </Box>
-                )}
+                
               </VStack>
             </TabPanel>
 
@@ -746,7 +887,7 @@ const LighthouseViewer = ({ data, onClose }) => {
   );
 };
 
-// Historical Metrics Graph Component (no changes here from previous)
+// Historical Metrics Graph Component
 const MetricHistoryGraph = ({ data, metricKey, title, valueFormatter }) => {
   if (!data || data.length === 0 || !metricKey) {
     return (
@@ -834,39 +975,28 @@ const TestLighthousePage = () => {
     setSubmitted(false);
 
     try {
-      // Assuming your backend will process this queue entry and
-      // eventually add a result to lighthouse_results with scores.
-      // If you want a 'pending' state in the table *immediately*,
-      // your backend would need to insert a row into lighthouse_results
-      // with a status like 'pending' right after processing the queue.
-      // For this example, we'll assume a new result row only appears when complete.
       const { error } = await supabase
         .from("lighthouse_queue")
-        .insert([{ url, status: "pending" }]); // Assuming queue has status
+        .insert([{ url, status: "pending" }]); 
 
       if (error) throw error;
 
       setSubmitted(true);
-      setUrl(""); // Clear input after sending to queue
-      // The real-time subscription will update the table when the test completes
+      setUrl(""); 
     } catch (err) {
       setError("Error al enviar a Supabase: " + err.message);
-    } finally {
-      // setLoading(false); // Do NOT set to false immediately if waiting for result.
-                           // The fetchResults in the useEffect will handle this.
     }
   };
 
   const fetchResults = async (targetUrl = null) => {
-    setLoading(true); // Indicate loading for fetching results
+    setLoading(true); 
     let query = supabase
       .from("lighthouse_results")
-      .select("*") // Ensure all columns are selected
+      .select("*") 
       .order("created_at", { ascending: false });
 
     if (targetUrl) {
       query = query.eq("url", targetUrl);
-    } else {
     }
 
     const { data, error } = await query;
@@ -881,7 +1011,7 @@ const TestLighthousePage = () => {
         setFilteredResults(data);
       }
     }
-    setLoading(false); // Stop loading after results are fetched
+    setLoading(false); 
   };
 
   useEffect(() => {
@@ -902,11 +1032,7 @@ const TestLighthousePage = () => {
         { event: '*', schema: 'public', table: 'lighthouse_results' },
         (payload) => {
           console.log('Change received!', payload);
-          // When a change occurs, re-fetch all results, potentially filtered by searchUrl
           fetchResults(searchUrl || null);
-          // If the payload indicates a new result for the current searchUrl,
-          // or if the test just completed, you might want to specifically
-          // indicate that row is no longer loading.
         }
       )
       .subscribe();
@@ -924,7 +1050,6 @@ const TestLighthousePage = () => {
   const handleSearch = () => {
     setSearchUrl(url);
     setError("");
-    // The useEffect will trigger fetchResults based on searchUrl change
   };
 
   const handleClearSearch = () => {
@@ -1000,7 +1125,6 @@ const TestLighthousePage = () => {
         </Alert>
       )}
 
-      {/* Main loading spinner (e.g., when initial fetch or search is ongoing) */}
       {loading && !filteredResults.length && (
         <HStack maxW="600px" spacing={3}>
           <Spinner size="md" />
@@ -1058,8 +1182,7 @@ const TestLighthousePage = () => {
             </Thead>
             <Tbody>
               {filteredResults.map((result) => {
-                // Determine if this specific result is 'loading'
-                const isResultLoading = result.status === 'pending' || !result.json; // Assuming status column or lack of JSON indicates pending
+                const isResultLoading = result.status === 'pending' || !result.json;
                 return (
                   <Tr key={result.id}>
                     <Td>
@@ -1103,7 +1226,7 @@ const TestLighthousePage = () => {
                         size="sm"
                         colorScheme="blue"
                         onClick={() => openJson(result.json)}
-                        isDisabled={isResultLoading} // Disable view button while loading
+                        isDisabled={isResultLoading}
                       />
                     </Td>
                   </Tr>

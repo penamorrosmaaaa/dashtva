@@ -9,10 +9,10 @@ import {
   useNavigate,
 } from 'react-router-dom';
 
-// Global Header import
+// Global Header
 import Header from './Header';
 
-// Component imports
+// Pages
 import HomeAdmin from './HomeAdmin/HomeAdmin';
 import NewPageAdmin from './NewPageAdmin/NewPageAdmin';
 import General from './General/General';
@@ -25,8 +25,9 @@ import LoginPage from './LoginPage';
 import TimeBox from './time-box/timebox';
 import TimeBoxAdmin from './time-box/timeboxadmin';
 import Lighthouse from './Lighthouse/Lighthouse';
-import TarjetasQA from './TarjetasQA/TarjetasQA'; // ✅ NEW
-import AdminQA from './TarjetasQA/AdminQA'; // ✅ NEW
+import TarjetasQA from './TarjetasQA/TarjetasQA';
+import AdminQA from './TarjetasQA/AdminQA';
+import CsrDashboardUploader from './Csr/CsrDashboardUploader'; // ✅ New import
 
 const App = () => {
   return (
@@ -114,7 +115,7 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
       <Route path="/ADMIN-PopularObjects" element={<HomeAdmin />} />
       <Route path="/ADMIN-DIGITAL-CALENDAR" element={<NewPageAdmin />} />
       <Route path="/ADMIN-TimeBox" element={<TimeBoxAdmin />} />
-      <Route path="/ADMIN-TarjetasQA" element={<AdminQA />} />  // ✅ This now renders your form
+      <Route path="/ADMIN-TarjetasQA" element={<AdminQA />} />
 
       {/* Regular user routes */}
       <Route
@@ -148,10 +149,22 @@ const AuthenticatedRoutes = ({ handleLogout }) => {
             <TarjetasQA />
           </Box>
         }
+      />
+      <Route
+        path="/CSR-Dashboard"
+        element={
+          <Box pt="200px">
+            <CsrDashboardUploader />
+          </Box>
+        }
       /> {/* ✅ NEW */}
 
-      <Route path="/landing" element={<LandingPage handleLogout={handleLogout} />} />
+      <Route
+        path="/landing"
+        element={<LandingPage handleLogout={handleLogout} />}
+      />
 
+      {/* Fallback: main dashboard */}
       <Route
         path="*"
         element={

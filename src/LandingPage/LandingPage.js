@@ -11,6 +11,7 @@ import nasaVideo from '../assets/150253-798222949.mp4';
 import logoImage from '../assets/Diseño sin título (1).png';
 import { GiLighthouse } from 'react-icons/gi';
 import { FaCreditCard } from 'react-icons/fa'; // ✅ NEW: Import the icon for Tarjetas QA
+import CSRDashboard from '../Csr/CsrDashboardUploader.js';
 
 
 /**
@@ -363,6 +364,14 @@ const LandingPage = ({ handleLogout }) => {
       route: '/Lighthouse',
       adminRoute: '/ADMIN-Lighthouse',
       delay: '1.2s',
+    },
+    {
+      id: 'csr', // ✅ UPDATED
+      label: 'CSR Dashboard', // ✅ UPDATED
+      icon: FaCreditCard, // ✅ Or change to another icon if preferred
+      route: '/CSR-Dashboard', // ✅ NEW
+      adminRoute: '/ADMIN-CSR-Dashboard', // ✅ Optional
+      delay: '2.0s', // ✅ Adjusted delay
     },
     {
       id: 'tarjetasqa', // ✅ NEW
